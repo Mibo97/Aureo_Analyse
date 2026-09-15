@@ -69,6 +69,18 @@ from queen_controls import (
     summarise_sensor_controls_by_chamber,
     plot_control_chamber_comparison,
 )
+from morphology import (
+    derive_thresholds_from_reference,
+    classify_morphotype,
+    add_switching_dose,
+    summarise_morphotype_over_time,
+    summarise_morphotype_endpoint,
+    test_aberrant_across_periods,
+    plot_morphospace,
+    plot_aberrant_over_time,
+    plot_aberrant_vs_period,
+    plot_morphotype_composition,
+)
 from violin_plots import plot_panel_a
 from summary_plots import (
     plot_budding_ratio_timeseries,
@@ -151,6 +163,9 @@ from config import (
     FLUX_CONFIG,
     MU_MAX_THRESHOLD,
     ROBUSTNESS_VALUE_COLS,
+    MORPHOLOGY_REFERENCE_CONDITIONS,
+    MORPHOLOGY_PERCENTILE,
+    MORPHOLOGY_ENDPOINT_LAST_FRACTION,
     log_active_configuration,
 )
 
@@ -292,10 +307,23 @@ def main() -> None:
         qc_positions_path.name, len(cells),
     )
 
+    # ------------------------------------------------------------------
+    # 2d. Morphospace-Normalfenster EINMAL aus dem Gesamtdatensatz ableiten
+    # ------------------------------------------------------------------
+    # Bewusst hier und nicht in run_pipeline(): die Referenz (PosCtrl) gibt es
+    # nur bei den Oszillationsdaten. Wuerde jede Teil-Pipeline ihre eigenen
+    # Schwellen bilden, waeren die aberranten Anteile von Oszillations- und
+    # statischen Daten nicht mehr miteinander vergleichbar.
+    morph_thresholds = derive_thresholds_from_reference(
+        cells,
+        reference_condition_types=MORPHOLOGY_REFERENCE_CONDITIONS,
+        percentile=MORPHOLOGY_PERCENTILE,
+    )
+
     run_pipeline(
         cells_osc, output_dir=OUTPUT_DIR, freq_order=resolve_x_order(cells_osc, "osc_freq", FREQ_ORDER),
         intensity_cols=intensity_cols, ratio_cols=ratio_cols,
-        run_sensor_controls=True,
+        run_sensor_controls=True, morph_thresholds=morph_thresholds,
     )
 
     if cells_static.empty:
@@ -310,7 +338,7 @@ def main() -> None:
             cells_static, output_dir=OUTPUT_DIR_STATIC,
             freq_order=resolve_x_order(cells_static, "osc_freq", STATIC_ORDER),
             intensity_cols=[], ratio_cols=[],
-            run_sensor_controls=False,
+            run_sensor_controls=False, morph_thresholds=morph_thresholds,
         )
 
     logger.info("=== Fertig! Oszillationsdaten: %s | statische Daten: %s ===", OUTPUT_DIR, OUTPUT_DIR_STATIC)
@@ -323,6 +351,7 @@ def run_pipeline(
     intensity_cols: list[str],
     ratio_cols: list[str],
     run_sensor_controls: bool,
+    morph_thresholds=None,
 ) -> None:
     """
     Kompletter Analyse-Kern (Schritte 00-95), unabhängig davon ob er auf den
@@ -462,6 +491,60 @@ def run_pipeline(
                 output_dir / "12_mu_event_vs_mu_area.pdf",
                 label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
                 mu_event_table=exclude_controls(mu_table), mu_area_table=exclude_controls(area_table),
+            )
+
+    # ==================================================================
+    # 13. Kumulative Morphologie-Wirkung der Feast/Famine-Zyklen
+    # ==================================================================
+    # Die Oszillationsperioden liegen alle am oder unter dem Abtastlimit
+    # (siehe config.OSC_FREQ_IS_PERIOD_IN_MINUTES) - ein einzelner Zyklus ist
+    # nicht beobachtbar. Ausgewertet wird daher, was sich ueber Stunden
+    # AUFSUMMIERT: wie weit driftet die Morphologie aus dem Normalfenster der
+    # unbehandelten Kontrolle heraus, und haengt diese Drift von der
+    # Zykluslaenge ab? Siehe morphology.py.
+    if morph_thresholds is None:
+        logger.warning(
+            "Keine Morphotyp-Schwellen verfuegbar (fehlen area/eccentricity/solidity?) - "
+            "Schritt 13 uebersprungen."
+        )
+    else:
+        pd.DataFrame([morph_thresholds.as_row()]).to_csv(
+            output_dir / "13_morphotype_thresholds.csv", index=False,
+        )
+        cells_morph = classify_morphotype(cells, morph_thresholds)
+        cells_morph = add_switching_dose(cells_morph, min_per_frame=MIN_PER_FRAME)
+
+        morph_per_chamber, morph_agg = summarise_morphotype_over_time(cells_morph)
+        if morph_per_chamber.empty:
+            logger.warning("Keine gueltigen Morphologie-Werte - Schritt 13 uebersprungen.")
+        else:
+            morph_per_chamber.to_csv(output_dir / "13_morphotype_per_chamber_timeseries.csv", index=False)
+            morph_agg.to_csv(output_dir / "13_morphotype_aggregated_timeseries.csv", index=False)
+
+            morph_endpoint = summarise_morphotype_endpoint(
+                morph_per_chamber, last_fraction=MORPHOLOGY_ENDPOINT_LAST_FRACTION,
+            )
+            morph_endpoint.to_csv(output_dir / "13_morphotype_endpoint_per_chamber.csv", index=False)
+
+            period_test = test_aberrant_across_periods(morph_endpoint)
+            if not period_test.empty:
+                period_test.to_csv(output_dir / "13_aberrant_vs_period_stats.csv", index=False)
+
+            plot_morphospace(
+                cells_morph, morph_thresholds, output_dir / "13_morphospace.pdf",
+                freq_order=freq_order,
+            )
+            plot_aberrant_over_time(
+                exclude_controls(morph_agg), output_dir / "13_aberrant_over_time.pdf",
+                freq_order=freq_order,
+            )
+            plot_aberrant_vs_period(
+                morph_endpoint, output_dir / "13_aberrant_vs_period.pdf",
+                freq_order=freq_order,
+            )
+            plot_morphotype_composition(
+                exclude_controls(morph_agg), output_dir / "13_morphotype_composition.pdf",
+                freq_order=freq_order,
             )
 
     # ==================================================================
