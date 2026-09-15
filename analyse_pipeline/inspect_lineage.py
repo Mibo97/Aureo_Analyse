@@ -36,21 +36,25 @@ from lineage import classify_mother_bud, inspect_classification, LineageParams
 from analysis import add_time_column
 
 # ==============================================================================
-# Dieselbe Konfiguration wie in run_analysis.py - bei Änderungen dort auch hier
-# nachziehen, sonst vergleichst du gegen einen anderen Datenstand.
+# Konfiguration: exakt dieselbe wie in run_analysis.py, weil beide aus config.py
+# lesen. Vorher standen die Werte hier ein zweites Mal und waren auseinander
+# gelaufen (anderer DATA_ROOT, anderer CACHE_PATH, mother_min_frames 20 statt
+# 10) - damit wurde hier faktisch ein anderer Datenstand kalibriert als der,
+# den die Pipeline auswertet.
 # ==============================================================================
-DATA_ROOT = Path(r"/prj/microfluidic/ma_mimorde/Data")
-OUTPUT_DIR = DATA_ROOT.parent / "analysis_output"
-CACHE_PATH = OUTPUT_DIR / "combined_results_cache.parquet"
-QC_EXCLUSIONS_PATH = OUTPUT_DIR / "qc_exclusions.csv"
-MIN_PER_FRAME = 10.0
-
-# Aktuell in run_analysis.py verwendete Lineage-Parameter - hier zum Testen anpassen.
-PARAMS = LineageParams(
-    mother_min_frames=20,
-    bud_max_frames=7,
-    tolerance_px=30.0,
+from config import (
+    DATA_ROOT,
+    CACHE_PATH,
+    QC_EXCLUSIONS_PATH,
+    MIN_PER_FRAME,
+    LINEAGE_PARAMS,
+    log_active_configuration,
 )
+
+# Zum Ausprobieren anderer Schwellen einfach hier überschreiben, z.B.:
+#     PARAMS = LineageParams(mother_min_frames=20, bud_max_frames=7, tolerance_px=30.0)
+# Der Default ist bewusst der PRODUKTIVE Wert aus config.py.
+PARAMS: LineageParams = LINEAGE_PARAMS
 
 
 def load_prepared_cells() -> pd.DataFrame:
@@ -84,6 +88,7 @@ def qc_overlay_path_for(cells: pd.DataFrame, exp_id: str) -> Path:
 
 
 if __name__ == "__main__":
+    log_active_configuration()
     print("Lade Zelldaten (nutzt Parquet-Cache falls vorhanden)...")
     cells = load_prepared_cells()
 

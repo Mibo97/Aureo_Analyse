@@ -186,9 +186,9 @@ def plot_panel_a(
     if not per_mother.empty:
         panel_specs.append(("budding_ratio", per_mother, "Budding Ratio\n(buds/cell)"))
     if "area" in cells.columns:
-        panel_specs.append(("area", cells, "Area (µm²)"))
+        panel_specs.append(("area", cells, "Area [px²]"))
     if "eccentricity" in cells.columns:
-        panel_specs.append(("eccentricity", cells, "Eccentricity (a.u.)\n[Stellvertreter für Circularity]"))
+        panel_specs.append(("eccentricity", cells, "Eccentricity (a.u.)\n[proxy for circularity]"))
 
     for value_col, data_source, label in panel_specs:
         sub_all = data_source.dropna(subset=[value_col, group_col, facet_col])

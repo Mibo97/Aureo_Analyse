@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Mapping, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,6 +17,18 @@ logger = logging.getLogger(__name__)
 
 CONTROL_ORDER = ["NegCtrl", "PosCtrl"]
 CONTROL_COLORS = {"NegCtrl": "#4C78A8", "PosCtrl": "#E45756"}
+
+
+def _minutes_to_hours(minutes: float) -> float:
+    """Convert a minute-valued setting to the hour-valued 'time_h' axis.
+
+    Every ``*_min`` argument in this module is given in MINUTES (that is how the
+    experiment is described: "oscillations start after two hours" = 120 min),
+    while ``time_h`` produced by ``analysis.add_time_column()`` is in HOURS.
+    Comparing the two directly reads as ">= 120 hours" and silently matches
+    nothing, so every comparison and every axis position goes through here.
+    """
+    return minutes / 60.0
 
 
 def prepare_sensor_controls(
@@ -43,11 +56,14 @@ def summarise_sensor_controls(
     value_col: str,
     analysis_start_min: float = 120.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Summarise cell measurements first per replicate, then after 120 min.
+    """Summarise cell measurements first per replicate, then after the control phase.
 
     The per-timepoint median is calculated over all cells (and, if present,
     chambers) in one replicate. Thus cells are not treated as independent
     experimental replicates.
+
+    ``analysis_start_min`` is in MINUTES and is converted to hours before it is
+    compared against ``time_h`` - see ``_minutes_to_hours()``.
     """
     if control_cells.empty:
         return pd.DataFrame(), pd.DataFrame()
@@ -62,12 +78,20 @@ def summarise_sensor_controls(
         .reset_index()
     )
     summary_groups = [c for c in group_cols if c != "time_h"]
+    start_h = _minutes_to_hours(analysis_start_min)
     per_replicate_summary = (
-        per_replicate_time[per_replicate_time["time_h"] >= analysis_start_min]
+        per_replicate_time[per_replicate_time["time_h"] >= start_h]
         .groupby(summary_groups, dropna=False)["median_value"]
         .agg(control_value="median", n_timepoints="count")
         .reset_index()
     )
+    if per_replicate_summary.empty and not per_replicate_time.empty:
+        logger.warning(
+            "No control timepoints at or after %.0f min (= %.2f h); the recording only "
+            "covers %.2f-%.2f h. Check OSCILLATION_START_MIN against the actual run length.",
+            analysis_start_min, start_h,
+            per_replicate_time["time_h"].min(), per_replicate_time["time_h"].max(),
+        )
     return per_replicate_time, per_replicate_summary
 
 
@@ -101,13 +125,15 @@ def plot_sensor_control_timeseries(
         ax.fill_between(aggregate["time_h"], aggregate["q25"], aggregate["q75"], color=CONTROL_COLORS[control], alpha=0.18)
 
     if preconditioning_end_min is not None:
-        ax.axvline(preconditioning_end_min, color="0.35", linestyle="--", linewidth=1.0)
-        ax.text(preconditioning_end_min, 1.01, "2 h", transform=ax.get_xaxis_transform(), ha="center", va="bottom", fontsize=8)
-    ax.set_xlabel("Zeit [min]")
-    ax.set_ylabel(f"{sensor_label}-Ratio")
-    ax.set_title(f"{sensor_label}: Kontrollzeitreihe")
-    ax.legend(title="Kontrolle", frameon=True)
-    ax.text(0.01, -0.20, "Dünne Linien = Replikate; dicke Linie = Median; Band = Interquartilsabstand.",
+        end_h = _minutes_to_hours(preconditioning_end_min)
+        ax.axvline(end_h, color="0.35", linestyle="--", linewidth=1.0)
+        ax.text(end_h, 1.01, f"{end_h:.0f} h", transform=ax.get_xaxis_transform(),
+                ha="center", va="bottom", fontsize=8)
+    ax.set_xlabel("Time [h]")
+    ax.set_ylabel(f"{sensor_label} ratio")
+    ax.set_title(f"{sensor_label}: control time course")
+    ax.legend(title="Control", frameon=True)
+    ax.text(0.01, -0.20, "Thin lines = replicates; thick line = median; band = interquartile range.",
             transform=ax.transAxes, fontsize=8, va="top")
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=180)
@@ -120,8 +146,16 @@ def plot_sensor_control_comparison(
     out_path: Path,
     sensor_label: str,
     analysis_start_min: float = 0.0,
+    control_labels: Optional[Mapping[str, str]] = None,
 ) -> None:
-    """Directly compare per-replicate control values for one sensor."""
+    """Directly compare per-replicate control values for one sensor.
+
+    ``control_labels`` optionally adds a second tick-label line per control, e.g.
+    ``{"NegCtrl": "0 g/L", "PosCtrl": "50 g/L"}`` for a glucose sensor. It is a
+    parameter rather than a constant because the concentrations are only
+    meaningful for the sensor/oscillation type they were measured with - a
+    glucose concentration printed under a pH control is simply wrong.
+    """
     if per_replicate_summary.empty:
         logger.warning("Sensor control comparison: no data; plot skipped.")
         return
@@ -141,11 +175,15 @@ def plot_sensor_control_comparison(
                     color="black", capsize=4, linewidth=1.4, zorder=4)
 
     ax.set_xticks(range(len(CONTROL_ORDER)))
-    ax.set_xticklabels(["NegCtrl\n0 g/L", "PosCtrl\n50 g/L"])
-    time_label = "nach 2 h" if analysis_start_min == 120 else "über gesamte Messdauer"
-    ax.set_ylabel(f"{sensor_label}-Ratio {time_label}\n(Median pro Replikat)")
-    ax.set_title(f"{sensor_label}: Kontrollvergleich")
-    ax.text(0.01, -0.18, "Punkte = Replikate; schwarzer Balken = Median ± Interquartilsabstand.",
+    ax.set_xticklabels([
+        f"{c}\n{control_labels[c]}" if control_labels and c in control_labels else c
+        for c in CONTROL_ORDER
+    ])
+    start_h = _minutes_to_hours(analysis_start_min)
+    time_label = f"after {start_h:.0f} h" if start_h > 0 else "over the full recording"
+    ax.set_ylabel(f"{sensor_label} ratio {time_label}\n(median per replicate)")
+    ax.set_title(f"{sensor_label}: control comparison")
+    ax.text(0.01, -0.18, "Points = replicates; black bar = median ± interquartile range.",
             transform=ax.transAxes, fontsize=8, va="top")
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=180)
@@ -180,11 +218,11 @@ def plot_sensor_raw_channel_timeseries(
                 continue
             ax.plot(aggregate["time_h"], aggregate["median"], color=CONTROL_COLORS[control], linewidth=2.0, label=control)
             ax.fill_between(aggregate["time_h"], aggregate["q25"], aggregate["q75"], color=CONTROL_COLORS[control], alpha=0.18)
-        ax.axvline(preconditioning_end_min, color="0.35", linestyle="--", linewidth=1.0)
+        ax.axvline(_minutes_to_hours(preconditioning_end_min), color="0.35", linestyle="--", linewidth=1.0)
         ax.set_ylabel(channel_label)
-        ax.legend(title="Kontrolle", frameon=True)
-    axes[-1].set_xlabel("Zeit [min]")
-    fig.suptitle(f"{sensor_label}: Rohkanäle der Kontrollen", y=0.98)
+        ax.legend(title="Control", frameon=True)
+    axes[-1].set_xlabel("Time [h]")
+    fig.suptitle(f"{sensor_label}: raw control channels", y=0.98)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=180)
     plt.close(fig)
@@ -215,7 +253,7 @@ def summarise_sensor_controls_by_chamber(
     )
     summary_groups = [c for c in group_cols if c != "time_h"]
     return (
-        per_time[per_time["time_h"] >= analysis_start_min]
+        per_time[per_time["time_h"] >= _minutes_to_hours(analysis_start_min)]
         .groupby(summary_groups, dropna=False)["median_value"]
         .agg(control_value="median", n_timepoints="count")
         .reset_index()
@@ -245,11 +283,11 @@ def plot_control_chamber_comparison(
                 ax.plot([x - 0.16, x + 0.16], [values.median()] * 2, color="black", linewidth=1.8)
         ax.set_xticks(range(len(CONTROL_ORDER)))
         ax.set_xticklabels(["NegCtrl", "PosCtrl"], rotation=25, ha="right")
-        ax.set_title(f"{freq} min", fontsize=10)
+        ax.set_title(str(freq), fontsize=10)
         if ax is axes[0]:
-            ax.set_ylabel(f"{sensor_label}-Ratio\n(Median pro Kontrollkammer)")
-    fig.suptitle(f"{sensor_label}: Kontrollen innerhalb jedes Frequenz-Batches", y=1.02)
-    fig.text(0.5, -0.02, "Punkte = technische Kontrollkammern desselben Chips; schwarzer Strich = Median.",
+            ax.set_ylabel(f"{sensor_label} ratio\n(median per control chamber)")
+    fig.suptitle(f"{sensor_label}: controls within each oscillation-frequency batch", y=1.02)
+    fig.text(0.5, -0.02, "Points = technical control chambers of the same chip; black bar = median.",
              ha="center", fontsize=8)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=180)

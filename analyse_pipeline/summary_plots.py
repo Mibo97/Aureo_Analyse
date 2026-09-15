@@ -27,7 +27,7 @@ if not logger.handlers:
 sns.set_theme(style="whitegrid", context="notebook")
 
 try:
-    from analysis import natural_freq_sort  # falls dort schon definiert
+    from analysis import natural_freq_sort, pretty_label  # falls dort schon definiert
 except ImportError:
     import re
 
@@ -37,6 +37,10 @@ except ImportError:
             m = re.search(r"\d+(\.\d+)?", str(v))
             return (0, float(m.group())) if m else (1, str(v))
         return sorted(set(values), key=key)
+
+    def pretty_label(col: str) -> str:
+        """Fallback ohne analysis.py - siehe analysis.pretty_label()."""
+        return col.replace("_", " ")
 
 
 def _save_fig(fig: plt.Figure, out_path: Path) -> None:
@@ -98,24 +102,28 @@ def plot_budding_ratio_timeseries(
         squeeze=False, sharex=True,
     )
 
-    # Pro Spalte (group) merken, welche Zeile (facet) die UNTERSTE mit
-    # tatsächlich sichtbaren Daten ist - nur dort soll "Frame" stehen.
-    # Reines "ist es die letzte Zeile" würde bei ausgeblendeten Achsen
-    # (siehe sub.empty oben) zu fehlenden x-Achsen-Beschriftungen führen.
+    # Per column (group), find the LOWEST row (facet) that actually carries
+    # data - only that panel gets the "Frame" x-label. This has to be decided
+    # from the data, not from ax.get_visible(): at this point nothing has been
+    # hidden yet, so the old check always returned the last row.
+    def _panel_data(facet, group):
+        sub = df
+        if facet_col in df.columns:
+            sub = sub[sub[facet_col] == facet]
+        if group_col in df.columns:
+            sub = sub[sub[group_col] == group]
+        return sub
+
     last_visible_row_per_col = {}
     for i, facet in enumerate(facets):
-        for j in range(len(groups)):
-            if axes[i][j].get_visible():
+        for j, group in enumerate(groups):
+            if not _panel_data(facet, group).empty:
                 last_visible_row_per_col[j] = i
 
     for i, facet in enumerate(facets):
         for j, group in enumerate(groups):
             ax = axes[i][j]
-            sub = df
-            if facet_col in df.columns:
-                sub = sub[sub[facet_col] == facet]
-            if group_col in df.columns:
-                sub = sub[sub[group_col] == group]
+            sub = _panel_data(facet, group)
 
             if sub.empty:
                 ax.set_visible(False)
@@ -146,9 +154,9 @@ def plot_budding_ratio_timeseries(
 
     handles, labels = axes[0][0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, title=color_col, loc="lower center",
+        fig.legend(handles, labels, title=pretty_label(color_col), loc="lower center",
                    ncol=min(len(colors), 6), bbox_to_anchor=(0.5, -0.05))
-    fig.suptitle("Budding Ratio über Zeit (Mittelwert ± SD über Replikate)", y=1.02)
+    fig.suptitle("Budding ratio over time (mean ± SD over replicates)", y=1.02)
     fig.tight_layout()
     _save_fig(fig, out_path)
 
@@ -304,9 +312,9 @@ def plot_point_errorbar(
         ax.set_xticklabels(x_values, rotation=30)
         if facet is not None:
             ax.set_title(str(facet), fontsize=11, fontweight="bold")
-        ax.set_xlabel(x_col)
+        ax.set_xlabel(pretty_label(x_col))
         if ax is axes[0]:
-            ax.set_ylabel(ylabel or value_col)
+            ax.set_ylabel(ylabel or pretty_label(value_col))
 
     if legend_handles:
         # Außerhalb rechts neben der letzten Facette - bbox_inches="tight" bei
@@ -316,7 +324,7 @@ def plot_point_errorbar(
             loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, borderaxespad=0.0,
         )
 
-    fig.suptitle(title or f"{ylabel or value_col} pro Bedingung (Mittelwert ± SD über Replikate)", y=1.02)
+    fig.suptitle(title or f"{ylabel or pretty_label(value_col)} per condition (mean ± SD over replicates)", y=1.02)
     fig.tight_layout()
     _save_fig(fig, out_path)
 
@@ -401,19 +409,19 @@ def plot_rt_vs_rp_quadrant(
                 ax.annotate(str(row[label_col]), (row[rp_col], row[rt_col]),
                             textcoords="offset points", xytext=(5, 5), fontsize=7)
 
-        ax.set_xlabel("R(p) (a.u.) — höher = homogenere Population")
+        ax.set_xlabel("R(p) (a.u.) — higher = more homogeneous population")
         if ax is axes[0]:
-            ax.set_ylabel("R(t) (a.u.) — höher = stabiler über Zeit")
+            ax.set_ylabel("R(t) (a.u.) — higher = more stable over time")
         if facet is not None:
             ax.set_title(str(facet), fontsize=11, fontweight="bold")
 
     if legend_handles:
         fig.legend(
-            legend_handles.values(), legend_handles.keys(), title=color_col,
+            legend_handles.values(), legend_handles.keys(), title=pretty_label(color_col),
             loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, borderaxespad=0.0,
         )
 
-    fig.suptitle("Robustness über Zeit vs. über Population", y=1.02)
+    fig.suptitle("Robustness over time vs. over the population", y=1.02)
     fig.tight_layout()
     _save_fig(fig, out_path)
 
@@ -454,9 +462,9 @@ def plot_rt_single_cell_distribution(
         plt.close(fig)
         return
 
-    ax.set_xlabel(value_col)
-    ax.set_ylabel("Dichte")
-    ax.set_title(f"Verteilung von {value_col} über Einzelzellen, pro {facet_col}")
-    ax.legend(title=facet_col, loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=8, borderaxespad=0.0)
+    ax.set_xlabel(pretty_label(value_col))
+    ax.set_ylabel("Density")
+    ax.set_title(f"Distribution of {pretty_label(value_col)} across single cells, by {pretty_label(facet_col)}")
+    ax.legend(title=pretty_label(facet_col), loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=8, borderaxespad=0.0)
     fig.tight_layout()
     _save_fig(fig, out_path)

@@ -1,0 +1,23 @@
+# Abhängigkeiten der Analyse-Pipeline (analyse_pipeline/).
+# Installation:  pip install -r requirements.txt
+#
+# Die Untergrenzen sind bewusst großzügig - getestet zuletzt mit
+# pandas 3.0, numpy 2.4, matplotlib 3.11, seaborn 0.13, scipy 1.17.
+
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+seaborn>=0.13
+
+# Parquet-Cache (data_loading.load_all_results) - ohne pyarrow schlägt das
+# Schreiben/Lesen von combined_results_cache.parquet fehl.
+pyarrow>=14.0
+
+# Signifikanz-Sternchen in den Panel-A-Violinplots (violin_plots.py).
+# OPTIONAL: fehlt das Paket, entstehen die Plots trotzdem - dann aber OHNE
+# Sternchen und mit einer Warnung beim Import.
+statannotations>=0.6
+
+# Nur für plot_qc_lineage_overlay.py (annotiert die QC-Overlay-TIFFs).
+Pillow>=10.0

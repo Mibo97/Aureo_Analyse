@@ -194,7 +194,12 @@ def compute_area_growth_rate(
         else:
             cell_type = "unknown"
 
-        g = grp[["frame", "area", "solidity", "eccentricity"]].dropna(subset=["frame", "area"])
+        # 'solidity'/'eccentricity' are optional (see docstring) - select only what
+        # is actually present, otherwise this raises KeyError on datasets that
+        # carry neither, and the `if "solidity" in g.columns` guards below would
+        # never be reachable.
+        morphology_cols = [c for c in ("solidity", "eccentricity") if c in grp.columns]
+        g = grp[["frame", "area"] + morphology_cols].dropna(subset=["frame", "area"])
         g = g.sort_values("frame")
         g = g[(g["area"] >= min_area_px) & (g["area"] <= max_area_px)]
 
@@ -575,8 +580,8 @@ def plot_mu_event_vs_mu_area(
         ax.set_ylim(lims)
         ax.set_aspect("equal", adjustable="box")
 
-        ax.set_xlabel("µ_event [h⁻¹] (Reproduktion)")
-        ax.set_ylabel("µ_area [h⁻¹] (Biomasse)")
+        ax.set_xlabel("µ_event [h⁻¹] (reproduction)")
+        ax.set_ylabel("µ_area [h⁻¹] (biomass)")
 
         # Statistik pro Facette: Pearson-Korrelation (Zusammenhang µ_event/µ_area)
         # und gepaarter Wilcoxon-Vorzeichen-Rang-Test auf die Differenz, als
@@ -586,10 +591,10 @@ def plot_mu_event_vs_mu_area(
         title = str(facet) if facet else ""
         if using_cell_level:
             entry = cell_stats.get(facet, {"n": 0})
-            n_stat, level_tag = entry["n"], "Zellen"
+            n_stat, level_tag = entry["n"], "cells"
         else:
             entry = {}
-            n_stat, level_tag = len(sub), "Bedingungen"
+            n_stat, level_tag = len(sub), "conditions"
             if n_stat >= 3:
                 r, p_corr = pearsonr(sub["mean_mu"], sub["mean_mu_area"])
                 entry["r"], entry["p_corr"] = r, p_corr
@@ -604,7 +609,7 @@ def plot_mu_event_vs_mu_area(
         if "r" in entry:
             title += f"\nr={entry['r']:.2f} (p={entry['p_corr']:.3f}, n={n_stat} {level_tag})"
         else:
-            title += f"\nr: n.v. (n={n_stat} {level_tag} < 3)"
+            title += f"\nr: n/a (n={n_stat} {level_tag} < 3)"
         if "p_wilcoxon" in entry:
             title += f", Wilcoxon p={entry['p_wilcoxon']:.3f}"
         ax.set_title(title, fontsize=9)
@@ -619,7 +624,7 @@ def plot_mu_event_vs_mu_area(
                 handles_by_label.setdefault(li, hi)
         fig.legend(handles_by_label.values(), handles_by_label.keys(),
                    loc="lower center", ncol=len(handles_by_label))
-    fig.suptitle("Reproduktion vs. Biomasse-Wachstum", y=1.02)
+    fig.suptitle("Reproduction vs. biomass growth", y=1.02)
     fig.tight_layout()
 
     out_path = Path(out_path)

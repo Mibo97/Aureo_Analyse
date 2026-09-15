@@ -196,5 +196,5 @@ def plot_control_consistency(
         color_col="biosensor" if "biosensor" in controls.columns else None,
         style_col="condition_type",
         x_order=x_order, ylabel=ylabel,
-        title=title or "Kontroll-Konsistenz über Oszillationsfrequenz-Batches\n(flach = Kontrolle robust, Trend = möglicher Strömungseffekt)",
+        title=title or "Control consistency across oscillation-frequency batches\n(flat = control robust, trend = possible flow/batch effect)",
     )

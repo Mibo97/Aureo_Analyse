@@ -29,6 +29,48 @@ if not logger.handlers:
 sns.set_theme(style="whitegrid", context="notebook")
 
 
+# Anzeigenamen für Spalten, die in generischen Plots direkt als Achsen-/
+# Legendentitel landen (plot_point_errorbar(), plot_rt_single_cell_distribution(),
+# ...). Ohne diese Tabelle steht dort der rohe Spaltenname ("osc_freq").
+# Nur Anzeige - die Spaltennamen in den CSV-Exporten ändern sich NICHT.
+COLUMN_LABELS: dict[str, str] = {
+    "osc_freq": "Oscillation frequency",
+    "osc_type": "Oscillation type",
+    "biosensor": "Biosensor",
+    "condition": "Condition",
+    "condition_type": "Condition type",
+    "replicate": "Replicate",
+    "chamber": "Chamber",
+    "frame": "Frame",
+    "time_h": "Time [h]",
+    "area": "Cell area [px²]",
+    "eccentricity": "Eccentricity (a.u.)",
+    "solidity": "Solidity (a.u.)",
+    "budding_ratio": "Budding ratio (buds/cell)",
+    "n_tracks": "Number of tracks",
+    "mu": "Specific growth rate µ [h⁻¹]",
+    "mu_area": "µ_area [h⁻¹]",
+    "R_t_population": "R(t), population level",
+    "R_t_single_cell": "R(t), single cell",
+    "R_p": "R(p)",
+}
+
+
+def pretty_label(col: str) -> str:
+    """Anzeigename für einen Spaltennamen (siehe COLUMN_LABELS).
+
+    Unbekannte Spalten fallen auf eine harmlose Aufhübschung zurück
+    (Unterstriche zu Leerzeichen), ratio_*-Spalten auf "<Sensor> ratio" -
+    so bleibt der Plot lesbar, auch wenn eine Spalte hier noch nicht
+    eingetragen ist.
+    """
+    if col in COLUMN_LABELS:
+        return COLUMN_LABELS[col]
+    if col.startswith("ratio_"):
+        return f"{col[len('ratio_'):]} ratio"
+    return col.replace("_", " ")
+
+
 def natural_freq_sort(values: Sequence[str]) -> list[str]:
     """
     Sortiert Frequenz-Strings wie '2min','5min','10min','60min' NUMERISCH
@@ -86,8 +128,6 @@ def plot_n_tracks_overview(
     NegCtrl/PosCtrl werden anhand von ctrl_pattern in der 'condition'-Spalte
     erkannt (default: erkennt '...NegCtrl...' und '...PosCtrl...').
     """
-    import re
-
     order = freq_order if freq_order is not None else natural_freq_sort(
         overview["osc_freq"].dropna().unique()
     )
@@ -96,7 +136,6 @@ def plot_n_tracks_overview(
     # Plot 1: Detail – ein Balken pro Replikat/Kammer (unveraendert)
     # ------------------------------------------------------------------
     ov = overview.copy()
-    ov["rep_chamber"] = ov["replicate"] + " / " + ov["chamber"]
 
     g = sns.catplot(
         data=ov,
@@ -105,12 +144,12 @@ def plot_n_tracks_overview(
         kind="bar", order=order, errorbar=None,
         height=3.5, aspect=1.3, palette="Set2",
     )
-    g.set_axis_labels("Oszillationsfrequenz", "Anzahl Tracks")
+    g.set_axis_labels("Oscillation frequency", "Number of tracks")
     g.set_titles("{row_name} | {col_name}")
     for ax in g.axes.flat:
         ax.tick_params(axis="x", rotation=45)
     g.fig.suptitle(
-        "Anzahl getrackter Zellen pro Experiment (nach QC)\nFarbe = Replikat / Kammer",
+        "Tracked cells per experiment (after QC)\nColour = replicate",
         y=1.02,
     )
     g.savefig(out_path, bbox_inches="tight")
@@ -222,20 +261,20 @@ def plot_n_tracks_overview(
             ax.set_xticklabels(order, rotation=45, ha="right")
             ax.set_title(f"{osc_type} | {biosensor}", fontsize=10)
             if j == 0:
-                ax.set_ylabel("Anzahl Tracks")
+                ax.set_ylabel("Number of tracks")
             if i == len(osc_types) - 1:
-                ax.set_xlabel("Oszillationsfrequenz")
+                ax.set_xlabel("Oscillation frequency")
 
             # Legende nur einmal pro Axes, Duplikate entfernen
             handles, labels = ax.get_legend_handles_labels()
             seen = {}
             for h, l in zip(handles, labels):
                 seen.setdefault(l, h)
-            ax.legend(seen.values(), seen.keys(), fontsize=7, title="Gruppe")
+            ax.legend(seen.values(), seen.keys(), fontsize=7, title="Group")
 
     fig.suptitle(
-        "Anzahl Tracks pro Frequenz – Replikate aggregiert\n"
-        "(Balken = Mittelwert über Replikate; Fehlerbalken = ± STD; Schraffur = Kontrollen)",
+        "Number of tracks per frequency – aggregated over replicates\n"
+        "(bars = mean over replicates; error bars = ± SD; hatching = controls)",
         y=1.02,
     )
     fig.tight_layout()
@@ -315,13 +354,13 @@ def plot_metric_over_time_by_frequency(
                 )
             ax.set_title(f"{osc_type} | {biosensor}", fontsize=10)
             if i == len(osc_types) - 1:
-                ax.set_xlabel("time [h]")
+                ax.set_xlabel("Time [h]")
             if j == 0:
                 ax.set_ylabel(ylabel or value_col)
 
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, title="Osz.-Frequenz", loc="lower center", ncol=min(len(freqs), 6), bbox_to_anchor=(0.5, -0.05))
-    fig.suptitle(f"{value_col} über Zeit, nach Oszillationsfrequenz\n(Linie = Mittelwert über Replikate; Band = ± SEM)", y=1.02)
+    fig.legend(handles, labels, title="Osc. frequency", loc="lower center", ncol=min(len(freqs), 6), bbox_to_anchor=(0.5, -0.05))
+    fig.suptitle(f"{value_col} over time, by oscillation frequency\n(line = mean over replicates; band = ± SEM)", y=1.02)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
@@ -352,9 +391,9 @@ def plot_morphology_scatter(
     )
     for ax in g.axes.flat:
         ax.set_xscale("log")
-    g.set_axis_labels("Zellfläche [px²] (log)", "Exzentrizität (0=Kreis, 1=Linie)")
+    g.set_axis_labels("Cell area [px²] (log)", "Eccentricity (0 = circle, 1 = line)")
     g.set_titles("{row_name} | {col_name}")
-    g.fig.suptitle("Morphologie: Fläche vs. Exzentrizität (Stichprobe nach QC)", y=1.02)
+    g.fig.suptitle("Morphology: area vs. eccentricity (sample after QC)", y=1.02)
     g.savefig(out_path, bbox_inches="tight")
     plt.close(g.fig)
     logger.info("Plot gespeichert: %s", out_path.name)
@@ -426,11 +465,11 @@ def plot_single_cell_trajectories(
                 ax.plot(track["time_h"], track[value_col], alpha=0.5, linewidth=0.6)
             ax.set_title(f"{osc_type} | {freq} | {biosensor}", fontsize=8)
             if i == len(osc_types) - 1:
-                ax.set_xlabel("time [h]")
+                ax.set_xlabel("Time [h]")
             if j == 0:
                 ax.set_ylabel(value_col)
 
-    fig.suptitle(f"{value_col} Einzelzell-Trajektorien (Beispielkammer pro Bedingung)", y=1.02)
+    fig.suptitle(f"{value_col}: single-cell trajectories (one example chamber per condition)", y=1.02)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
@@ -445,10 +484,16 @@ def summary_statistics(df: pd.DataFrame, intensity_cols: list[str]) -> pd.DataFr
     for c in intensity_cols:
         agg_dict[c] = "mean"
 
+    # Intensity columns are already named 'mean_<channel>' (see
+    # find_intensity_columns()), so prefixing them again produced
+    # 'mean_mean_GFP'. Only add the prefix where it is not there yet.
+    intensity_renames = {
+        c: c if c.startswith("mean_") else f"mean_{c}" for c in intensity_cols
+    }
     summary = (
         df.groupby(["biosensor", "osc_type", "osc_freq", "replicate"])
         .agg(agg_dict)
-        .rename(columns={"track_id": "n_tracks", "area": "mean_area", **{c: f"mean_{c}" for c in intensity_cols}})
+        .rename(columns={"track_id": "n_tracks", "area": "mean_area", **intensity_renames})
         .reset_index()
         .sort_values(["biosensor", "osc_type", "osc_freq", "replicate"])
     )
