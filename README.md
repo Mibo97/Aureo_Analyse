@@ -97,7 +97,8 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 | `queen_controls.py` | PosCtrl-vs-NegCtrl-Validierung der Sensoren selbst |
 | `analysis.py`, `summary_plots.py`, `violin_plots.py`, `mother_trajectories.py` | Plots & gemeinsame Helfer |
 | `inspect_lineage.py` | Interaktive Kalibrierung der Lineage-Parameter |
-| `plot_qc_lineage_overlay.py` | Eigenständiges CLI: Budding-Events ins QC-TIFF zeichnen |
+| `validate_lineage.py` | **Quantitative** Validierung der Mutter/Bud-Heuristik (alle Kammern) |
+| `plot_qc_lineage_overlay.py` | **Visuelle** Validierung: Events ins QC-TIFF zeichnen (eine Kammer) |
 
 ## Output
 
@@ -117,6 +118,67 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 Statische Daten landen in denselben Präfixen unter `analysis_output/static/`
 (ohne `30_`/`31_`/`95_`, da dort nur der Wildtyp ohne Fluoreszenzkanäle läuft).
+
+---
+
+## Die Lineage-Heuristik validieren
+
+`lineage.classify_mother_bud()` entscheidet über Budding Ratio, µ_event, den
+Stammbaum und die Mutter/Knospe-Trennung. Es ist eine Heuristik aus
+Centroid-Abstand und Tracklänge, **kein** echtes Lineage-Tracking — deshalb
+gehört vor jede Aussage eine Validierung. Beide Werkzeuge lesen die Dateien,
+die `run_analysis.py` erzeugt:
+
+```
+analysis_output/00_cell_positions.parquet   Zellpositionen NACH QC
+analysis_output/20_budding_events.csv       erkannte Events (je eine Datei
+analysis_output/static/20_budding_events.csv   pro Teil-Pipeline)
+```
+
+**1. Quantitativ, über alle Kammern:**
+
+```bash
+cd analyse_pipeline
+python validate_lineage.py          # Pfade kommen aus config.py
+```
+
+Erzeugt in `analysis_output/lineage_validation/`:
+
+| Datei | Frage, die sie beantwortet |
+| --- | --- |
+| `lv_01_d_over_r_distribution.pdf` | Lagen die Buds komfortabel im Suchradius, oder hat die Toleranz sie gerade noch hereingeholt? |
+| `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Bedingungen konstant? |
+| `lv_03_detection_rate_kruskal.csv` | Kruskal-Wallis dazu: p < 0.05 = Erkennung mit der Bedingung konfundiert |
+| `lv_03_assignment_ambiguity.pdf` | Wie oft kamen mehrere Mütter in Frage (greedy Nearest-Neighbour)? |
+| `lv_04_tolerance_sweep.pdf` | Sitzt `tolerance_px` auf einem Plateau oder auf einer Flanke? |
+
+Die Kurzfassung steht am Ende im Log — inklusive Warnung, wenn zu viele
+Zuordnungen grenzwertig oder mehrdeutig sind.
+
+**2. Visuell, eine Kammer:**
+
+```bash
+python plot_qc_lineage_overlay.py \
+    --cells   ../analysis_output/00_cell_positions.parquet \
+    --lineage-events ../analysis_output/20_budding_events.csv \
+    --qc-tif  ".../QC/260616_Osc1.5_NegCtrl_Rep1_ChamA13_QC_overlay.tif" \
+    --output  ChamA13_lineage_overlay.tif
+```
+
+`--exp-id` wird automatisch bestimmt (über `cells['filename']`, sonst über
+Pfad und Dateinamen). Marker im Ausgabe-TIFF:
+
+| Marker | Bedeutung |
+| --- | --- |
+| türkiser Kreis, klein | Mutter-Zentroid |
+| türkiser Kreis, groß | adaptiver Suchradius dieser Mutter |
+| oranger Kreis | zugeordneter Bud, `d/r` = Distanz / Suchradius |
+| gelbe Linie | Mutter-Bud-Zuordnung |
+| hellblauer Kreis `?` | Bud-Kandidat **ohne** Mutter — fällt aus allen Auswertungen |
+
+Überlappen sich die Suchradien benachbarter Mütter im Bild, ist jede
+Zuordnung in diesem Bereich eine Entscheidung der Heuristik, keine
+Beobachtung — das ist der wichtigste Blick beim Kalibrieren.
 
 ---
 

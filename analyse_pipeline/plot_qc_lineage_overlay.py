@@ -18,24 +18,41 @@ condition/replicate/chamber im Dateinamen, siehe data_loading.py), das
 Skript leitet exp_id automatisch daraus ab (derive_exp_id()) und prüft das
 Ergebnis gegen cells['exp_id'], bevor annotiert wird.
 
+Beide Eingabetabellen erzeugt run_analysis.py in OUTPUT_DIR:
+    --cells           analysis_output/00_cell_positions.parquet
+    --lineage-events  analysis_output/20_budding_events.csv
+
 Variante A - Dateipfad direkt angeben (immer zuverlässig, empfohlen):
     python plot_qc_lineage_overlay.py \
-        --cells cells.parquet --lineage-events lineage_events.csv \
-        --qc-tif "/Data/StrainX/Glc/1.5/03_results/QC/260616_Osc1.5_NegCtrl_Rep1_ChamA13_QC_overlay.tif" \
+        --cells   ../analysis_output/00_cell_positions.parquet \
+        --lineage-events ../analysis_output/20_budding_events.csv \
+        --qc-tif "/Data/BSG/Glc/1.5/03_results/QC/260616_Osc1.5_NegCtrl_Rep1_ChamA13_QC_overlay.tif" \
         --output ChamA13_lineage_overlay.tif
 
 Variante B - automatisch unter --data-root suchen, über den entscheidenden
 Dateinamen-Teilstring (Datum kann variieren):
     python plot_qc_lineage_overlay.py \
-        --cells cells.parquet --lineage-events lineage_events.csv \
+        --cells   ../analysis_output/00_cell_positions.parquet \
+        --lineage-events ../analysis_output/20_budding_events.csv \
         --data-root /Data --match "_Osc1.5_NegCtrl_Rep1_ChamA13_"
 
 --exp-id bleibt als Override verfügbar, falls euer Namensschema doch einmal
 abweicht oder die automatische Ableitung fehlschlägt.
 
-Standardmäßig werden nur Frames mit einem erkannten Budding-Event
-ausgegeben (--mode events - das ist der eigentliche Kalibrierungs-Zweck).
-Mit --mode all bzw. --mode range lässt sich das erweitern.
+Standardmäßig werden die Frames ausgegeben, in denen ein Budding-Event
+erkannt wurde ODER ein Bud-Kandidat KEINER Mutter zugeordnet werden konnte
+(--mode events - das ist der eigentliche Kalibrierungs-Zweck). Mit --mode all
+bzw. --mode range lässt sich das erweitern.
+
+LEGENDE DER MARKER
+------------------
+    tuerkiser Kreis (klein)  Mutter-Zentroid
+    tuerkiser Kreis (gross)  adaptiver Suchradius dieser Mutter
+    oranger Kreis            zugeordneter Bud, Label 'd/r' = Distanz / Suchradius
+                             (nahe 1.0 = gerade eben noch akzeptiert -> pruefen)
+    gelbe Linie              Mutter-Bud-Zuordnung
+    hellblauer Kreis '?'     Bud-Kandidat OHNE Mutter - faellt aus Budding Ratio,
+                             µ_event und Stammbaum heraus
 
 ANNAHMEN (bei Abweichung bitte anpassen)
 -----------------------------------------
@@ -56,7 +73,7 @@ import argparse
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -68,7 +85,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 MOTHER_COLOR = (0, 200, 140)     # teal
 BUD_COLOR = (255, 90, 40)        # orange-rot
 LINE_COLOR = (255, 220, 0)       # gelb
+MISS_COLOR = (170, 170, 255)     # hellblau: Bud-Kandidat OHNE zugeordnete Mutter
 MARKER_RADIUS = 10
+
+
+def short_uid(cell_uid: str) -> str:
+    """'BSG__Glc__1.5__Osc1.5_NegCtrl__Rep1__ChamA13__track7' -> 'track7'.
+
+    Innerhalb EINES Bildes ist die exp_id konstant. Der volle cell_uid ist
+    schnell >50 Zeichen lang, lief über den Bildrand hinaus und überlagerte
+    bei mehreren Events im selben Frame alle anderen Labels unlesbar.
+    """
+    return str(cell_uid).rsplit("__", 1)[-1]
 
 # Dateinamen-Muster eurer Cellpose-QC-Overlays, siehe Beispiele im Chat:
 #   260616_Osc1.5_NegCtrl_Rep1_ChamA13_QC_overlay.tif  (Kontroll-Kammer)
@@ -76,8 +104,25 @@ MARKER_RADIUS = 10
 # 'condition' ist alles zwischen Datum und '_Rep' - dadurch werden beide
 # Fälle abgedeckt, ohne _NegCtrl/_PosCtrl explizit im Muster zu benötigen.
 _QC_FILENAME_RE = re.compile(
-    r"^\d+_(?P<condition>.+?)_Rep(?P<replicate>\d+)_Cham(?P<chamber>[A-Za-z0-9]+)_QC_overlay\.tif$"
+    r"^\d+_(?P<condition>.+?)_Rep(?P<replicate>\d+)_Cham(?P<chamber>[A-Za-z0-9]+)_QC_overlay\.tiff?$",
+    re.IGNORECASE,
 )
+
+# Alles vor '_QC_overlay.tif[f]' ist der Datei-Stem, den die Bildverarbeitung
+# auch in die Spalte 'filename' von Combined_Results schreibt - das ist die
+# zuverlaessigste Bruecke zwischen Bild und Tabelle (siehe derive_exp_id()).
+_QC_STEM_RE = re.compile(r"^(?P<stem>.+?)_QC_overlay\.tiff?$", re.IGNORECASE)
+
+
+def qc_stem(name: str) -> str:
+    """'..._ChamA13_QC_overlay.tif' -> '..._ChamA13' (der Stem aus 'filename')."""
+    m = _QC_STEM_RE.match(name)
+    if not m:
+        raise ValueError(
+            f"Dateiname '{name}' endet nicht auf '_QC_overlay.tif' / '_QC_overlay.tiff' - "
+            f"bitte --exp-id explizit angeben."
+        )
+    return m.group("stem")
 
 
 # ==============================================================================
@@ -143,36 +188,66 @@ def derive_exp_id(
          aufgebaut ist als hier angenommen) -> wird mit Warnung verwendet.
       3. sonst -> klarer Fehler mit Vorschlag, --exp-id explizit zu setzen.
     """
-    biosensor, osc_type, osc_freq = find_hierarchy_before_results_dir(qc_path, results_dir_name)
-    condition, replicate, chamber = parse_qc_filename(qc_path.name)
+    stem = qc_stem(qc_path.name)
+    known_ids = sorted({str(e) for e in cells["exp_id"].dropna().unique()})
+    if not known_ids:
+        raise ValueError("'cells' enthält keine exp_id-Werte.")
 
-    candidate = "__".join([biosensor, osc_type, osc_freq, condition, replicate, chamber])
-    known_ids = set(cells["exp_id"].astype(str))
-
-    if candidate in known_ids:
-        logger.info("exp_id aus Pfad abgeleitet: '%s'", candidate)
-        return candidate
-
-    key_no_condition = (biosensor, osc_type, osc_freq, replicate, chamber)
-    fallback_matches = [
-        eid for eid in known_ids
-        if len((p := eid.split("__"))) == 6 and (p[0], p[1], p[2], p[4], p[5]) == key_no_condition
-    ]
-    if len(fallback_matches) == 1:
-        logger.warning(
-            "exp_id '%s' (aus Pfad abgeleitet) nicht exakt in cells['exp_id'] gefunden, aber "
-            "genau ein eindeutiger Treffer über Biosensor/Osz.typ/-frequenz/Replikat/Kammer "
-            "(condition weicht ab) - verwende '%s'. Falls das falsch ist: --exp-id explizit setzen.",
-            candidate, fallback_matches[0],
+    # --- Weg 1: über die Spalte 'filename' (exakt, konventionsunabhängig).
+    # Die Bildverarbeitung schreibt denselben Datei-Stem in 'filename' und in
+    # den QC-Overlay-Namen - damit ist die Zuordnung eindeutig, egal wie
+    # condition/replicate/chamber im Detail geschrieben sind.
+    if "filename" in cells.columns:
+        hits = sorted({
+            str(e) for e in cells.loc[cells["filename"].astype(str) == stem, "exp_id"].dropna().unique()
+        })
+        if len(hits) == 1:
+            logger.info("exp_id über cells['filename'] == '%s' bestimmt: '%s'", stem, hits[0])
+            return hits[0]
+        if len(hits) > 1:
+            raise ValueError(
+                f"Datei-Stem '{stem}' gehört zu mehreren exp_ids {hits} - bitte --exp-id explizit angeben."
+            )
+        logger.info(
+            "Kein cells['filename'] == '%s' - versuche Zuordnung über Pfad-Hierarchie und "
+            "Dateinamen-Bestandteile.", stem,
         )
-        return fallback_matches[0]
 
-    example_ids = sorted(known_ids)[:8]
+    # --- Weg 2: Hierarchie aus dem Pfad + Teilstring-Abgleich der restlichen
+    # exp_id-Bestandteile gegen den Dateinamen. Bewusst KEIN Zusammenbauen
+    # eines Kandidaten-Strings mehr: die frühere Version zerlegte 'Rep1' zu
+    # '1' und 'ChamA13' zu 'A13' und konnte deshalb NIE auf eine echte exp_id
+    # treffen (die 'Rep1'/'ChamA13' enthält).
+    biosensor, osc_type, osc_freq = find_hierarchy_before_results_dir(qc_path, results_dir_name)
+    same_hierarchy = [
+        eid for eid in known_ids if eid.split("__")[:3] == [biosensor, osc_type, osc_freq]
+    ]
+    if not same_hierarchy:
+        raise ValueError(
+            f"Keine exp_id mit Hierarchie '{biosensor}__{osc_type}__{osc_freq}' in 'cells'. "
+            f"Passt --results-dir-name ('{results_dir_name}') zum Pfad '{qc_path}'? "
+            f"Beispiele vorhandener exp_ids: {known_ids[:8]}"
+        )
+
+    def _match_score(eid: str) -> int:
+        """Wie viele der restlichen exp_id-Bestandteile kommen im Dateinamen vor?"""
+        return sum(1 for part in eid.split("__")[3:] if part and part in stem)
+
+    scored = [(_match_score(eid), eid) for eid in same_hierarchy]
+    best = max(s for s, _ in scored)
+    winners = [eid for s, eid in scored if s == best]
+
+    if best > 0 and len(winners) == 1:
+        logger.info(
+            "exp_id über Pfad-Hierarchie + Dateiname bestimmt: '%s' (%d passende Bestandteile).",
+            winners[0], best,
+        )
+        return winners[0]
+
     raise ValueError(
-        f"Konnte exp_id nicht sicher aus dem Pfad ableiten (erwartet '{candidate}', "
-        f"{'mehrere' if len(fallback_matches) > 1 else 'keine'} Kandidaten über "
-        f"Biosensor/Osz.typ/-frequenz/Replikat/Kammer gefunden: {fallback_matches}). "
-        f"Bitte --exp-id explizit angeben. Beispiele vorhandener exp_ids: {example_ids}"
+        f"Konnte exp_id nicht eindeutig aus '{qc_path.name}' ableiten "
+        f"({len(winners)} gleich gute Kandidaten bei {best} passenden Bestandteilen: {winners[:5]}). "
+        f"Bitte --exp-id explizit angeben. Kandidaten dieser Hierarchie: {same_hierarchy[:8]}"
     )
 
 
@@ -194,8 +269,9 @@ def find_qc_overlay(data_root: Path, match: str, chamber: Optional[str] = None) 
     laut scheitern und die Kandidaten auflisten, als das falsche Bild zu nehmen.
     """
     candidates = [
-        p for p in data_root.rglob("*QC_overlay.tif")
-        if match in p.name and (chamber is None or f"Cham{chamber}" in p.name)
+        p for p in data_root.rglob("*QC_overlay.tif*")
+        if p.suffix.lower() in (".tif", ".tiff")
+        and match in p.name and (chamber is None or f"Cham{chamber}" in p.name)
     ]
     if len(candidates) == 0:
         raise FileNotFoundError(
@@ -254,6 +330,7 @@ def select_frames(
     mode: str,
     frame_range: Optional[tuple[int, int]],
     context: int,
+    miss_frames: Sequence[int] = (),
 ) -> list[int]:
     if mode == "all":
         return list(range(n_frames_in_stack))
@@ -265,10 +342,15 @@ def select_frames(
         return [f for f in range(lo, hi + 1) if 0 <= f < n_frames_in_stack]
 
     if mode == "events":
-        if events.empty:
-            logger.warning("Keine Budding-Events für dieses exp_id - Ausgabe wäre leer, gebe alle Frames zurück.")
+        # Nicht zugeordnete Bud-Kandidaten sind genauso Teil der Kalibrierung
+        # wie die erkannten Events - ihre Frames kommen daher mit in die Auswahl.
+        base_frames = sorted(set(events["budding_frame"].tolist() if not events.empty else []) | set(miss_frames))
+        if not base_frames:
+            logger.warning(
+                "Weder Budding-Events noch nicht zugeordnete Kandidaten für dieses exp_id - "
+                "gebe alle Frames zurück."
+            )
             return list(range(n_frames_in_stack))
-        base_frames = sorted(events["budding_frame"].unique().tolist())
         frames = set()
         for f in base_frames:
             frames.update(range(max(0, f - context), min(n_frames_in_stack - 1, f + context) + 1))
@@ -280,6 +362,35 @@ def select_frames(
 # ==============================================================================
 # 3. Marker + Verbindungen einzeichnen
 # ==============================================================================
+
+def find_unassigned_bud_candidates(
+    cells_sub: pd.DataFrame, events_sub: pd.DataFrame,
+) -> dict[str, int]:
+    """cell_uid -> erster Frame, für alle Bud-KANDIDATEN OHNE zugeordnete Mutter.
+
+    Spiegelt die Kandidaten-Definition aus lineage.classify_mother_bud():
+    jede Zelle, die NACH dem ersten Frame der Kammer neu auftaucht, ist ein
+    Kandidat. Wer davon in lineage_events nicht als 'bud_cell_uid' vorkommt,
+    wurde keiner Mutter zugeordnet und fehlt damit in Budding Ratio, µ_event
+    und im Stammbaum.
+
+    classify_mother_bud() zählt diese Fälle nur als eine Gesamtzahl über ALLE
+    Kammern ins Log. Für die Kalibrierung ist aber genau interessant, WO im
+    Bild sie auftreten: ein Kandidat mitten im Feld neben einer klar
+    erkennbaren Mutter bedeutet 'tolerance_px zu klein', einer am Bildrand
+    oder auf Debris bedeutet 'ist gar kein Bud'.
+    """
+    if cells_sub.empty:
+        return {}
+    first_frame = cells_sub.groupby("cell_uid")["frame"].min()
+    chamber_start = cells_sub["frame"].min()
+    candidates = first_frame[first_frame > chamber_start]
+    assigned = (
+        set(events_sub["bud_cell_uid"].astype(str))
+        if not events_sub.empty and "bud_cell_uid" in events_sub.columns else set()
+    )
+    return {str(uid): int(f) for uid, f in candidates.items() if str(uid) not in assigned}
+
 
 def _centroid(cells: pd.DataFrame, exp_id: str, frame: int, cell_uid: str) -> Optional[tuple[float, float]]:
     row = cells[(cells["exp_id"] == exp_id) & (cells["frame"] == frame) & (cells["cell_uid"] == cell_uid)]
@@ -295,7 +406,8 @@ def draw_lineage_annotations(
     cells: pd.DataFrame,
     events_at_frame: pd.DataFrame,
     font: ImageFont.ImageFont,
-) -> np.ndarray:
+    misses_at_frame: Optional[Sequence[str]] = None,
+) -> tuple[np.ndarray, int]:
     """
     Zeichnet für ALLE Budding-Events, deren budding_frame == frame ist, die
     Mutter- und Bud-Zentroide plus Verbindungslinie und Label auf ein
@@ -307,6 +419,7 @@ def draw_lineage_annotations(
     draw = ImageDraw.Draw(img)
     draw.text((6, 4), f"frame={frame}", fill=(255, 255, 255), font=font)
 
+    n_drawn = 0
     for _, ev in events_at_frame.iterrows():
         mom_uid, bud_uid = ev["mother_cell_uid"], ev["bud_cell_uid"]
         mom_xy = _centroid(cells, exp_id, frame, mom_uid)
@@ -320,6 +433,15 @@ def draw_lineage_annotations(
 
         mx, my = mom_xy
         bx, by = bud_xy
+
+        # Suchradius der Mutter mitzeichnen: so ist im Bild direkt sichtbar,
+        # ob der Bud knapp oder komfortabel innerhalb der Toleranz lag - und
+        # ob der Radius fremde Nachbarzellen mit einschließt.
+        radius = ev.get("adaptive_radius_px")
+        if radius is not None and pd.notna(radius):
+            draw.ellipse([mx - radius, my - radius, mx + radius, my + radius],
+                         outline=MOTHER_COLOR)
+
         draw.line([(mx, my), (bx, by)], fill=LINE_COLOR, width=2)
         draw.ellipse(
             [mx - MARKER_RADIUS, my - MARKER_RADIUS, mx + MARKER_RADIUS, my + MARKER_RADIUS],
@@ -329,10 +451,32 @@ def draw_lineage_annotations(
             [bx - MARKER_RADIUS, by - MARKER_RADIUS, bx + MARKER_RADIUS, by + MARKER_RADIUS],
             outline=BUD_COLOR, width=2,
         )
-        draw.text((mx + MARKER_RADIUS + 2, my - MARKER_RADIUS - 4), f"M:{mom_uid}", fill=MOTHER_COLOR, font=font)
-        draw.text((bx + MARKER_RADIUS + 2, by + MARKER_RADIUS - 8), f"B:{bud_uid}", fill=BUD_COLOR, font=font)
+        draw.text((mx + MARKER_RADIUS + 2, my - MARKER_RADIUS - 4),
+                  f"M:{short_uid(mom_uid)}", fill=MOTHER_COLOR, font=font)
 
-    return np.array(img)
+        # d/r = Distanz relativ zum Suchradius: 0 = Bud sitzt auf dem
+        # Mutter-Zentroid, ~1 = gerade eben noch akzeptiert. Werte dicht an 1
+        # sind die Zuordnungen, die man beim Kalibrieren prüfen will.
+        bud_label = f"B:{short_uid(bud_uid)}"
+        dist = ev.get("distance_px")
+        if dist is not None and pd.notna(dist) and radius is not None and pd.notna(radius) and radius > 0:
+            bud_label += f" d/r={dist / radius:.2f}"
+        draw.text((bx + MARKER_RADIUS + 2, by + MARKER_RADIUS - 8), bud_label, fill=BUD_COLOR, font=font)
+        n_drawn += 1
+
+    for miss_uid in misses_at_frame or []:
+        xy = _centroid(cells, exp_id, frame, miss_uid)
+        if xy is None:
+            continue
+        cx, cy = xy
+        draw.ellipse(
+            [cx - MARKER_RADIUS, cy - MARKER_RADIUS, cx + MARKER_RADIUS, cy + MARKER_RADIUS],
+            outline=MISS_COLOR, width=2,
+        )
+        draw.text((cx + MARKER_RADIUS + 2, cy - MARKER_RADIUS - 4),
+                  f"?:{short_uid(miss_uid)}", fill=MISS_COLOR, font=font)
+
+    return np.array(img), n_drawn
 
 
 # ==============================================================================
@@ -354,8 +498,18 @@ def build_lineage_overlay(
     if missing_cells:
         raise ValueError(f"'cells' fehlen Spalten: {missing_cells}")
 
-    required_events = {"exp_id", "mother_cell_uid", "bud_cell_uid", "budding_frame"}
-    missing_events = required_events - set(lineage_events.columns)
+    required_events = ["exp_id", "mother_cell_uid", "bud_cell_uid", "budding_frame"]
+    if lineage_events.empty:
+        # Kein einziges Event im gesamten Datensatz: weitermachen statt
+        # abbrechen - das Overlay zeigt dann nur die nicht zugeordneten
+        # Bud-Kandidaten, und genau das ist hier die gesuchte Information.
+        logger.warning(
+            "'lineage_events' enthaelt keine Zeilen - es werden nur nicht zugeordnete "
+            "Bud-Kandidaten markiert. Das ist der erwartete Ablauf, wenn die Heuristik "
+            "gar nichts erkannt hat (z.B. tolerance_px zu klein)."
+        )
+        lineage_events = pd.DataFrame(columns=required_events)
+    missing_events = set(required_events) - set(lineage_events.columns)
     if missing_events:
         raise ValueError(
             f"'lineage_events' fehlen Spalten: {missing_events}. Stellt sicher, dass "
@@ -375,7 +529,34 @@ def build_lineage_overlay(
     n_frames_in_stack = stack.shape[0]
     logger.info("QC-Overlay geladen: %d Frames, Bildgröße %dx%d.", n_frames_in_stack, stack.shape[2], stack.shape[1])
 
-    frames_to_render = select_frames(n_frames_in_stack, events_sub, mode, frame_range, context)
+    # Annahme dieses Skripts: Seitenindex im TIFF == Spalte 'frame'. Stimmt das
+    # nicht (z.B. weil 'frame' bei 1 beginnt), landen ALLE Marker eine Seite
+    # daneben - das faellt beim Draufschauen kaum auf, macht die Kalibrierung
+    # aber wertlos. Deshalb hier laut pruefen statt still annehmen.
+    frame_min, frame_max = int(cells_sub["frame"].min()), int(cells_sub["frame"].max())
+    if frame_min != 0 or frame_max != n_frames_in_stack - 1:
+        logger.warning(
+            "'frame' laeuft in dieser Kammer von %d bis %d, der TIFF-Stack hat %d Seiten "
+            "(erwartet: 0 bis %d). Falls die Zaehlung versetzt ist, sitzen alle Marker auf "
+            "der falschen Seite - bitte an einem Event mit sichtbarem Knospungsereignis pruefen.",
+            frame_min, frame_max, n_frames_in_stack, n_frames_in_stack - 1,
+        )
+
+    misses = find_unassigned_bud_candidates(cells_sub, events_sub)
+    if misses:
+        logger.info(
+            "%d von %d Bud-Kandidaten dieser Kammer wurden KEINER Mutter zugeordnet - "
+            "sie werden hellblau mit '?' markiert.",
+            len(misses), len(misses) + len(events_sub),
+        )
+    misses_by_frame: dict[int, list[str]] = {}
+    for uid, f in misses.items():
+        misses_by_frame.setdefault(f, []).append(uid)
+
+    frames_to_render = select_frames(
+        n_frames_in_stack, events_sub, mode, frame_range, context,
+        miss_frames=sorted(misses_by_frame),
+    )
     if not frames_to_render:
         raise ValueError("Keine Frames zum Rendern ausgewählt (leere Auswahl) - --mode/--frame-range prüfen.")
 
@@ -385,13 +566,24 @@ def build_lineage_overlay(
         font = ImageFont.load_default()
 
     out_frames = []
+    n_events_drawn = 0
     for f in frames_to_render:
         if f >= n_frames_in_stack:
             logger.warning("Frame %d liegt außerhalb des QC-Overlay-Stacks (%d Frames) - übersprungen.", f, n_frames_in_stack)
             continue
         events_at_frame = events_sub[events_sub["budding_frame"] == f]
-        annotated = draw_lineage_annotations(stack[f], exp_id, f, cells_sub, events_at_frame, font)
+        annotated, n_drawn = draw_lineage_annotations(
+            stack[f], exp_id, f, cells_sub, events_at_frame, font,
+            misses_at_frame=misses_by_frame.get(f, []),
+        )
         out_frames.append(annotated)
+        n_events_drawn += n_drawn
+
+    if not out_frames:
+        raise ValueError(
+            f"Kein einziger ausgewählter Frame liegt im QC-Overlay-Stack ({n_frames_in_stack} Seiten) - "
+            f"passen 'frame'-Spalte und TIFF-Seiten zusammen?"
+        )
 
     out_stack = np.stack(out_frames, axis=0)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -406,8 +598,9 @@ def build_lineage_overlay(
         compression="tiff_deflate",
     )
     logger.info(
-        "Fertig: %d Frames mit Mutter/Bud-Markern (%d Events insgesamt markiert) -> %s",
-        len(out_frames), len(events_sub), output_path,
+        "Fertig: %d Frames gerendert, %d von %d Events gezeichnet, %d nicht zugeordnete "
+        "Kandidaten markiert -> %s",
+        len(out_frames), n_events_drawn, len(events_sub), len(misses), output_path,
     )
     return output_path
 
@@ -417,9 +610,21 @@ def build_lineage_overlay(
 # ==============================================================================
 
 def _read_table(path: Path) -> pd.DataFrame:
+    """Liest .parquet oder .csv; eine LEERE CSV ergibt einen leeren DataFrame.
+
+    classify_mother_bud() liefert eine leere Tabelle, wenn in einem Datensatz
+    kein einziges Event erkannt wurde - to_csv() schreibt dann eine Datei ganz
+    ohne Kopfzeile, an der pd.read_csv() mit 'No columns to parse from file'
+    abbricht. Genau dieser Fall ist aber der wichtigste fuer das QC-Overlay:
+    man will ja sehen, WARUM nichts erkannt wurde.
+    """
     if path.suffix == ".parquet":
         return pd.read_parquet(path)
-    return pd.read_csv(path)
+    try:
+        return pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        logger.warning("'%s' ist leer - wird als Tabelle ohne Zeilen behandelt.", path)
+        return pd.DataFrame()
 
 
 def _parse_frame_range(s: Optional[str]) -> Optional[tuple[int, int]]:

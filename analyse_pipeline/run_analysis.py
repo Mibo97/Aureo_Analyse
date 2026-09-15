@@ -267,6 +267,31 @@ def main() -> None:
         len(cells_osc), len(cells_static),
     )
 
+    # ------------------------------------------------------------------
+    # 2c. Zell-Positionen für die QC-Kalibrierung exportieren
+    # ------------------------------------------------------------------
+    # plot_qc_lineage_overlay.py und validate_lineage.py brauchen den
+    # Zelldatensatz NACH Track-Merges und Exclusions - genau den Stand, auf dem
+    # classify_mother_bud() gelaufen ist. Bisher gab es dafür keine Datei: der
+    # Parquet-Cache ist der Stand VOR QC, und ein 'cells.parquet' (so in der
+    # Hilfe dieser Skripte genannt) hat die Pipeline nie geschrieben.
+    # Nur die benötigten Spalten, damit die Datei klein bleibt.
+    # Metadaten mit exportieren: validate_lineage.py gruppiert die
+    # Erkennungsrate danach (osc_freq/osc_type/...), und ohne diese Spalten
+    # faellt genau der Konfundierungs-Test aus, um den es dort geht.
+    qc_position_cols = [c for c in
+                        ["exp_id", "cell_uid", "track_id", "frame", "centroid_x", "centroid_y",
+                         "area", "filename",
+                         "biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
+                        if c in cells.columns]
+    qc_positions_path = OUTPUT_DIR / "00_cell_positions.parquet"
+    cells[qc_position_cols].to_parquet(qc_positions_path, index=False)
+    logger.info(
+        "Tabelle gespeichert: %s (%d Zeilen) - Eingabe für plot_qc_lineage_overlay.py "
+        "und validate_lineage.py.",
+        qc_positions_path.name, len(cells),
+    )
+
     run_pipeline(
         cells_osc, output_dir=OUTPUT_DIR, freq_order=resolve_x_order(cells_osc, "osc_freq", FREQ_ORDER),
         intensity_cols=intensity_cols, ratio_cols=ratio_cols,
