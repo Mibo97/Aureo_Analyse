@@ -474,7 +474,12 @@ def build_lineage_tree(lineage_events: pd.DataFrame) -> pd.DataFrame:
                 continue
             parent_of[bud] = (ev["mother_cell_uid"], ev["budding_frame"])
 
-        all_cells = set(group["mother_cell_uid"]).union(group["bud_cell_uid"])
+        # sorted(): die Iterationsreihenfolge eines Python-set haengt vom
+        # PYTHONHASHSEED ab und wechselt damit zwischen zwei Prozessen. Ohne
+        # diese Sortierung hat 23_lineage_tree.csv bei jedem Lauf eine andere
+        # Zeilenreihenfolge - identischer Inhalt, aber nicht reproduzierbar
+        # und bei jedem diff scheinbar veraendert.
+        all_cells = sorted(set(group["mother_cell_uid"]).union(group["bud_cell_uid"]))
 
         # Generation via BFS von den Wurzeln aus (Zellen ohne Eintrag in parent_of)
         generation = {}
