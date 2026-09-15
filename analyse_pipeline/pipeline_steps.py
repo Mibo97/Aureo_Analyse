@@ -1,0 +1,822 @@
+"""
+pipeline_steps.py
+=================
+Der Analyse-Kern als EINZELNE, benannte Schritte statt als eine Funktion.
+
+WARUM
+-----
+Vorher lag der gesamte Ablauf (Schritte 00-95) in einer 555-Zeilen-Funktion
+run_pipeline(). Das hatte drei praktische Folgen: man konnte keinen einzelnen
+Schritt erneut laufen lassen, ohne alles neu zu rechnen; man konnte keinen
+Schritt testen; und man musste die Funktion von oben lesen, um irgendetwas zu
+finden. Hier ist jeder Schritt eine eigene Funktion mit einem Schluessel
+("13_morphology"), und run_analysis.py kann eine Teilmenge davon ausfuehren:
+
+    python run_analysis.py --list-steps
+    python run_analysis.py --steps 13 40
+
+BERECHNUNG vs. AUSGABE
+----------------------
+Die Zwischenergebnisse, die mehrere Schritte brauchen (Lineage-Events,
+Mutterliste, µ-Tabellen), haengen am PipelineContext und werden LAZY berechnet:
+beim ersten Zugriff einmal, danach aus dem Cache. Dadurch funktioniert
+
+    --steps 40
+
+auch allein - der Kontext rechnet die noetigen Vorstufen selbst nach, ohne dass
+Schritt 10 seine Dateien noch einmal schreiben muss. Bei einem vollstaendigen
+Lauf wird trotzdem jede Vorstufe genau einmal berechnet.
+
+Die Schrittnummern entsprechen den Datei-Praefixen im Output-Ordner, damit
+Ablauf und Ordnerinhalt dieselbe Reihenfolge haben.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Optional
+
+import pandas as pd
+
+from config import (
+    MIN_PER_FRAME,
+    OSCILLATION_START_MIN,
+    PANEL_A_GROUP_COL,
+    PANEL_A_FACET_COL,
+    CONTROL_CONCENTRATION_LABELS,
+    LINEAGE_PARAMS,
+    STABLE_MOTHER_MIN_COVERAGE,
+    STABLE_MOTHER_GROUP_COLS,
+    STABLE_MOTHER_BASE_VALUE_COLS,
+    FLUX_CONFIG,
+    MU_MAX_THRESHOLD,
+    ROBUSTNESS_VALUE_COLS,
+    MORPHOLOGY_ENDPOINT_LAST_FRACTION,
+)
+from sensors import SENSOR_CONFIG
+from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
+from mother_trajectories import plot_stable_mother_per_group, build_lineage_tree, summarise_lineage_depth
+from budding_ratio_timeseries import compute_budding_ratio_timeseries, aggregate_budding_ratio_over_replicates
+from growth_rate import compute_specific_growth_rate, summarise_growth_rate, classify_condition_type
+from area_growth import compute_area_growth_rate, summarise_area_growth, plot_mu_event_vs_mu_area
+from robustness import (
+    compute_rt_population,
+    compute_rt_single_cell,
+    compute_rp,
+    aggregate_robustness_over_replicates,
+)
+from control_consistency import test_control_consistency_across_freq, plot_control_consistency
+from queen_controls import (
+    prepare_sensor_controls,
+    summarise_sensor_controls,
+    plot_sensor_control_timeseries,
+    plot_sensor_control_comparison,
+    plot_sensor_raw_channel_timeseries,
+    summarise_sensor_controls_by_chamber,
+    plot_control_chamber_comparison,
+)
+from morphology import (
+    classify_morphotype,
+    add_switching_dose,
+    summarise_morphotype_over_time,
+    summarise_morphotype_endpoint,
+    test_aberrant_across_periods,
+    plot_morphospace,
+    plot_aberrant_over_time,
+    plot_aberrant_vs_period,
+    plot_morphotype_composition,
+)
+from violin_plots import plot_panel_a
+from summary_plots import (
+    plot_budding_ratio_timeseries,
+    plot_point_errorbar,
+    plot_rt_vs_rp_quadrant,
+    plot_rt_single_cell_distribution,
+)
+from analysis import (
+    pretty_label,
+    data_overview,
+    plot_n_tracks_overview,
+    plot_metric_over_time_by_frequency,
+    plot_morphology_scatter,
+    plot_single_cell_trajectories,
+    summary_statistics,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def exclude_controls(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Entfernt PosCtrl-/NegCtrl-Zeilen aus einer Tabelle für die 'normalen'
+    Plots - die Kontrollen selbst werden bereits eigenständig über
+    test_control_consistency_across_freq()/plot_control_consistency()
+    ausgewertet (Suffix '_control_consistency_*'), daher sollen sie in den
+    übrigen Plots nicht mehr doppelt auftauchen.
+
+    Nutzt bevorzugt eine vorhandene 'condition_type'-Spalte (z.B. aus
+    summarise_growth_rate() oder den Robustness-Aggregaten); ist die nicht
+    vorhanden, wird sie aus 'condition' on-the-fly berechnet (siehe
+    growth_rate.classify_condition_type()). Fehlen beide Spalten, wird die
+    Tabelle unverändert zurückgegeben (mit Warnung), statt fälschlich alles
+    zu verwerfen. Wirkt NUR auf das, was geplottet wird - CSV-Exporte und
+    die Kontroll-Konsistenz-Berechnungen selbst bleiben unverändert und
+    behalten weiterhin PosCtrl/NegCtrl.
+    """
+    if df is None or df.empty:
+        return df
+    if "condition_type" in df.columns:
+        ctype = df["condition_type"]
+    elif "condition" in df.columns:
+        ctype = df["condition"].apply(classify_condition_type)
+    else:
+        logger.warning(
+            "exclude_controls(): weder 'condition' noch 'condition_type' in der Tabelle "
+            "vorhanden - wird ungefiltert (inkl. evtl. Kontrollen) zurückgegeben."
+        )
+        return df
+    return df[~ctype.isin(["PosCtrl", "NegCtrl"])].copy()
+
+
+@dataclass
+class PipelineContext:
+    """Alles, was die Schritte gemeinsam brauchen - Eingaben und Zwischenergebnisse.
+
+    Die Zwischenergebnisse sind Properties und werden erst beim ersten Zugriff
+    berechnet (und dann gecacht). Deshalb kann jeder Schritt einzeln laufen,
+    ohne dass der Aufrufer wissen muss, was er voraussetzt.
+    """
+
+    cells: pd.DataFrame
+    output_dir: Path
+    freq_order: Optional[list[str]]
+    intensity_cols: list[str]
+    ratio_cols: list[str]
+    run_sensor_controls: bool
+    morph_thresholds: object = None
+    # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
+    # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
+    # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
+    failed_steps: list[str] = field(default_factory=list)
+    _cache: dict = field(default_factory=dict, repr=False)
+
+    def _lazy(self, key: str, compute: Callable[[], object]):
+        if key not in self._cache:
+            logger.info("Zwischenergebnis '%s' wird berechnet ...", key)
+            self._cache[key] = compute()
+        return self._cache[key]
+
+    @property
+    def cells_plot(self) -> pd.DataFrame:
+        """Zelldaten OHNE PosCtrl/NegCtrl - nur fuer die 'normalen' Plots.
+
+        Lineage-Klassifikation, µ-/Robustness-Tabellen, Kontroll-Konsistenz und
+        alle CSV-Exporte laufen weiterhin auf dem VOLLEN Datensatz; nur die
+        Sichtbarkeit in den Plots aendert sich.
+        """
+        return self._lazy("cells_plot", lambda: exclude_controls(self.cells))
+
+    @property
+    def lineage_events(self) -> pd.DataFrame:
+        """Budding-Events. HEURISTIK ohne echtes Lineage-Tracking - siehe
+        lineage.py und validate_lineage.py."""
+        return self._lazy(
+            "lineage_events",
+            lambda: classify_mother_bud(self.cells, LINEAGE_PARAMS, flux_config=FLUX_CONFIG),
+        )
+
+    @property
+    def mothers(self) -> pd.DataFrame:
+        """ALLE Mutterzellen, auch ohne Budding-Event - notwendig, damit ruhende
+        Muetter mit budding_ratio=0 in Panel A erscheinen."""
+        return self._lazy("mothers", lambda: identify_mothers(self.cells, LINEAGE_PARAMS))
+
+    @property
+    def mu_table(self) -> pd.DataFrame:
+        return self._lazy("mu_table", lambda: compute_specific_growth_rate(
+            self.lineage_events, self.cells,
+            min_per_frame=MIN_PER_FRAME, mu_max_threshold=MU_MAX_THRESHOLD,
+        ))
+
+    @property
+    def mu_summary(self) -> pd.DataFrame:
+        return self._lazy("mu_summary", lambda: (
+            summarise_growth_rate(self.mu_table) if not self.mu_table.empty else pd.DataFrame()
+        ))
+
+    @property
+    def area_table(self) -> pd.DataFrame:
+        return self._lazy("area_table", lambda: compute_area_growth_rate(
+            self.cells, min_per_frame=MIN_PER_FRAME,
+            lineage_events=self.lineage_events, mothers=self.mothers,
+        ))
+
+
+
+def step_00_overview(ctx: PipelineContext) -> None:
+    """Übersicht / Sanity-Check."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+    freq_order = ctx.freq_order
+
+    # ==================================================================
+    # 00. Übersicht / Sanity-Check
+    # ==================================================================
+    overview = data_overview(cells)
+    overview.to_csv(output_dir / "00_data_overview.csv", index=False)
+    logger.info("Übersicht gespeichert: 00_data_overview.csv")
+    plot_n_tracks_overview(overview, output_dir / "00_n_tracks_overview.pdf", freq_order=freq_order)
+
+
+
+def step_10_growth(ctx: PipelineContext) -> None:
+    """Zellfläche, µ_event und µ_area."""
+    cells = ctx.cells
+    cells_plot = ctx.cells_plot
+    output_dir = ctx.output_dir
+    freq_order = ctx.freq_order
+    mu_table = ctx.mu_table
+    mu_summary = ctx.mu_summary
+    area_table = ctx.area_table
+
+    # ==================================================================
+    # 10. Zellmorphologie & Wachstum (Fläche, µ_event, µ_area)
+    # ==================================================================
+    if "area" in cells.columns:
+        plot_metric_over_time_by_frequency(
+            cells_plot, "area", output_dir / "10_cell_area_over_time.pdf",
+            freq_order=freq_order, ylabel="Cell area [px²]",
+        )
+
+    # -- µ_event: spezifische Wachstumsrate nach Eq. 2 (Blöbaum et al. 2024):
+    #    µ = ln(2)/t, aus der Zeit zwischen aufeinanderfolgenden Budding-
+    #    Events EINER Mutterzelle. Läuft identisch für alle Bedingungen
+    #    inkl. PosCtrl (durchgehend Feast) und NegCtrl (durchgehend
+    #    Starvation) - µ ist pro Zelle definiert, nicht pro Bedingung.
+    #
+    #    style_col="condition_type" wird hier NICHT mehr gesetzt: seit
+    #    exclude_controls() PosCtrl/NegCtrl vorher rausfiltert, bleibt in
+    #    diesem Plot ohnehin nur noch "Oscillation" übrig (bzw. bei den
+    #    statischen Daten St.omlp/St.ypd, was schon über die x-Achse
+    #    sichtbar ist) - eine zusätzliche Marker-Form dafür wäre redundant.
+    if not mu_table.empty:
+        mu_table.to_csv(output_dir / "11_specific_growth_rate.csv", index=False)
+        logger.info("Tabelle gespeichert: 11_specific_growth_rate.csv")
+
+        mu_summary.to_csv(output_dir / "11_specific_growth_rate_summary.csv", index=False)
+        logger.info("Tabelle gespeichert: 11_specific_growth_rate_summary.csv")
+
+        plot_point_errorbar(
+            exclude_controls(mu_summary), value_col="mean_mu", out_path=output_dir / "11_specific_growth_rate.pdf",
+            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_order=freq_order,
+            ylabel="Specific growth rate µ [h⁻¹]",
+        )
+
+        # Kontroll-Konsistenz: driften PosCtrl/NegCtrl über die Frequenz-Batches
+        # hinweg, obwohl sie eigentlich unabhängig von der Oszillation sein
+        # sollten? Test auf Replikat-Ebene (mu_table), Plot auf aggregierter
+        # Ebene (mu_summary) - siehe control_consistency.py Docstring.
+        mu_control_test = test_control_consistency_across_freq(mu_table, value_col="mu")
+        if not mu_control_test.empty:
+            mu_control_test.to_csv(output_dir / "11_control_consistency_mu_kruskal.csv", index=False)
+            logger.info("Tabelle gespeichert: 11_control_consistency_mu_kruskal.csv")
+
+        plot_control_consistency(
+            mu_summary, value_col="mean_mu", out_path=output_dir / "11_control_consistency_mu.pdf",
+            x_order=freq_order, ylabel="Specific growth rate µ [h⁻¹] (controls)",
+        )
+    else:
+        logger.warning("Keine µ-Werte berechnet - benötigt Mutterzellen mit >= 2 Budding-Events.")
+
+    # -- µ_area: flächenbasierte Wachstumsrate
+    if not area_table.empty:
+        area_table.to_csv(output_dir / "12_area_growth_rate.csv", index=False)
+
+        # Separate Summaries für Mütter und Knospen
+        area_summary_all = summarise_area_growth(area_table)
+        area_summary_mother = summarise_area_growth(area_table, cell_type="mother")
+        area_summary_bud = summarise_area_growth(area_table, cell_type="bud")
+
+        area_summary_all.to_csv(output_dir / "12_area_growth_rate_summary_all.csv", index=False)
+        area_summary_mother.to_csv(output_dir / "12_area_growth_rate_summary_mother.csv", index=False)
+        area_summary_bud.to_csv(output_dir / "12_area_growth_rate_summary_bud.csv", index=False)
+
+        # Plot: µ_area für Mütter (primär interessant) - ohne PosCtrl/NegCtrl,
+        # siehe exclude_controls().
+        plot_point_errorbar(
+            exclude_controls(area_summary_mother), value_col="mean_mu_area",
+            out_path=output_dir / "12_area_growth_rate_mother.pdf",
+            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_order=freq_order,
+            ylabel="µ_area, mother cells [h⁻¹]",
+        )
+
+        # Scatter: µ_event vs. µ_area (ebenfalls ohne Kontrollen)
+        if not mu_summary.empty:
+            plot_mu_event_vs_mu_area(
+                exclude_controls(mu_summary), exclude_controls(area_summary_mother),
+                output_dir / "12_mu_event_vs_mu_area.pdf",
+                label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
+                mu_event_table=exclude_controls(mu_table), mu_area_table=exclude_controls(area_table),
+            )
+
+
+
+def step_13_morphology(ctx: PipelineContext) -> None:
+    """Kumulative Morphologie-Wirkung."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+    freq_order = ctx.freq_order
+    morph_thresholds = ctx.morph_thresholds
+
+    # ==================================================================
+    # 13. Kumulative Morphologie-Wirkung der Feast/Famine-Zyklen
+    # ==================================================================
+    # Die Oszillationsperioden liegen alle am oder unter dem Abtastlimit
+    # (siehe config.OSC_FREQ_IS_PERIOD_IN_MINUTES) - ein einzelner Zyklus ist
+    # nicht beobachtbar. Ausgewertet wird daher, was sich ueber Stunden
+    # AUFSUMMIERT: wie weit driftet die Morphologie aus dem Normalfenster der
+    # unbehandelten Kontrolle heraus, und haengt diese Drift von der
+    # Zykluslaenge ab? Siehe morphology.py.
+    if morph_thresholds is None:
+        logger.warning(
+            "Keine Morphotyp-Schwellen verfuegbar (fehlen area/eccentricity/solidity?) - "
+            "Schritt 13 uebersprungen."
+        )
+    else:
+        pd.DataFrame([morph_thresholds.as_row()]).to_csv(
+            output_dir / "13_morphotype_thresholds.csv", index=False,
+        )
+        cells_morph = classify_morphotype(cells, morph_thresholds)
+        cells_morph = add_switching_dose(cells_morph, min_per_frame=MIN_PER_FRAME)
+
+        morph_per_chamber, morph_agg = summarise_morphotype_over_time(cells_morph)
+        if morph_per_chamber.empty:
+            logger.warning("Keine gueltigen Morphologie-Werte - Schritt 13 uebersprungen.")
+        else:
+            morph_per_chamber.to_csv(output_dir / "13_morphotype_per_chamber_timeseries.csv", index=False)
+            morph_agg.to_csv(output_dir / "13_morphotype_aggregated_timeseries.csv", index=False)
+
+            morph_endpoint = summarise_morphotype_endpoint(
+                morph_per_chamber, last_fraction=MORPHOLOGY_ENDPOINT_LAST_FRACTION,
+            )
+            morph_endpoint.to_csv(output_dir / "13_morphotype_endpoint_per_chamber.csv", index=False)
+
+            period_test = test_aberrant_across_periods(morph_endpoint)
+            if not period_test.empty:
+                period_test.to_csv(output_dir / "13_aberrant_vs_period_stats.csv", index=False)
+
+            plot_morphospace(
+                cells_morph, morph_thresholds, output_dir / "13_morphospace.pdf",
+                freq_order=freq_order,
+            )
+            plot_aberrant_over_time(
+                exclude_controls(morph_agg), output_dir / "13_aberrant_over_time.pdf",
+                freq_order=freq_order,
+            )
+            plot_aberrant_vs_period(
+                morph_endpoint, output_dir / "13_aberrant_vs_period.pdf",
+                freq_order=freq_order,
+            )
+            plot_morphotype_composition(
+                exclude_controls(morph_agg), output_dir / "13_morphotype_composition.pdf",
+                freq_order=freq_order,
+            )
+
+
+
+def step_20_lineage(ctx: PipelineContext) -> None:
+    """Budding-Events, Budding Ratio, Panel A, Stammbaum."""
+    cells = ctx.cells
+    cells_plot = ctx.cells_plot
+    output_dir = ctx.output_dir
+    freq_order = ctx.freq_order
+    lineage_events = ctx.lineage_events
+    mothers = ctx.mothers
+
+    # ==================================================================
+    # 20. Lineage/Budding (Ausgabe der in Schritt 3 vorab berechneten
+    #     Mutter/Bud-Klassifikation, plus Budding Ratio, Panel A und
+    #     Lineage-Tiefe)
+    # ==================================================================
+    if not lineage_events.empty:
+        lineage_events.to_csv(output_dir / "20_budding_events.csv", index=False)
+        logger.info("Tabelle gespeichert: 20_budding_events.csv (%d Events)", len(lineage_events))
+    else:
+        logger.warning("Keine Budding-Events erkannt - Budding Ratio besteht dann ausschließlich aus ruhenden Müttern.")
+
+    # -- Budding Ratio "pro Mutter über die gesamte Beobachtungsdauer"
+    #    (NICHT die Paper-Eq.-3-Zeitreihe, siehe weiter unten dafür)
+    per_mother, per_experiment = compute_budding_ratio(lineage_events, cells, mothers)
+    if not per_mother.empty:
+        per_mother.to_csv(output_dir / "21_budding_ratio_per_mother.csv", index=False)
+        per_experiment.to_csv(output_dir / "21_budding_ratio_per_experiment.csv", index=False)
+        logger.info("Tabellen gespeichert: 21_budding_ratio_per_mother.csv / _per_experiment.csv")
+
+        plot_panel_a(
+            cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
+            group_col=PANEL_A_GROUP_COL, facet_col=PANEL_A_FACET_COL,
+        )
+    else:
+        logger.warning("compute_budding_ratio() lieferte keine per_mother-Tabelle - Panel A wird übersprungen.")
+
+    # -- Budding Ratio als ZEITREIHE nach Eq. 3 (Blöbaum et al. 2024):
+    #    n_buds(t) / n_cells(t-1), analog zu Fig. 3a im Paper.
+    #    HINWEIS: bei euch ist die Negativkontrolle durchgehend Starvation
+    #    (im Paper: durchgehend Feast) - die Berechnung selbst ist medien-
+    #    unabhängig, aber die INTERPRETATION im Vergleich zum Paper ist es
+    #    nicht. Siehe budding_ratio_timeseries.py Docstring.
+    budding_ts = compute_budding_ratio_timeseries(cells, lineage_events)
+    budding_ts.to_csv(output_dir / "22_budding_ratio_timeseries.csv", index=False)
+    logger.info("Tabelle gespeichert: 22_budding_ratio_timeseries.csv")
+
+    budding_ts_agg = aggregate_budding_ratio_over_replicates(budding_ts)
+    budding_ts_agg.to_csv(output_dir / "22_budding_ratio_timeseries_aggregated.csv", index=False)
+    logger.info("Tabelle gespeichert: 22_budding_ratio_timeseries_aggregated.csv")
+
+    plot_budding_ratio_timeseries(
+        exclude_controls(budding_ts), output_dir / "22_budding_ratio_timeseries.pdf",
+        group_col=PANEL_A_GROUP_COL, facet_col=PANEL_A_FACET_COL, freq_order=freq_order,
+    )
+
+    # -- Lineage-Baum & Generationstiefe
+    if not lineage_events.empty:
+        lineage_tree = build_lineage_tree(lineage_events)
+        if not lineage_tree.empty:
+            lineage_tree.to_csv(output_dir / "23_lineage_tree.csv", index=False)
+            logger.info("Tabelle gespeichert: 23_lineage_tree.csv")
+
+            lineage_depth = summarise_lineage_depth(lineage_tree)
+            lineage_depth.to_csv(output_dir / "23_lineage_depth_summary.csv", index=False)
+            logger.info(
+                "Tabelle gespeichert: 23_lineage_depth_summary.csv (mittlere max. "
+                "Generationstiefe=%.1f über %d Kammern)",
+                lineage_depth["max_generation"].mean(), len(lineage_depth),
+            )
+
+
+
+def step_30_sensors(ctx: PipelineContext) -> None:
+    """Sensor-Intensitäten und Ratios über die Zeit."""
+    cells_plot = ctx.cells_plot
+    output_dir = ctx.output_dir
+    freq_order = ctx.freq_order
+    intensity_cols = ctx.intensity_cols
+    ratio_cols = ctx.ratio_cols
+
+    # ==================================================================
+    # 30. Sensor-/Ratio-Zeitverläufe (unterstützend - Grundlage für die
+    #     Robustness-Auswertung in Sektion 40)
+    # ==================================================================
+    if not intensity_cols:
+        logger.warning("Keine 'mean_<kanal>' Spalten gefunden - Sensor-Intensitäts-Plots werden übersprungen.")
+
+    for col in intensity_cols:
+        plot_metric_over_time_by_frequency(
+            cells_plot, col, output_dir / f"30_{col}_over_time.pdf", freq_order=freq_order,
+        )
+
+    if not ratio_cols:
+        logger.warning("Keine 'ratio_*' Spalten gefunden - Ratio-Plots werden übersprungen.")
+
+    for col in ratio_cols:
+        plot_metric_over_time_by_frequency(
+            cells_plot, col, output_dir / f"31_{col}_over_time.pdf",
+            freq_order=freq_order, ylabel=pretty_label(col),
+        )
+
+
+
+def step_40_robustness(ctx: PipelineContext) -> None:
+    """Robustness R(t)/R(p)."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+    freq_order = ctx.freq_order
+    ratio_cols = ctx.ratio_cols
+    mu_table = ctx.mu_table
+    area_table = ctx.area_table
+
+    # ==================================================================
+    # 40. Robustness-Quantifizierung R(t) und R(p) (Eq. 1, Trivellin et al.
+    #     2022 / Blöbaum et al. 2024) für die in ROBUSTNESS_VALUE_COLS
+    #     konfigurierten Spalten PLUS die zur Laufzeit erkannten
+    #     ratio_*-Spalten (Sektion 30) - dadurch fließen die Sensor-Daten
+    #     hier in die zusammenfassende Auswertung mit ein.
+    #
+    #     Zusätzlich (siehe unten, nach der Haupt-Schleife): µ_event und
+    #     µ_area aus Sektion 10, JEWEILS NUR IN DER SINNVOLLEN VARIANTE
+    #     (µ_event -> R(t) Einzelzelle, µ_area -> R(p)) - die jeweils
+    #     andere Variante ist mit der Datenstruktur dieser Tabellen nicht
+    #     sauber definierbar, siehe Kommentare dort.
+    # ==================================================================
+    # dict.fromkeys() statt set(): erhält die Reihenfolge und entfernt
+    # Duplikate, falls eine Spalte versehentlich in beiden Listen auftaucht.
+    robustness_value_cols = list(dict.fromkeys(ROBUSTNESS_VALUE_COLS + ratio_cols))
+    logger.info("Robustness R(t)/R(p) wird berechnet für: %s", robustness_value_cols)
+
+    for value_col in robustness_value_cols:
+        if value_col not in cells.columns:
+            logger.warning("Robustness: Spalte '%s' nicht in den Daten - übersprungen.", value_col)
+            continue
+
+        rt_pop = compute_rt_population(cells, value_col)
+        rt_pop.to_csv(output_dir / f"40_Rt_population_{value_col}.csv", index=False)
+
+        rt_cell = compute_rt_single_cell(cells, value_col)
+        rt_cell.to_csv(output_dir / f"40_Rt_single_cell_{value_col}.csv", index=False)
+        plot_rt_single_cell_distribution(
+            exclude_controls(rt_cell), output_dir / f"40_Rt_single_cell_{value_col}.pdf",
+            value_col="R_t_single_cell", facet_col="osc_freq", freq_order=freq_order,
+        )
+
+        rp = compute_rp(cells, value_col)
+        rp.to_csv(output_dir / f"40_Rp_{value_col}.csv", index=False)
+
+        rt_pop_agg = aggregate_robustness_over_replicates(rt_pop, "R_t_population")
+        rt_pop_agg.to_csv(output_dir / f"40_Rt_population_{value_col}_aggregated.csv", index=False)
+
+        rp_agg = aggregate_robustness_over_replicates(rp, "R_p")
+        rp_agg.to_csv(output_dir / f"40_Rp_{value_col}_aggregated.csv", index=False)
+
+        # Kontrollen raus aus den 'normalen' R(t)/R(p)-Plots - die laufen
+        # jetzt separat über die control_consistency-Plots weiter unten.
+        rt_pop_agg_plot = exclude_controls(rt_pop_agg)
+        rp_agg_plot = exclude_controls(rp_agg)
+
+        plot_point_errorbar(
+            rt_pop_agg_plot, value_col="mean", out_path=output_dir / f"40_Rt_population_{value_col}.pdf",
+            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_order=freq_order,
+            ylabel=f"R(t) — {value_col}", title=f"R(t) population level — {value_col}",
+        )
+        plot_point_errorbar(
+            rp_agg_plot, value_col="mean", out_path=output_dir / f"40_Rp_{value_col}.pdf",
+            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_order=freq_order,
+            ylabel=f"R(p) — {value_col}", title=f"R(p) — {value_col}",
+        )
+        plot_rt_vs_rp_quadrant(
+            rt_pop_agg_plot, rp_agg_plot, output_dir / f"40_Rt_vs_Rp_{value_col}.pdf",
+            label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
+        )
+
+        # Kontroll-Konsistenz für R(t)/R(p), analog zur Wachstumsrate oben.
+        rt_control_test = test_control_consistency_across_freq(rt_pop, value_col="R_t_population")
+        if not rt_control_test.empty:
+            rt_control_test.to_csv(output_dir / f"40_control_consistency_Rt_population_{value_col}_kruskal.csv", index=False)
+        plot_control_consistency(
+            rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
+            x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
+        )
+
+        rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
+        if not rp_control_test.empty:
+            rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
+        plot_control_consistency(
+            rp_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rp_{value_col}.pdf",
+            x_order=freq_order, ylabel=f"R(p) — {value_col} (controls)",
+        )
+
+        logger.info("Robustness R(t)/R(p) für '%s' berechnet und gespeichert.", value_col)
+
+    # -- µ_event -> R(t) Einzelzelle: wie stabil ist die Reproduktionsrate
+    #    EINER Mutter über ihre eigenen Budding-Intervalle?
+    #    mu_table hat KEINE 'frame'-Spalte (nur frame_start/frame_end pro
+    #    Intervall) und ist damit NICHT mit compute_rt_population()/
+    #    compute_rp() kompatibel - die brauchen eine gemeinsame Zeitachse
+    #    über mehrere Zellen hinweg, die es bei Event-Daten mit ihren pro
+    #    Mutter unterschiedlichen Intervall-Zeitpunkten nicht sinnvoll gibt
+    #    (Intervall-Enden verschiedener Mütter fallen kaum je zusammen).
+    #    compute_rt_single_cell() braucht dagegen KEINE 'frame'-Spalte,
+    #    nur mehrere Werte PRO ZELLE - das ist hier gegeben (mehrere
+    #    Intervalle pro Mutter), daher funktioniert NUR diese Variante.
+    if not mu_table.empty:
+        mu_valid = mu_table[~mu_table["mu_is_artefact"]]
+        rt_cell_mu = compute_rt_single_cell(mu_valid, value_col="mu", cell_id_col="mother_cell_uid")
+        rt_cell_mu.to_csv(output_dir / "40_Rt_single_cell_mu_event.csv", index=False)
+        plot_rt_single_cell_distribution(
+            exclude_controls(rt_cell_mu), output_dir / "40_Rt_single_cell_mu_event.pdf",
+            value_col="R_t_single_cell", facet_col="osc_freq", freq_order=freq_order,
+        )
+        rt_cell_mu_agg = aggregate_robustness_over_replicates(rt_cell_mu, "R_t_single_cell")
+        rt_cell_mu_agg.to_csv(output_dir / "40_Rt_single_cell_mu_event_aggregated.csv", index=False)
+        logger.info("R(t) Einzelzelle für µ_event berechnet und gespeichert (%d Mütter).", len(rt_cell_mu))
+    else:
+        logger.warning("mu_table ist leer - R(t) Einzelzelle für µ_event wird übersprungen.")
+
+    # -- µ_area -> R(p): wie homogen ist die flächenbasierte Wachstumsrate
+    #    ÜBER DIE ZELLEN einer Kammer?
+    #    area_table hat pro Zelle nur EINEN Wert (der ganze Track wurde
+    #    bereits zu einer Steigung verdichtet) - eine Zeitachse gibt es
+    #    hier nicht mehr, R(t) ist für µ_area daher NICHT definierbar
+    #    (weder Populations- noch Einzelzell-Variante: beide bräuchten
+    #    mehrere Zeitpunkte pro Zelle bzw. pro Kammer).
+    #    compute_rp() gruppiert technisch nach exp_id x frame - da wir
+    #    keine Zeit haben, setzen wir 'frame' konstant auf 0. Dadurch
+    #    entspricht jede Kammer genau einer Gruppe, und R(p) misst wie
+    #    beabsichtigt die Homogenität ÜBER DIE ZELLEN einer Kammer (statt
+    #    über Zeitpunkte). Nur zuverlässige Fits (fit_is_reliable) gehen
+    #    ein - unzuverlässige Fits würden R(p) sonst mit Rauschen aus
+    #    schlecht bestimmten Steigungen aufblähen. Mutter- und Knospen-
+    #    Tracks werden NICHT getrennt (analog zu 'area'/'eccentricity'
+    #    oben, die ebenfalls nicht nach cell_type filtern).
+    if not area_table.empty:
+        area_reliable = area_table[area_table["fit_is_reliable"]].copy()
+        area_reliable["frame"] = 0
+        rp_mu_area = compute_rp(area_reliable, value_col="mu_area")
+        rp_mu_area.to_csv(output_dir / "40_Rp_mu_area.csv", index=False)
+
+        rp_mu_area_agg = aggregate_robustness_over_replicates(rp_mu_area, "R_p")
+        rp_mu_area_agg.to_csv(output_dir / "40_Rp_mu_area_aggregated.csv", index=False)
+
+        plot_point_errorbar(
+            exclude_controls(rp_mu_area_agg), value_col="mean", out_path=output_dir / "40_Rp_mu_area.pdf",
+            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_order=freq_order,
+            ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
+        )
+
+        rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
+        if not rp_mu_area_control_test.empty:
+            rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
+        plot_control_consistency(
+            rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
+            x_order=freq_order, ylabel="R(p) — µ_area (controls)",
+        )
+        logger.info("R(p) für µ_area berechnet und gespeichert (%d zuverlässige Tracks).", len(area_reliable))
+    else:
+        logger.warning("area_table ist leer - R(p) für µ_area wird übersprungen.")
+
+
+
+def step_50_summary(ctx: PipelineContext) -> None:
+    """Zusammenfassungstabelle."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+    intensity_cols = ctx.intensity_cols
+
+    # ==================================================================
+    # 50. Zusammenfassungstabelle
+    # ==================================================================
+    summary = summary_statistics(cells, intensity_cols)
+    summary.to_csv(output_dir / "50_summary_statistics.csv", index=False)
+    logger.info("Tabelle gespeichert: 50_summary_statistics.csv")
+
+
+
+def step_90_appendix(ctx: PipelineContext) -> None:
+    """Anhang: Morphologie-Scatter und Trajektorien."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+    lineage_events = ctx.lineage_events
+    mothers = ctx.mothers
+
+    # ==================================================================
+    # 90. ANHANG: Morphologie-Scatter, Einzelzell-Trajektorien, stabile
+    #     Mutter-Trajektorien - deskriptive Plausibilitäts-Checks ohne
+    #     eigene quantitative Kennzahl, siehe Diskussion zur Restrukturierung.
+    # ==================================================================
+    plot_morphology_scatter(cells, output_dir / "90_morphology_scatter.pdf")
+
+    # Dieser Plot zeigt 'area', hing aber an intensity_cols - dadurch fehlte er
+    # bei den statischen Daten komplett (Wildtyp, keine Fluoreszenzkanäle).
+    if "area" in cells.columns:
+        plot_single_cell_trajectories(cells, "area", output_dir / "91_single_cell_trajectories.pdf")
+    else:
+        logger.warning("Spalte 'area' fehlt - 91_single_cell_trajectories.pdf übersprungen.")
+
+    # Stabil getrackte Mütter im Detail: pro Bedingungs-Kombination
+    # (STABLE_MOTHER_GROUP_COLS) EINE stabile Mutter, mit Budding-Markern
+    # und nur ihrem eigenen Ratio-Kanal (siehe mother_trajectories.py) -
+    # ergänzt die aggregierten Auswertungen oben (Panel A, Fig. 3a) um
+    # eine Einzelzell-Ebene zur visuellen Plausibilitätsprüfung.
+    stable_base_cols = [c for c in STABLE_MOTHER_BASE_VALUE_COLS if c in cells.columns]
+    if not mothers.empty and stable_base_cols:
+        plot_stable_mother_per_group(
+            cells, lineage_events, mothers,
+            out_path=output_dir / "92_stable_mother_trajectories.pdf",
+            group_cols=STABLE_MOTHER_GROUP_COLS, base_value_cols=stable_base_cols,
+            min_coverage=STABLE_MOTHER_MIN_COVERAGE, min_per_frame=MIN_PER_FRAME,
+        )
+        logger.info("Plot gespeichert: 92_stable_mother_trajectories.pdf")
+    else:
+        logger.warning("Keine stabilen Mütter oder keine base_value_cols - 92_stable_mother_trajectories.pdf übersprungen.")
+
+
+
+def step_95_sensor_controls(ctx: PipelineContext) -> None:
+    """Anhang: Sensor-Controls (PosCtrl vs. NegCtrl)."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+    run_sensor_controls = ctx.run_sensor_controls
+
+    # ==================================================================
+    # 95. ANHANG: Sensor-Controls (PosCtrl-vs-NegCtrl-Validierung pro
+    #     Biosensor). Reine Kalibrierungs-/QC-Auswertung des Sensors selbst,
+    #     nicht Teil der biologischen Kernaussage - siehe Diskussion zur
+    #     Restrukturierung. Zellwerte werden vorab pro Replikat summiert,
+    #     um Pseudoreplikation zu vermeiden.
+    #
+    #     Wird für die statischen Daten übersprungen (run_sensor_controls=
+    #     False): dort wird nur der Wildtyp kultiviert, es gibt also keine
+    #     Fluoreszenzkanäle/Sensor-Ratios auszuwerten.
+    # ==================================================================
+    if not run_sensor_controls:
+        logger.info("Sensor-Control-Validierung (Schritt 95) übersprungen (run_sensor_controls=False).")
+        SENSOR_CONFIG_ITEMS = {}
+    else:
+        SENSOR_CONFIG_ITEMS = SENSOR_CONFIG
+
+    for biosensor, sensor_cfg in SENSOR_CONFIG_ITEMS.items():
+        ratio_col = sensor_cfg.ratio_name
+        if ratio_col not in cells.columns or not cells[ratio_col].notna().any():
+            logger.info("Sensor-control validation: no usable '%s' values for %s; skipped.", ratio_col, biosensor)
+            continue
+
+        sensor_data = cells[cells["biosensor"] == biosensor]
+        for osc_type in sorted(sensor_data["osc_type"].dropna().unique()):
+            analysis_start_min = OSCILLATION_START_MIN
+            controls = prepare_sensor_controls(
+                cells, value_col=ratio_col, biosensor=biosensor, osc_type=osc_type,
+            )
+            control_time, control_summary = summarise_sensor_controls(
+                controls, value_col=ratio_col, analysis_start_min=analysis_start_min,
+            )
+            if control_time.empty:
+                continue
+
+            output_stem = f"95_{biosensor}_{osc_type}_{ratio_col}"
+            control_time.to_csv(output_dir / f"{output_stem}_timeseries_per_replicate.csv", index=False)
+            control_summary.to_csv(output_dir / f"{output_stem}_summary_per_replicate.csv", index=False)
+            sensor_label = ratio_col.replace("ratio_", "")
+            plot_sensor_control_timeseries(
+                control_time, output_dir / f"{output_stem}_timeseries.pdf",
+                sensor_label=sensor_label,
+                preconditioning_end_min=OSCILLATION_START_MIN,
+            )
+            plot_sensor_control_comparison(
+                control_summary, output_dir / f"{output_stem}_comparison.pdf",
+                sensor_label=sensor_label, analysis_start_min=analysis_start_min,
+                control_labels=CONTROL_CONCENTRATION_LABELS.get(osc_type),
+            )
+
+            # A flat ratio can arise because both raw channels shift together
+            # or because neither channel contains a detectable control effect.
+            # The two raw-channel panels make this distinction inspectable.
+            channel_a_controls = prepare_sensor_controls(
+                cells, value_col=sensor_cfg.channel_a, biosensor=biosensor, osc_type=osc_type,
+            )
+            channel_b_controls = prepare_sensor_controls(
+                cells, value_col=sensor_cfg.channel_b, biosensor=biosensor, osc_type=osc_type,
+            )
+            channel_a_time, _ = summarise_sensor_controls(
+                channel_a_controls, value_col=sensor_cfg.channel_a, analysis_start_min=analysis_start_min,
+            )
+            channel_b_time, _ = summarise_sensor_controls(
+                channel_b_controls, value_col=sensor_cfg.channel_b, analysis_start_min=analysis_start_min,
+            )
+            plot_sensor_raw_channel_timeseries(
+                channel_a_time, channel_b_time, output_dir / f"{output_stem}_raw_channels.pdf",
+                sensor_label=sensor_label, channel_a_label=sensor_cfg.channel_a,
+                channel_b_label=sensor_cfg.channel_b,
+                preconditioning_end_min=OSCILLATION_START_MIN,
+            )
+
+            chamber_summary = summarise_sensor_controls_by_chamber(
+                controls, value_col=ratio_col, analysis_start_min=analysis_start_min,
+            )
+            if not chamber_summary.empty:
+                chamber_summary.to_csv(output_dir / f"{output_stem}_control_chambers.csv", index=False)
+                plot_control_chamber_comparison(
+                    chamber_summary, output_dir / f"{output_stem}_control_chambers.pdf",
+                    sensor_label=sensor_label,
+                )
+
+    logger.info("=== Fertig! Alle Plots & Tabellen in: %s ===", output_dir)
+
+
+
+
+@dataclass(frozen=True)
+class Step:
+    """Ein benannter Auswertungsschritt."""
+
+    key: str
+    title: str
+    run: Callable[[PipelineContext], None]
+
+
+STEPS: list[Step] = [
+    Step("00_overview", "Übersicht / Sanity-Check", step_00_overview),
+    Step("10_growth", "Zellfläche, µ_event und µ_area", step_10_growth),
+    Step("13_morphology", "Kumulative Morphologie-Wirkung", step_13_morphology),
+    Step("20_lineage", "Budding-Events, Budding Ratio, Panel A, Stammbaum", step_20_lineage),
+    Step("30_sensors", "Sensor-Intensitäten und Ratios über die Zeit", step_30_sensors),
+    Step("40_robustness", "Robustness R(t)/R(p)", step_40_robustness),
+    Step("50_summary", "Zusammenfassungstabelle", step_50_summary),
+    Step("90_appendix", "Anhang: Morphologie-Scatter und Trajektorien", step_90_appendix),
+    Step("95_sensor_controls", "Anhang: Sensor-Controls (PosCtrl vs. NegCtrl)", step_95_sensor_controls),
+]

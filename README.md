@@ -88,6 +88,7 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 | `data_loading.py` | Einlesen der Hierarchie, `exp_id`/`cell_uid`, Parquet-Cache |
 | `qc_exclusions.py` | Nicht-destruktives manuelles QC: Track-Merges & Exclusions |
 | `sensors.py` | Ratiometrische Sensoren → `ratio_*`-Spalten (`SENSOR_CONFIG`) |
+| `morphology.py` | Kumulative Morphologie-Wirkung, Morphotypen, Dosis-Wirkung |
 | `lineage.py` | Mutter/Bud-Heuristik, Budding Ratio pro Mutter |
 | `growth_rate.py` | µ_event aus Budding-Intervallen (Eq. 2) |
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
@@ -97,7 +98,8 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 | `queen_controls.py` | PosCtrl-vs-NegCtrl-Validierung der Sensoren selbst |
 | `analysis.py`, `summary_plots.py`, `violin_plots.py`, `mother_trajectories.py` | Plots & gemeinsame Helfer |
 | `inspect_lineage.py` | Interaktive Kalibrierung der Lineage-Parameter |
-| `plot_qc_lineage_overlay.py` | Eigenständiges CLI: Budding-Events ins QC-TIFF zeichnen |
+| `validate_lineage.py` | **Quantitative** Validierung der Mutter/Bud-Heuristik (alle Kammern) |
+| `plot_qc_lineage_overlay.py` | **Visuelle** Validierung: Events ins QC-TIFF zeichnen (eine Kammer) |
 
 ## Output
 
@@ -107,7 +109,8 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | Präfix | Inhalt |
 | --- | --- |
 | `00_` | Übersicht / Sanity-Check (Tracks pro Experiment) |
-| `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
+| `10_`–`12_` | Zellwachstum (Fläche, µ_event, µ_area) |
+| `13_` | **Kumulative Morphologie-Wirkung** der Feast/Famine-Zyklen |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
@@ -117,6 +120,132 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 Statische Daten landen in denselben Präfixen unter `analysis_output/static/`
 (ohne `30_`/`31_`/`95_`, da dort nur der Wildtyp ohne Fluoreszenzkanäle läuft).
+
+---
+
+## Abtastung: die Oszillation ist eine Behandlung, keine Messgröße
+
+Die Spalte `osc_freq` enthält trotz ihres Namens die **Periode in Minuten**
+(0.75 … 24), keine Frequenz. Bei `MIN_PER_FRAME = 10` liegt die kürzeste
+auflösbare Periode (Nyquist) bei **20 min** — fünf der sechs Bedingungen liegen
+darunter, die sechste nur knapp darüber:
+
+| Periode | Zyklen pro Frame | Zyklen in 10 h | auflösbar? |
+| --- | --- | --- | --- |
+| 0.75 min | 13.3 | 800 | nein |
+| 1.5 min | 6.7 | 400 | nein |
+| 3 min | 3.3 | 200 | nein |
+| 6 min | 1.7 | 100 | nein |
+| 12 min | 0.8 | 50 | nein |
+| 24 min | 0.4 | 25 | grenzwertig (2.4 Frames/Zyklus) |
+
+Daraus folgen zwei Dinge, die in die Methodenbeschreibung gehören:
+
+1. **Ein einzelner Zyklus ist nicht beobachtbar.** Eine scheinbare Periodizität
+   in `31_ratio_*_over_time.pdf` wäre ein Alias-Artefakt, nicht der
+   Medienwechsel — sie darf nicht als solcher interpretiert werden.
+2. **Die Oszillation ist die Behandlung.** Bei gleichem Tastverhältnis erhalten
+   alle Bedingungen dieselbe Gesamt-Feast- und Gesamt-Famine-Zeit und
+   unterscheiden sich nur darin, wie fein sie zerhackt ist: ein **32-facher
+   Dosisbereich** in der Anzahl der Wechsel. Ausgewertet wird deshalb die
+   **kumulative** Wirkung über Stunden (Schritt `13_`), nicht der Zyklusverlauf.
+
+Die erwartete Richtung ergibt sich aus der Länge der Famine-Halbperiode: bei
+0.75 min sind das ~22 s, die interne Metabolitpools mühelos überbrücken — die
+Zelle sieht praktisch ein konstantes, gemitteltes Medium. Bei 24 min sind es
+12 min, lang genug für echte Verarmung und eine Hungerantwort, 25-mal in 10 h.
+**Die stärkere Belastung wird bei den langsamen Zyklen erwartet**, nicht bei den
+schnellen.
+
+## Kumulative Morphologie (Schritt 13)
+
+`morphology.py` definiert das "normale" Morphospace-Fenster aus der
+Referenzbedingung (Default `PosCtrl`, durchgehend Feast) über Perzentile von
+`eccentricity`, `solidity` und `area` — nicht über erfundene Pixel-Schwellen.
+Jede Zelle außerhalb gilt als **aberrant** und bekommt einen Morphotyp:
+
+| Morphotyp | Kriterium (Priorität von oben) |
+| --- | --- |
+| `clustered` | `solidity` unter der Schwelle — konkave Kontur, oft gar keine Einzelzelle mehr |
+| `elongated` | `eccentricity` über der Schwelle |
+| `swollen` | `area` über der Schwelle, sonst normale Form |
+| `yeast_like` | innerhalb aller Grenzen |
+
+| Datei | Inhalt |
+| --- | --- |
+| `13_morphotype_thresholds.csv` | die verwendeten Schwellen inkl. Herkunft — **gehört in die Methoden** |
+| `13_aberrant_vs_period.pdf` | **Dosis-Wirkung**: Endzustand gegen die Periode, mit PosCtrl/NegCtrl als Bezugsbänder |
+| `13_aberrant_over_time.pdf` | wächst der aberrante Anteil über die Stunden, und hängt das von der Periode ab? |
+| `13_morphotype_composition.pdf` | welcher Typ akkumuliert, und wann |
+| `13_morphospace.pdf` | wo im Morphospace die Zellen jeder Periode liegen |
+| `13_aberrant_vs_period_stats.csv` | Kruskal-Wallis + **Spearman** gegen die Periode (Monotonie ist die eigentliche Vorhersage) |
+
+Ein Hinweis zur Kalibrierung: das 95er-Perzentil wird auf **drei** teils
+unabhängige Merkmale angewendet, daher liegt der aberrante Anteil auch in einer
+völlig normalen Population bei etwa 5–15 %. Die PosCtrl-Linie in
+`13_aberrant_vs_period.pdf` ist dieser Nullpunkt — Abweichungen davon sind das
+Signal, nicht der Absolutwert.
+
+---
+
+## Die Lineage-Heuristik validieren
+
+`lineage.classify_mother_bud()` entscheidet über Budding Ratio, µ_event, den
+Stammbaum und die Mutter/Knospe-Trennung. Es ist eine Heuristik aus
+Centroid-Abstand und Tracklänge, **kein** echtes Lineage-Tracking — deshalb
+gehört vor jede Aussage eine Validierung. Beide Werkzeuge lesen die Dateien,
+die `run_analysis.py` erzeugt:
+
+```
+analysis_output/00_cell_positions.parquet   Zellpositionen NACH QC
+analysis_output/20_budding_events.csv       erkannte Events (je eine Datei
+analysis_output/static/20_budding_events.csv   pro Teil-Pipeline)
+```
+
+**1. Quantitativ, über alle Kammern:**
+
+```bash
+cd analyse_pipeline
+python validate_lineage.py          # Pfade kommen aus config.py
+```
+
+Erzeugt in `analysis_output/lineage_validation/`:
+
+| Datei | Frage, die sie beantwortet |
+| --- | --- |
+| `lv_01_d_over_r_distribution.pdf` | Lagen die Buds komfortabel im Suchradius, oder hat die Toleranz sie gerade noch hereingeholt? |
+| `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Bedingungen konstant? |
+| `lv_03_detection_rate_kruskal.csv` | Kruskal-Wallis dazu: p < 0.05 = Erkennung mit der Bedingung konfundiert |
+| `lv_03_assignment_ambiguity.pdf` | Wie oft kamen mehrere Mütter in Frage (greedy Nearest-Neighbour)? |
+| `lv_04_tolerance_sweep.pdf` | Sitzt `tolerance_px` auf einem Plateau oder auf einer Flanke? |
+
+Die Kurzfassung steht am Ende im Log — inklusive Warnung, wenn zu viele
+Zuordnungen grenzwertig oder mehrdeutig sind.
+
+**2. Visuell, eine Kammer:**
+
+```bash
+python plot_qc_lineage_overlay.py \
+    --cells   ../analysis_output/00_cell_positions.parquet \
+    --lineage-events ../analysis_output/20_budding_events.csv \
+    --qc-tif  ".../QC/260616_Osc1.5_NegCtrl_Rep1_ChamA13_QC_overlay.tif" \
+    --output  ChamA13_lineage_overlay.tif
+```
+
+`--exp-id` wird automatisch bestimmt (über `cells['filename']`, sonst über
+Pfad und Dateinamen). Marker im Ausgabe-TIFF:
+
+| Marker | Bedeutung |
+| --- | --- |
+| türkiser Kreis, klein | Mutter-Zentroid |
+| türkiser Kreis, groß | adaptiver Suchradius dieser Mutter |
+| oranger Kreis | zugeordneter Bud, `d/r` = Distanz / Suchradius |
+| gelbe Linie | Mutter-Bud-Zuordnung |
+| hellblauer Kreis `?` | Bud-Kandidat **ohne** Mutter — fällt aus allen Auswertungen |
+
+Überlappen sich die Suchradien benachbarter Mütter im Bild, ist jede
+Zuordnung in diesem Bereich eine Entscheidung der Heuristik, keine
+Beobachtung — das ist der wichtigste Blick beim Kalibrieren.
 
 ---
 
