@@ -130,7 +130,7 @@ def plot_mother_trajectories(
         if has_events else {}
     )
 
-    x_label = "Zeit [h]" if min_per_frame is not None else "Frame"
+    x_label = "Time [h]" if min_per_frame is not None else "Frame"
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -163,15 +163,15 @@ def plot_mother_trajectories(
                         ax.set_title(value_col, fontsize=10)
                     if col_i == 0:
                         ax.set_ylabel(
-                            f"{cell_uid}\ncoverage={['coverage']:.2f}", fontsize=8,
+                            f"{cell_uid}\ncoverage={mom_row['coverage']:.2f}", fontsize=8,
                         )
                     if row_i == n_rows - 1:
                         ax.set_xlabel(x_label, fontsize=9)
                     ax.tick_params(labelsize=8)
 
             fig.suptitle(
-                f"Stabile Mütter (coverage ≥ {min_coverage:.2f}) - Seite {page + 1}/{n_pages} "
-                "- gestrichelte rote Linien = erkannte Budding-Events",
+                f"Stably tracked mother cells (coverage ≥ {min_coverage:.2f}) - "
+                f"page {page + 1}/{n_pages} - dashed red lines = detected budding events",
                 fontsize=10,
             )
             fig.tight_layout(rect=(0, 0, 1, 0.96))
@@ -339,7 +339,7 @@ def plot_stable_mother_per_group(
         if has_events else {}
     )
 
-    x_label = "Zeit [h]" if min_per_frame is not None else "Frame"
+    x_label = "Time [h]" if min_per_frame is not None else "Frame"
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -398,8 +398,8 @@ def plot_stable_mother_per_group(
                     ax.tick_params(labelsize=8)
 
             fig.suptitle(
-                f"Eine stabile Mutter pro Bedingung ({' x '.join(group_cols)}) - "
-                f"Seite {page + 1}/{n_pages} - gestrichelte rote Linien = Budding-Events",
+                f"One stably tracked mother per condition ({' x '.join(group_cols)}) - "
+                f"page {page + 1}/{n_pages} - dashed red lines = budding events",
                 fontsize=9.5,
             )
             fig.tight_layout(rect=(0, 0, 1, 0.95))

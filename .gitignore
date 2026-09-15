@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Analyse-Output (wird von run_analysis.py erzeugt, gehoert nicht ins Repo)
+analysis_output/
+*.parquet

@@ -48,7 +48,7 @@ from qc_exclusions import (
     apply_qc_exclusions,
 )
 from sensors import compute_ratios, SENSOR_CONFIG
-from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers, LineageParams, FluxChannelConfig
+from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
 from mother_trajectories import plot_stable_mother_per_group, build_lineage_tree, summarise_lineage_depth
 from budding_ratio_timeseries import compute_budding_ratio_timeseries, aggregate_budding_ratio_over_replicates
 from growth_rate import compute_specific_growth_rate, summarise_growth_rate, classify_condition_type
@@ -77,6 +77,7 @@ from summary_plots import (
     plot_rt_single_cell_distribution,
 )
 from analysis import (
+    pretty_label,
     add_time_column,
     find_intensity_columns,
     data_overview,
@@ -123,85 +124,35 @@ def exclude_controls(df: pd.DataFrame) -> pd.DataFrame:
     return df[~ctype.isin(["PosCtrl", "NegCtrl"])].copy()
 
 # ==============================================================================
-# 0. KONFIGURATION - hier anpassen
+# 0. KONFIGURATION
 # ==============================================================================
-
-#DATA_ROOT = Path(r"/prj/microfluidic/ma_mimorde/Data/")
-#OUTPUT_DIR = DATA_ROOT.parent / "analysis_output"
-#CACHE_PATH = OUTPUT_DIR / "combined_results_cache.parquet"
-#QC_EXCLUSIONS_PATH = OUTPUT_DIR / "qc_exclusions.csv"
-
-
-# ==============================================================================
-#Lokal Konfiguration
-# ==============================================================================
-
-DATA_ROOT = Path(r"D:\Studium\6_SoSe2026\aureo\Daten_verarbeitung\lokal_test\Data")
-OUTPUT_DIR = DATA_ROOT.parent / "analysis_output"
-CACHE_PATH = OUTPUT_DIR.parent / "combined_results_cache.parquet"
-QC_EXCLUSIONS_PATH = OUTPUT_DIR / "qc_exclusions.csv"
-
-
-MIN_PER_FRAME = 10.0  # Minuten pro Frame
-
-# Reihenfolge der Oszillationsfrequenzen für Plots (None = alphabetisch/numerisch sortiert)
-# Beispiel falls eure Ordnernamen z.B. "2min","5min","10min",... heissen:
-FREQ_ORDER = ["0.75", "1.5", "3", "6", "12", "24"] 
-
-# Statische (nicht-oszillierende) Daten: liegen unter
-# Data/<Biosensor>/static/static_<medium>/... und werden komplett getrennt
-# von den Oszillationsdaten ausgewertet (eigene Plots/Tabellen unter
-# OUTPUT_DIR_STATIC). 'osc_freq' ist für diese Ordner "static_omlp"/
-# "static_ypd" - das entspricht hier der Vergleichsgruppe St.omlp vs.
-# St.ypd und übernimmt damit dieselbe Rolle wie FREQ_ORDER oben.
-STATIC_ORDER = ["static_omlp", "static_ypd"]
-OUTPUT_DIR_STATIC = OUTPUT_DIR / "static"
-
-FORCE_RELOAD = False  # auf True setzen, wenn neue Rohdaten dazugekommen sind
-
-# Panel A (Violin-Plots mit Signifikanztests): welche Spalte definiert die
-# Gruppen auf der x-Achse (im Paper: der Hefe-Stamm)? Falls ihr noch keine
-# eigene 'strain'-Spalte habt, hier vorerst auf eine bestehende Spalte setzen
-# (z.B. 'biosensor'), bis eine echte Stamm-Information aus der Bildverarbeitung
-# verfügbar ist.
-PANEL_A_GROUP_COL = "biosensor"   # ggf. anpassen, z.B. auf "strain" sobald verfügbar
-PANEL_A_FACET_COL = "osc_type"
-
-# Mutter/Bud-Klassifikation - siehe lineage.py für Details & Kalibrierungshinweise.
-# WICHTIG: tolerance_px ist in Pixel eurer Kamera/Optik - unbedingt an echten
-# Bildern/QC-Overlays kalibrieren, bevor den Ergebnissen vertraut wird.
-LINEAGE_PARAMS = LineageParams(
-    mother_min_frames=10,
-    bud_max_frames=7,
-    established_min_frames=3,
-    tolerance_px=30.0,
+# Alle Pfade und Parameter stehen in config.py - dort (oder über die
+# Umgebungsvariablen AUREO_DATA_ROOT / AUREO_OUTPUT_DIR) anpassen, NICHT hier.
+# inspect_lineage.py liest dieselbe Datei, damit Kalibrierung und Auswertung
+# garantiert mit denselben Schwellen laufen.
+from config import (
+    DATA_ROOT,
+    OUTPUT_DIR,
+    OUTPUT_DIR_STATIC,
+    CACHE_PATH,
+    QC_EXCLUSIONS_PATH,
+    FORCE_RELOAD,
+    MIN_PER_FRAME,
+    FREQ_ORDER,
+    STATIC_ORDER,
+    OSCILLATION_START_MIN,
+    PANEL_A_GROUP_COL,
+    PANEL_A_FACET_COL,
+    CONTROL_CONCENTRATION_LABELS,
+    LINEAGE_PARAMS,
+    STABLE_MOTHER_MIN_COVERAGE,
+    STABLE_MOTHER_GROUP_COLS,
+    STABLE_MOTHER_BASE_VALUE_COLS,
+    FLUX_CONFIG,
+    MU_MAX_THRESHOLD,
+    ROBUSTNESS_VALUE_COLS,
+    log_active_configuration,
 )
-
-# Detail-Trajektorien "stabiler" Mütter (siehe Schritt 90 unten, Anhang): wie
-# streng ist "stabil"? coverage = n_frames / (frame_max - frame_min + 1), siehe
-# lineage.identify_mothers()/select_stable_mothers() für die Begründung.
-STABLE_MOTHER_MIN_COVERAGE = 0.15
-# Eine stabile Mutter PRO Kombination dieser Spalten (Biosensor/Strain x
-# Oszillationstyp x -frequenz x Condition) - Ratio-Kanal wird automatisch pro
-# Mutter aus ihrem eigenen Biosensor bestimmt (nicht mehr manuell auflisten,
-# siehe mother_trajectories.plot_stable_mother_per_group()).
-STABLE_MOTHER_GROUP_COLS = ["biosensor", "osc_type", "osc_freq", "condition"]
-STABLE_MOTHER_BASE_VALUE_COLS = ["area"]
-# Optional: physiologischer Flux zum Budding-Zeitpunkt (z.B. ratiometrischer
-# Sensor wie QUEEN-2m: channel_a/channel_b). None = kein Flux berechnet.
-FLUX_CONFIG = None  # z.B. FluxChannelConfig(channel_a="mean_mTurqouise", channel_b="mean_RFP", min_denominator=1.0)
-
-# Spezifische Wachstumsrate (Eq. 2): µ-Werte über dieser Schwelle [h^-1]
-# werden als Artefakt markiert (Standard 0.6, siehe Paper Methods).
-MU_MAX_THRESHOLD = 10
-
-# Robustness R(t)/R(p) (siehe robustness.py): für welche Spalten berechnen?
-# 'budding_ratio' wird separat aus der Zeitreihe behandelt (siehe Schritt 20).
-ROBUSTNESS_VALUE_COLS = [c for c in ["area", "eccentricity"]]  # ggf. um Sensor-/Ratio-Spalten ergänzen
-
-# Sensor-control validation. For both glucose and pH, oscillations start after
-# a two-hour control phase; controls are therefore compared post-120-min.
-OSCILLATION_START_MIN = 120.0
 
 
 def resolve_x_order(cells: pd.DataFrame, col: str, preferred_order: list[str] | None) -> list[str]:
@@ -237,6 +188,10 @@ def resolve_x_order(cells: pd.DataFrame, col: str, preferred_order: list[str] | 
 
 
 def main() -> None:
+    # Aktive Konfiguration inkl. aller Abweichungen vom dokumentierten Standard
+    # ganz am Anfang ins Log - siehe config.log_active_configuration().
+    log_active_configuration()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR_STATIC.mkdir(parents=True, exist_ok=True)
 
@@ -398,7 +353,7 @@ def run_pipeline(
     if "area" in cells.columns:
         plot_metric_over_time_by_frequency(
             cells_plot, "area", output_dir / "10_cell_area_over_time.pdf",
-            freq_order=freq_order, ylabel="Zellfläche [px²]",
+            freq_order=freq_order, ylabel="Cell area [px²]",
         )
 
     # -- µ_event: spezifische Wachstumsrate nach Eq. 2 (Blöbaum et al. 2024):
@@ -427,7 +382,7 @@ def run_pipeline(
             exclude_controls(mu_summary), value_col="mean_mu", out_path=output_dir / "11_specific_growth_rate.pdf",
             x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
-            ylabel="Spezifische Wachstumsrate µ [h⁻¹]",
+            ylabel="Specific growth rate µ [h⁻¹]",
         )
 
         # Kontroll-Konsistenz: driften PosCtrl/NegCtrl über die Frequenz-Batches
@@ -441,7 +396,7 @@ def run_pipeline(
 
         plot_control_consistency(
             mu_summary, value_col="mean_mu", out_path=output_dir / "11_control_consistency_mu.pdf",
-            x_order=freq_order, ylabel="Spezifische Wachstumsrate µ [h⁻¹] (Kontrollen)",
+            x_order=freq_order, ylabel="Specific growth rate µ [h⁻¹] (controls)",
         )
     else:
         logger.warning("Keine µ-Werte berechnet - benötigt Mutterzellen mit >= 2 Budding-Events.")
@@ -472,7 +427,7 @@ def run_pipeline(
             out_path=output_dir / "12_area_growth_rate_mother.pdf",
             x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
-            ylabel="µ_area Mütter [h⁻¹]",
+            ylabel="µ_area, mother cells [h⁻¹]",
         )
 
         # Scatter: µ_event vs. µ_area (ebenfalls ohne Kontrollen)
@@ -562,7 +517,7 @@ def run_pipeline(
     for col in ratio_cols:
         plot_metric_over_time_by_frequency(
             cells_plot, col, output_dir / f"31_{col}_over_time.pdf",
-            freq_order=freq_order, ylabel=col.replace("ratio_", "Ratio "),
+            freq_order=freq_order, ylabel=pretty_label(col),
         )
 
     # ==================================================================
@@ -616,7 +571,7 @@ def run_pipeline(
             rt_pop_agg_plot, value_col="mean", out_path=output_dir / f"40_Rt_population_{value_col}.pdf",
             x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
-            ylabel=f"R(t) — {value_col}", title=f"R(t) Populationsebene — {value_col}",
+            ylabel=f"R(t) — {value_col}", title=f"R(t) population level — {value_col}",
         )
         plot_point_errorbar(
             rp_agg_plot, value_col="mean", out_path=output_dir / f"40_Rp_{value_col}.pdf",
@@ -635,7 +590,7 @@ def run_pipeline(
             rt_control_test.to_csv(output_dir / f"40_control_consistency_Rt_population_{value_col}_kruskal.csv", index=False)
         plot_control_consistency(
             rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
-            x_order=freq_order, ylabel=f"R(t) — {value_col} (Kontrollen)",
+            x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
         )
 
         rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
@@ -643,7 +598,7 @@ def run_pipeline(
             rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
         plot_control_consistency(
             rp_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rp_{value_col}.pdf",
-            x_order=freq_order, ylabel=f"R(p) — {value_col} (Kontrollen)",
+            x_order=freq_order, ylabel=f"R(p) — {value_col} (controls)",
         )
 
         logger.info("Robustness R(t)/R(p) für '%s' berechnet und gespeichert.", value_col)
@@ -702,7 +657,7 @@ def run_pipeline(
             exclude_controls(rp_mu_area_agg), value_col="mean", out_path=output_dir / "40_Rp_mu_area.pdf",
             x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
-            ylabel="R(p) — µ_area", title="R(p) — µ_area (Homogenität über Zellen)",
+            ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
         )
 
         rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
@@ -710,7 +665,7 @@ def run_pipeline(
             rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
         plot_control_consistency(
             rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
-            x_order=freq_order, ylabel="R(p) — µ_area (Kontrollen)",
+            x_order=freq_order, ylabel="R(p) — µ_area (controls)",
         )
         logger.info("R(p) für µ_area berechnet und gespeichert (%d zuverlässige Tracks).", len(area_reliable))
     else:
@@ -730,8 +685,12 @@ def run_pipeline(
     # ==================================================================
     plot_morphology_scatter(cells, output_dir / "90_morphology_scatter.pdf")
 
-    if intensity_cols:
+    # Dieser Plot zeigt 'area', hing aber an intensity_cols - dadurch fehlte er
+    # bei den statischen Daten komplett (Wildtyp, keine Fluoreszenzkanäle).
+    if "area" in cells.columns:
         plot_single_cell_trajectories(cells, "area", output_dir / "91_single_cell_trajectories.pdf")
+    else:
+        logger.warning("Spalte 'area' fehlt - 91_single_cell_trajectories.pdf übersprungen.")
 
     # Stabil getrackte Mütter im Detail: pro Bedingungs-Kombination
     # (STABLE_MOTHER_GROUP_COLS) EINE stabile Mutter, mit Budding-Markern
@@ -797,6 +756,7 @@ def run_pipeline(
             plot_sensor_control_comparison(
                 control_summary, output_dir / f"{output_stem}_comparison.pdf",
                 sensor_label=sensor_label, analysis_start_min=analysis_start_min,
+                control_labels=CONTROL_CONCENTRATION_LABELS.get(osc_type),
             )
 
             # A flat ratio can arise because both raw channels shift together
