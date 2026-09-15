@@ -5,7 +5,7 @@ Hauptskript der Analyse-Pipeline.
 
     python run_analysis.py                    # alles
     python run_analysis.py --list-steps       # welche Schritte gibt es?
-    python run_analysis.py --steps 13 40      # nur diese neu rechnen
+    python run_analysis.py --steps 20 40      # nur diese neu rechnen
 
 Erwartete Ordnerstruktur unter DATA_ROOT:
 
@@ -22,7 +22,7 @@ ausfuehren. Die Auswertung selbst steht dort, ein Schritt pro Funktion.
 Ablauf:
     1. Alle Combined_Results einlesen (gecacht als .parquet)
     2. Track-Merges DANN QC-Exclusions anwenden (nicht-destruktiv)
-    3. Oszillations- und statische Daten trennen, Morphospace-Referenz bilden
+    3. Oszillations- und statische Daten trennen
     4. pipeline_steps.STEPS auf beide Teilmengen anwenden
 
 Konfiguration: config.py (oder AUREO_DATA_ROOT / AUREO_OUTPUT_DIR).
@@ -54,8 +54,6 @@ from config import (
     MIN_PER_FRAME,
     FREQ_ORDER,
     STATIC_ORDER,
-    MORPHOLOGY_REFERENCE_CONDITIONS,
-    MORPHOLOGY_PERCENTILE,
     log_active_configuration,
 )
 from data_loading import load_all_results
@@ -68,7 +66,6 @@ from qc_exclusions import (
     apply_qc_exclusions,
 )
 from sensors import compute_ratios, SENSOR_CONFIG
-from morphology import derive_thresholds_from_reference
 from analysis import add_time_column, find_intensity_columns
 from pipeline_steps import STEPS, PipelineContext
 
@@ -111,7 +108,7 @@ def resolve_x_order(cells: pd.DataFrame, col: str, preferred_order: list[str] | 
 def select_steps(patterns: list[str] | None):
     """Waehlt Schritte anhand von Teilstrings ihres Schluessels aus.
 
-    '13' trifft '13_morphology', 'morph' ebenso. Ein Muster ohne Treffer ist
+    '40' trifft '40_robustness', 'robust' ebenso. Ein Muster ohne Treffer ist
     ein Fehler und kein stilles Ueberspringen - sonst laeuft man versehentlich
     eine leere Pipeline und haelt das Ergebnis fuer aktuell.
     """
@@ -167,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--steps", nargs="+", metavar="MUSTER", default=None,
         help="Nur diese Schritte ausfuehren, als Teilstring des Schluessels "
-             "(z.B. '13 40' oder 'morphology'). Standard: alle.",
+             "(z.B. '20 40' oder 'robustness'). Standard: alle.",
     )
     parser.add_argument(
         "--list-steps", action="store_true",
@@ -183,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Verfuegbare Schritte (Reihenfolge = Ausfuehrungsreihenfolge):\n")
         for s in STEPS:
             print(f"  {s.key:<20} {s.title}")
-        print("\nBeispiel:  python run_analysis.py --steps 13 40")
+        print("\nBeispiel:  python run_analysis.py --steps 20 40")
         return 0
 
     steps = select_steps(args.steps)
@@ -290,19 +287,6 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # ------------------------------------------------------------------
-    # 2d. Morphospace-Normalfenster EINMAL aus dem Gesamtdatensatz ableiten
-    # ------------------------------------------------------------------
-    # Bewusst hier und nicht pro Teil-Pipeline: die Referenz (PosCtrl) gibt es
-    # nur bei den Oszillationsdaten. Wuerde jede Teilmenge ihre eigenen
-    # Schwellen bilden, waeren die aberranten Anteile von Oszillations- und
-    # statischen Daten nicht mehr miteinander vergleichbar.
-    morph_thresholds = derive_thresholds_from_reference(
-        cells,
-        reference_condition_types=MORPHOLOGY_REFERENCE_CONDITIONS,
-        percentile=MORPHOLOGY_PERCENTILE,
-    )
-
-    # ------------------------------------------------------------------
     # 3. Schritte ausfuehren - erst Oszillation, dann statisch
     # ------------------------------------------------------------------
     failed = []
@@ -311,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
         cells=cells_osc, output_dir=OUTPUT_DIR,
         freq_order=resolve_x_order(cells_osc, "osc_freq", FREQ_ORDER),
         intensity_cols=intensity_cols, ratio_cols=ratio_cols,
-        run_sensor_controls=True, morph_thresholds=morph_thresholds,
+        run_sensor_controls=True,
     )
     run_steps(osc_ctx, steps)
     failed += [f"Oszillation/{k}" for k in osc_ctx.failed_steps]
@@ -332,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
             cells=cells_static, output_dir=OUTPUT_DIR_STATIC,
             freq_order=resolve_x_order(cells_static, "osc_freq", STATIC_ORDER),
             intensity_cols=[], ratio_cols=[],
-            run_sensor_controls=False, morph_thresholds=morph_thresholds,
+            run_sensor_controls=False,
         )
         run_steps(static_ctx, steps)
         failed += [f"statisch/{k}" for k in static_ctx.failed_steps]

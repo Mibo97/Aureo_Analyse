@@ -88,7 +88,6 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 | `data_loading.py` | Einlesen der Hierarchie, `exp_id`/`cell_uid`, Parquet-Cache |
 | `qc_exclusions.py` | Nicht-destruktives manuelles QC: Track-Merges & Exclusions |
 | `sensors.py` | Ratiometrische Sensoren → `ratio_*`-Spalten (`SENSOR_CONFIG`) |
-| `morphology.py` | Kumulative Morphologie-Wirkung, Morphotypen, Dosis-Wirkung |
 | `lineage.py` | Mutter/Bud-Heuristik, Budding Ratio pro Mutter |
 | `growth_rate.py` | µ_event aus Budding-Intervallen (Eq. 2) |
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
@@ -109,8 +108,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | Präfix | Inhalt |
 | --- | --- |
 | `00_` | Übersicht / Sanity-Check (Tracks pro Experiment) |
-| `10_`–`12_` | Zellwachstum (Fläche, µ_event, µ_area) |
-| `13_` | **Kumulative Morphologie-Wirkung** der Feast/Famine-Zyklen |
+| `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
@@ -147,8 +145,8 @@ Daraus folgen zwei Dinge, die in die Methodenbeschreibung gehören:
 2. **Die Oszillation ist die Behandlung.** Bei gleichem Tastverhältnis erhalten
    alle Bedingungen dieselbe Gesamt-Feast- und Gesamt-Famine-Zeit und
    unterscheiden sich nur darin, wie fein sie zerhackt ist: ein **32-facher
-   Dosisbereich** in der Anzahl der Wechsel. Ausgewertet wird deshalb die
-   **kumulative** Wirkung über Stunden (Schritt `13_`), nicht der Zyklusverlauf.
+   Dosisbereich** in der Anzahl der Wechsel. Interpretierbar ist deshalb nur
+   die **kumulative** Wirkung über Stunden, nicht der Zyklusverlauf.
 
 Die erwartete Richtung ergibt sich aus der Länge der Famine-Halbperiode: bei
 0.75 min sind das ~22 s, die interne Metabolitpools mühelos überbrücken — die
@@ -156,37 +154,6 @@ Zelle sieht praktisch ein konstantes, gemitteltes Medium. Bei 24 min sind es
 12 min, lang genug für echte Verarmung und eine Hungerantwort, 25-mal in 10 h.
 **Die stärkere Belastung wird bei den langsamen Zyklen erwartet**, nicht bei den
 schnellen.
-
-## Kumulative Morphologie (Schritt 13)
-
-`morphology.py` definiert das "normale" Morphospace-Fenster aus der
-Referenzbedingung (Default `PosCtrl`, durchgehend Feast) über Perzentile von
-`eccentricity`, `solidity` und `area` — nicht über erfundene Pixel-Schwellen.
-Jede Zelle außerhalb gilt als **aberrant** und bekommt einen Morphotyp:
-
-| Morphotyp | Kriterium (Priorität von oben) |
-| --- | --- |
-| `clustered` | `solidity` unter der Schwelle — konkave Kontur, oft gar keine Einzelzelle mehr |
-| `elongated` | `eccentricity` über der Schwelle |
-| `swollen` | `area` über der Schwelle, sonst normale Form |
-| `yeast_like` | innerhalb aller Grenzen |
-
-| Datei | Inhalt |
-| --- | --- |
-| `13_morphotype_thresholds.csv` | die verwendeten Schwellen inkl. Herkunft — **gehört in die Methoden** |
-| `13_aberrant_vs_period.pdf` | **Dosis-Wirkung**: Endzustand gegen die Periode, mit PosCtrl/NegCtrl als Bezugsbänder |
-| `13_aberrant_over_time.pdf` | wächst der aberrante Anteil über die Stunden, und hängt das von der Periode ab? |
-| `13_morphotype_composition.pdf` | welcher Typ akkumuliert, und wann |
-| `13_morphospace.pdf` | wo im Morphospace die Zellen jeder Periode liegen |
-| `13_aberrant_vs_period_stats.csv` | Kruskal-Wallis + **Spearman** gegen die Periode (Monotonie ist die eigentliche Vorhersage) |
-
-Ein Hinweis zur Kalibrierung: das 95er-Perzentil wird auf **drei** teils
-unabhängige Merkmale angewendet, daher liegt der aberrante Anteil auch in einer
-völlig normalen Population bei etwa 5–15 %. Die PosCtrl-Linie in
-`13_aberrant_vs_period.pdf` ist dieser Nullpunkt — Abweichungen davon sind das
-Signal, nicht der Absolutwert.
-
----
 
 ## Die Lineage-Heuristik validieren
 
