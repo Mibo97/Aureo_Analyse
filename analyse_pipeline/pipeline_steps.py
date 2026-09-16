@@ -10,10 +10,10 @@ run_pipeline(). Das hatte drei praktische Folgen: man konnte keinen einzelnen
 Schritt erneut laufen lassen, ohne alles neu zu rechnen; man konnte keinen
 Schritt testen; und man musste die Funktion von oben lesen, um irgendetwas zu
 finden. Hier ist jeder Schritt eine eigene Funktion mit einem Schluessel
-("13_morphology"), und run_analysis.py kann eine Teilmenge davon ausfuehren:
+("40_robustness"), und run_analysis.py kann eine Teilmenge davon ausfuehren:
 
     python run_analysis.py --list-steps
-    python run_analysis.py --steps 13 40
+    python run_analysis.py --steps 20 40
 
 BERECHNUNG vs. AUSGABE
 ----------------------
@@ -53,7 +53,6 @@ from config import (
     FLUX_CONFIG,
     MU_MAX_THRESHOLD,
     ROBUSTNESS_VALUE_COLS,
-    MORPHOLOGY_ENDPOINT_LAST_FRACTION,
 )
 from sensors import SENSOR_CONFIG
 from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
@@ -76,17 +75,6 @@ from queen_controls import (
     plot_sensor_raw_channel_timeseries,
     summarise_sensor_controls_by_chamber,
     plot_control_chamber_comparison,
-)
-from morphology import (
-    classify_morphotype,
-    add_switching_dose,
-    summarise_morphotype_over_time,
-    summarise_morphotype_endpoint,
-    test_aberrant_across_periods,
-    plot_morphospace,
-    plot_aberrant_over_time,
-    plot_aberrant_vs_period,
-    plot_morphotype_composition,
 )
 from violin_plots import plot_panel_a
 from summary_plots import (
@@ -155,7 +143,15 @@ class PipelineContext:
     intensity_cols: list[str]
     ratio_cols: list[str]
     run_sensor_controls: bool
-    morph_thresholds: object = None
+    # Kontroll-Konsistenz ueber die osc_freq-Batches (control_consistency.py).
+    # Braucht MINDESTENS ZWEI Batches: test_control_consistency_across_freq()
+    # liefert bei einem einzigen p = NaN, und plot_control_consistency() zeichnet
+    # dann einen einzelnen Punkt pro Kontrollart - eine trivial flache Linie, die
+    # wie "Kontrollen sind konsistent" aussieht und nichts enthaelt. Fuer solche
+    # Teilmengen (z.B. der PKO-Zweig mit nur einer Periode) deshalb False, statt
+    # eine irrefuehrende Abbildung zu erzeugen. run_analysis.py setzt das anhand
+    # der tatsaechlich vorhandenen Batches.
+    run_control_consistency: bool = True
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -279,15 +275,21 @@ def step_10_growth(ctx: PipelineContext) -> None:
         # hinweg, obwohl sie eigentlich unabhängig von der Oszillation sein
         # sollten? Test auf Replikat-Ebene (mu_table), Plot auf aggregierter
         # Ebene (mu_summary) - siehe control_consistency.py Docstring.
-        mu_control_test = test_control_consistency_across_freq(mu_table, value_col="mu")
-        if not mu_control_test.empty:
-            mu_control_test.to_csv(output_dir / "11_control_consistency_mu_kruskal.csv", index=False)
-            logger.info("Tabelle gespeichert: 11_control_consistency_mu_kruskal.csv")
+        if ctx.run_control_consistency:
+            mu_control_test = test_control_consistency_across_freq(mu_table, value_col="mu")
+            if not mu_control_test.empty:
+                mu_control_test.to_csv(output_dir / "11_control_consistency_mu_kruskal.csv", index=False)
+                logger.info("Tabelle gespeichert: 11_control_consistency_mu_kruskal.csv")
 
-        plot_control_consistency(
-            mu_summary, value_col="mean_mu", out_path=output_dir / "11_control_consistency_mu.pdf",
-            x_order=freq_order, ylabel="Specific growth rate µ [h⁻¹] (controls)",
-        )
+            plot_control_consistency(
+                mu_summary, value_col="mean_mu", out_path=output_dir / "11_control_consistency_mu.pdf",
+                x_order=freq_order, ylabel="Specific growth rate µ [h⁻¹] (controls)",
+            )
+        else:
+            logger.info(
+                "Kontroll-Konsistenz fuer µ uebersprungen (run_control_consistency=False) - "
+                "siehe PipelineContext."
+            )
     else:
         logger.warning("Keine µ-Werte berechnet - benötigt Mutterzellen mit >= 2 Budding-Events.")
 
@@ -321,69 +323,6 @@ def step_10_growth(ctx: PipelineContext) -> None:
                 output_dir / "12_mu_event_vs_mu_area.pdf",
                 label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
                 mu_event_table=exclude_controls(mu_table), mu_area_table=exclude_controls(area_table),
-            )
-
-
-
-def step_13_morphology(ctx: PipelineContext) -> None:
-    """Kumulative Morphologie-Wirkung."""
-    cells = ctx.cells
-    output_dir = ctx.output_dir
-    freq_order = ctx.freq_order
-    morph_thresholds = ctx.morph_thresholds
-
-    # ==================================================================
-    # 13. Kumulative Morphologie-Wirkung der Feast/Famine-Zyklen
-    # ==================================================================
-    # Die Oszillationsperioden liegen alle am oder unter dem Abtastlimit
-    # (siehe config.OSC_FREQ_IS_PERIOD_IN_MINUTES) - ein einzelner Zyklus ist
-    # nicht beobachtbar. Ausgewertet wird daher, was sich ueber Stunden
-    # AUFSUMMIERT: wie weit driftet die Morphologie aus dem Normalfenster der
-    # unbehandelten Kontrolle heraus, und haengt diese Drift von der
-    # Zykluslaenge ab? Siehe morphology.py.
-    if morph_thresholds is None:
-        logger.warning(
-            "Keine Morphotyp-Schwellen verfuegbar (fehlen area/eccentricity/solidity?) - "
-            "Schritt 13 uebersprungen."
-        )
-    else:
-        pd.DataFrame([morph_thresholds.as_row()]).to_csv(
-            output_dir / "13_morphotype_thresholds.csv", index=False,
-        )
-        cells_morph = classify_morphotype(cells, morph_thresholds)
-        cells_morph = add_switching_dose(cells_morph, min_per_frame=MIN_PER_FRAME)
-
-        morph_per_chamber, morph_agg = summarise_morphotype_over_time(cells_morph)
-        if morph_per_chamber.empty:
-            logger.warning("Keine gueltigen Morphologie-Werte - Schritt 13 uebersprungen.")
-        else:
-            morph_per_chamber.to_csv(output_dir / "13_morphotype_per_chamber_timeseries.csv", index=False)
-            morph_agg.to_csv(output_dir / "13_morphotype_aggregated_timeseries.csv", index=False)
-
-            morph_endpoint = summarise_morphotype_endpoint(
-                morph_per_chamber, last_fraction=MORPHOLOGY_ENDPOINT_LAST_FRACTION,
-            )
-            morph_endpoint.to_csv(output_dir / "13_morphotype_endpoint_per_chamber.csv", index=False)
-
-            period_test = test_aberrant_across_periods(morph_endpoint)
-            if not period_test.empty:
-                period_test.to_csv(output_dir / "13_aberrant_vs_period_stats.csv", index=False)
-
-            plot_morphospace(
-                cells_morph, morph_thresholds, output_dir / "13_morphospace.pdf",
-                freq_order=freq_order,
-            )
-            plot_aberrant_over_time(
-                exclude_controls(morph_agg), output_dir / "13_aberrant_over_time.pdf",
-                freq_order=freq_order,
-            )
-            plot_aberrant_vs_period(
-                morph_endpoint, output_dir / "13_aberrant_vs_period.pdf",
-                freq_order=freq_order,
-            )
-            plot_morphotype_composition(
-                exclude_controls(morph_agg), output_dir / "13_morphotype_composition.pdf",
-                freq_order=freq_order,
             )
 
 
@@ -564,21 +503,22 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         )
 
         # Kontroll-Konsistenz für R(t)/R(p), analog zur Wachstumsrate oben.
-        rt_control_test = test_control_consistency_across_freq(rt_pop, value_col="R_t_population")
-        if not rt_control_test.empty:
-            rt_control_test.to_csv(output_dir / f"40_control_consistency_Rt_population_{value_col}_kruskal.csv", index=False)
-        plot_control_consistency(
-            rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
-            x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
-        )
+        if ctx.run_control_consistency:
+            rt_control_test = test_control_consistency_across_freq(rt_pop, value_col="R_t_population")
+            if not rt_control_test.empty:
+                rt_control_test.to_csv(output_dir / f"40_control_consistency_Rt_population_{value_col}_kruskal.csv", index=False)
+            plot_control_consistency(
+                rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
+                x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
+            )
 
-        rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
-        if not rp_control_test.empty:
-            rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
-        plot_control_consistency(
-            rp_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rp_{value_col}.pdf",
-            x_order=freq_order, ylabel=f"R(p) — {value_col} (controls)",
-        )
+            rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
+            if not rp_control_test.empty:
+                rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
+            plot_control_consistency(
+                rp_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rp_{value_col}.pdf",
+                x_order=freq_order, ylabel=f"R(p) — {value_col} (controls)",
+            )
 
         logger.info("Robustness R(t)/R(p) für '%s' berechnet und gespeichert.", value_col)
 
@@ -639,13 +579,14 @@ def step_40_robustness(ctx: PipelineContext) -> None:
             ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
         )
 
-        rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
-        if not rp_mu_area_control_test.empty:
-            rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
-        plot_control_consistency(
-            rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
-            x_order=freq_order, ylabel="R(p) — µ_area (controls)",
-        )
+        if ctx.run_control_consistency:
+            rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
+            if not rp_mu_area_control_test.empty:
+                rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
+            plot_control_consistency(
+                rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
+                x_order=freq_order, ylabel="R(p) — µ_area (controls)",
+            )
         logger.info("R(p) für µ_area berechnet und gespeichert (%d zuverlässige Tracks).", len(area_reliable))
     else:
         logger.warning("area_table ist leer - R(p) für µ_area wird übersprungen.")
@@ -812,7 +753,6 @@ class Step:
 STEPS: list[Step] = [
     Step("00_overview", "Übersicht / Sanity-Check", step_00_overview),
     Step("10_growth", "Zellfläche, µ_event und µ_area", step_10_growth),
-    Step("13_morphology", "Kumulative Morphologie-Wirkung", step_13_morphology),
     Step("20_lineage", "Budding-Events, Budding Ratio, Panel A, Stammbaum", step_20_lineage),
     Step("30_sensors", "Sensor-Intensitäten und Ratios über die Zeit", step_30_sensors),
     Step("40_robustness", "Robustness R(t)/R(p)", step_40_robustness),

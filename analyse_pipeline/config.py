@@ -68,6 +68,7 @@ OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / "analysis
 CACHE_PATH: Path = OUTPUT_DIR.parent / "combined_results_cache.parquet"
 QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
+OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
 
 FORCE_RELOAD = False  # auf True setzen, wenn neue Rohdaten dazugekommen sind
 
@@ -91,8 +92,8 @@ MIN_PER_FRAME = 10.0  # Minuten pro Frame
 # Die Oszillation ist damit eine BEHANDLUNG, keine Messgroesse: bei gleicher
 # Gesamtdauer erfahren die Bedingungen ~800 (0.75 min) bis ~25 (24 min)
 # Zyklen in 10 h - ein 32-facher Dosisbereich bei identischer Gesamt-Feast-
-# und Gesamt-Famine-Zeit. Ausgewertet wird entsprechend die KUMULATIVE
-# Wirkung (siehe morphology.py), nicht der Verlauf innerhalb eines Zyklus.
+# und Gesamt-Famine-Zeit. Interpretiert werden kann entsprechend nur die
+# KUMULATIVE Wirkung ueber Stunden, nicht der Verlauf innerhalb eines Zyklus.
 OSC_FREQ_IS_PERIOD_IN_MINUTES = True
 
 # Reihenfolge der Oszillationsfrequenzen auf der x-Achse.
@@ -105,6 +106,22 @@ FREQ_ORDER = ["0.75", "1.5", "3", "6", "12", "24"]
 # ausgewertet (eigener Output-Ordner OUTPUT_DIR_STATIC). Dort steht in
 # 'osc_freq' statt einer Frequenz die Vergleichsgruppe St.omlp vs. St.ypd.
 STATIC_ORDER = ["static_omlp", "static_ypd"]
+
+# --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
+# Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
+# Kontrollen sich ohne Exopolysaccharid korrekt verhalten (Clogging-Hypothese,
+# siehe pko_comparison.py).
+#
+# PKO liegt als eigener Ordner auf der BIOSENSOR-Ebene
+# (Data/PKO/<osc_type>/<periode>/03_results/...) und landet damit in der Spalte
+# 'biosensor' - eine echte 'strain'-Spalte liefert Combined_Results nicht
+# (siehe PANEL_A_GROUP_COL unten). Ohne die Abtrennung in run_analysis.py wuerde
+# PKO deshalb als zusaetzliche Farbe in JEDEN bestehenden Oszillations-Plot
+# laufen (PANEL_A_GROUP_COL ist dort auch color_col) und als zusaetzliches
+# Violin in Panel A - die vorhandenen Ergebnisse wuerden sich also aendern.
+# Genau das soll nicht passieren: PKO bekommt einen eigenen Kontext und einen
+# eigenen Output-Ordner, exakt wie die statischen Daten.
+PKO_BIOSENSOR_NAME = "PKO"
 
 # Oszillationen starten nach einer zweistündigen Kontrollphase. ANGABE IN
 # MINUTEN - queen_controls._minutes_to_hours() rechnet auf die 'time_h'-Achse um.
@@ -160,19 +177,6 @@ FLUX_CONFIG: FluxChannelConfig | None = None
 # als Artefakt markiert (mu_is_artefact=True), aber NICHT gelöscht.
 MU_MAX_THRESHOLD = 10.0
 
-# --- Morphologie (morphology.py) ---------------------------------------------
-# Das "normale" Morphospace-Fenster wird aus dieser Bedingung abgeleitet -
-# per Default PosCtrl (durchgehend Feast), also Zellen ohne Oszillation.
-# Bewusst NICHT aus dem Gesamtdatensatz: sonst definierten die
-# Oszillationszellen mit, was 'normal' heisst.
-MORPHOLOGY_REFERENCE_CONDITIONS = ("PosCtrl",)
-# Perzentil der Referenzverteilung, ab dem eine Zelle als aberrant gilt.
-# 95 heisst: die obersten 5% Exzentrizitaet/Flaeche und die untersten 5%
-# Solidity der Referenz gelten bereits als abweichend.
-MORPHOLOGY_PERCENTILE = 95.0
-# Anteil der Frames am Ende jeder Kammer, der den "Endzustand" bildet.
-MORPHOLOGY_ENDPOINT_LAST_FRACTION = 0.25
-
 # Robustness R(t)/R(p) (siehe robustness.py): für welche Spalten berechnen?
 # Die zur Laufzeit erkannten ratio_*-Spalten kommen in run_analysis.py dazu.
 # 'budding_ratio' wird separat aus der Zeitreihe behandelt (Schritt 22).
@@ -211,8 +215,16 @@ METHOD_CAVEATS: list[str] = [
     "Zellen/Intervalle, nicht erst pro Replikat. sd_mu/sd_mu_area und n_values in "
     "11_*_summary.csv und 12_*_summary_*.csv beschreiben daher die Streuung über Zellen "
     "(Pseudoreplikation), nicht über biologische Replikate. "
-    "aggregate_robustness_over_replicates() und analysis._aggregate_over_replicates() "
-    "mitteln dagegen korrekt zweistufig.",
+    "analysis._aggregate_over_replicates() (Schritte 10/30/31) und "
+    "queen_controls.summarise_sensor_controls() (Schritt 95) gruppieren dagegen auf "
+    "'replicate' und mitteln korrekt.",
+    "aggregate_robustness_over_replicates() (alle 40_*_aggregated) ist nur HALB korrekt: "
+    "der Default replicate_id_col='exp_id' behebt die Frame-Pseudoreplikation, aber "
+    "exp_id enthaelt laut data_loading.py auch 'chamber'. Es wird also auf KAMMER-Ebene "
+    "gemittelt und jede Kammer danach als biologisches Replikat gezaehlt - bei 3 "
+    "Replikaten x 2 Kammern steht in n_replicates eine 6, und die ausgewiesene sd mischt "
+    "technische mit biologischer Varianz. Fuer biologische Fehlerbalken mit "
+    "replicate_id_col='replicate' aufrufen.",
     "Robustness R ist eine RELATIVE Größe: der Normalisierungsfaktor m wird über den "
     "GESAMTEN übergebenen Datensatz gebildet. R-Werte aus Läufen mit unterschiedlichem "
     "Datenumfang sind nicht miteinander vergleichbar (siehe robustness.py).",
@@ -250,8 +262,8 @@ def log_active_configuration() -> None:
                 "ABTASTUNG: 'osc_freq' ist die Periode in Minuten. Bei %.0f min/Frame liegt die "
                 "kuerzeste aufloesbare Periode bei %.0f min - %d von %d Bedingungen (%s) liegen "
                 "darunter. Einzelne Zyklen sind NICHT beobachtbar; scheinbare Periodizitaet in "
-                "den Sensor-Zeitreihen ist ein Alias-Artefakt. Ausgewertet wird die kumulative "
-                "Wirkung (morphology.py), nicht der Zyklusverlauf.",
+                "den Sensor-Zeitreihen ist ein Alias-Artefakt. Interpretierbar ist nur die "
+                "kumulative Wirkung ueber Stunden, nicht der Zyklusverlauf.",
                 MIN_PER_FRAME, nyquist_min, len(unresolved), len(periods),
                 ", ".join(f"{p:g}" for p in unresolved),
             )
