@@ -138,6 +138,25 @@ OSCILLATION_START_MIN = 120.0
 PANEL_A_GROUP_COL = "biosensor"
 PANEL_A_FACET_COL = "osc_type"
 
+# Panel A fuer die STATISCHEN Daten: dort ist 'biosensor' die falsche Gruppe.
+# plot_panel_a() nutzt nur group_col und facet_col und sieht 'osc_freq' nie -
+# bei den statischen Daten steht die Vergleichsgruppe (static_omlp/static_ypd)
+# aber genau dort. Mit group_col='biosensor' landen deshalb BEIDE Medien in
+# EINEM Violin, und die Abbildung kann die Frage "komplexes vs. minimales
+# Medium" gar nicht beantworten. Der statische Kontext setzt daher 'osc_freq'.
+PANEL_A_GROUP_COL_STATIC = "osc_freq"
+
+# --- Kumulativer Endzustand (endpoint_trends.py, Schritt 13) -----------------
+# Anteil der Frames am ENDE jeder Kammer, der den "Endzustand" bildet. Relativ
+# zur jeweiligen Kammer, nicht absolut - Kammern koennen unterschiedlich lang
+# aufgenommen sein.
+ENDPOINT_LAST_FRACTION = 0.25
+# Spalten, fuer die der Endzustand gegen die Periode gestellt wird. Die zur
+# Laufzeit erkannten ratio_*-Spalten kommen in pipeline_steps.py dazu - erst
+# dadurch bekommen die Sensor-Daten ueberhaupt eine kumulative Auswertung
+# (50_summary_statistics.csv sieht nur intensity_cols, nie die Ratios).
+ENDPOINT_VALUE_COLS = ["area", "eccentricity"]
+
 # Zusatz-Zeile unter den Kontroll-Ticks in plot_sensor_control_comparison(),
 # PRO OSZILLATIONSTYP. Die Konzentrationen gelten nur für den Oszillationstyp,
 # mit dem sie gemessen wurden - eine Glucose-Konzentration unter einer
@@ -218,13 +237,11 @@ METHOD_CAVEATS: list[str] = [
     "analysis._aggregate_over_replicates() (Schritte 10/30/31) und "
     "queen_controls.summarise_sensor_controls() (Schritt 95) gruppieren dagegen auf "
     "'replicate' und mitteln korrekt.",
-    "aggregate_robustness_over_replicates() (alle 40_*_aggregated) ist nur HALB korrekt: "
-    "der Default replicate_id_col='exp_id' behebt die Frame-Pseudoreplikation, aber "
-    "exp_id enthaelt laut data_loading.py auch 'chamber'. Es wird also auf KAMMER-Ebene "
-    "gemittelt und jede Kammer danach als biologisches Replikat gezaehlt - bei 3 "
-    "Replikaten x 2 Kammern steht in n_replicates eine 6, und die ausgewiesene sd mischt "
-    "technische mit biologischer Varianz. Fuer biologische Fehlerbalken mit "
-    "replicate_id_col='replicate' aufrufen.",
+    "aggregate_robustness_over_replicates() (alle 40_*_aggregated) aggregiert dreistufig "
+    "Frame -> Kammer -> Replikat (replicate_id_col='replicate'). n_replicates nennt damit "
+    "die echte Replikatzahl und sd die Streuung ZWISCHEN Replikaten. Bei 3 Replikaten ist "
+    "sd allerdings schlecht geschaetzt - die Fehlerbalken werden dadurch breiter und "
+    "ehrlicher, nicht enger. Die alte Kammer-Ebene gibt es mit replicate_id_col='exp_id'.",
     "Robustness R ist eine RELATIVE Größe: der Normalisierungsfaktor m wird über den "
     "GESAMTEN übergebenen Datensatz gebildet. R-Werte aus Läufen mit unterschiedlichem "
     "Datenumfang sind nicht miteinander vergleichbar (siehe robustness.py).",

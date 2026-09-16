@@ -103,6 +103,7 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
 | `budding_ratio_timeseries.py` | Budding Ratio als Zeitreihe (Eq. 3) |
 | `robustness.py` | R(t)/R(p) nach Eq. 1 |
+| `endpoint_trends.py` | **Kumulativer Endzustand gegen die Periode + Spearman-Trendtest** |
 | `control_consistency.py` | Kruskal-Wallis: driften PosCtrl/NegCtrl über Batches? |
 | `queen_controls.py` | PosCtrl-vs-NegCtrl-Validierung der Sensoren selbst |
 | `pko_comparison.py` | **WT gegen PKO**: Kammer-Übereinstimmung, Kontroll-Bracket, Zell-Ausbeute |
@@ -120,6 +121,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | --- | --- |
 | `00_` | Übersicht / Sanity-Check (Tracks pro Experiment) |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
+| `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
@@ -167,6 +169,47 @@ Zelle sieht praktisch ein konstantes, gemitteltes Medium. Bei 24 min sind es
 12 min, lang genug für echte Verarmung und eine Hungerantwort, 25-mal in 10 h.
 **Die stärkere Belastung wird bei den langsamen Zyklen erwartet**, nicht bei den
 schnellen.
+
+## Kumulativer Endzustand (Schritt 13)
+
+Aus dem Abtast-Argument oben folgt, dass nur die **kumulative** Wirkung
+interpretierbar ist. Genau diese Auswertung fehlte: `10_`/`30_`/`31_` sind
+Zeitreihen, `40_` sind Varianzmaße, und `50_summary_statistics.csv` bekommt nur
+`intensity_cols` übergeben — die `ratio_*`-Spalten erscheinen dort **nie**. Für
+die Sensor-Daten ist Schritt 13 die erste kumulative Auswertung überhaupt.
+
+Der Endzustand ist der Mittelwert über die letzten `ENDPOINT_LAST_FRACTION`
+(Default 25 %) der Frames **jeder Kammer** — relativ zur Kammer, nicht absolut,
+weil Kammern unterschiedlich lang aufgenommen sein können. Danach wird
+dreistufig aggregiert: Kammer → Replikat → Bedingung.
+
+| Datei | Inhalt |
+| --- | --- |
+| `13_endpoint_per_replicate.csv` | ein Wert je Replikat und Bedingung (Grundlage des Tests) |
+| `13_endpoint_summary.csv` | Mittelwert ± SEM über Replikate je Bedingung |
+| `13_endpoint_spearman.csv` | Spearman ρ und p gegen die Periode, je Stamm/Oszillationstyp |
+| `13_endpoint_vs_period_<spalte>.pdf` | die Abbildung, mit PosCtrl/NegCtrl als Referenzbändern |
+
+**Spearman, nicht Kruskal-Wallis.** Die Vorhersage ist *monoton* in der Periode
+(längere Famine-Halbzyklen belasten mehr, siehe oben) — geprüft wird also eine
+Rangkorrelation. Kruskal-Wallis prüft „irgendeine Gruppe unterscheidet sich“ und
+ist dafür das falsche Werkzeug; es war bisher der einzige verdrahtete Test, und
+das nur für die Kontrollen. Getestet wird auf **Replikat**-Ebene: über Zellen
+gerechnet hängt das p fast nur an der Zellzahl.
+
+Die Kontrollen gehen **nicht** in die Korrelation ein — sie haben keine Periode,
+der Ordnername ihres Batches ist keine Behandlung. Sie erscheinen als
+waagerechte Bänder, was der Zweck einer Kontrolle ist.
+
+Die x-Achse ist **logarithmisch**: die Perioden sind geometrisch gestuft (Faktor
+2 von 0.75 bis 24 min, ein 32-facher Dosisbereich). Linear dargestellt drängen
+sich fünf der sechs Bedingungen links zusammen.
+
+Ein Trendtest braucht mindestens **drei** verschiedene Perioden — bei zwei
+Punkten ist ρ immer ±1, das ist Arithmetik und keine Evidenz. Für die
+statischen Daten und den PKO-Zweig entfällt der Test daher; das wird geloggt.
+
+---
 
 ## PKO: verstopft Pullulan den Chip? (Zweig 3)
 
@@ -332,14 +375,18 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
   Replikate. `analysis._aggregate_over_replicates()` (Schritte `10_`/`30_`/`31_`)
   und `queen_controls.summarise_sensor_controls()` (Schritt `95_`) gruppieren
   dagegen auf `replicate` und mitteln damit korrekt.
-* `aggregate_robustness_over_replicates()` (alle `40_*_aggregated`) ist nur
-  **halb** korrekt: der Default `replicate_id_col="exp_id"` behebt die
-  Frame-Pseudoreplikation, aber `exp_id` enthält laut `data_loading.py` auch
-  `chamber`. Die Funktion mittelt also auf **Kammer**-Ebene und behandelt
-  anschließend jede Kammer als biologisches Replikat — bei 3 Replikaten mit je
-  2 Kammern steht in `n_replicates` eine 6, und die ausgewiesene `sd` mischt
-  technische mit biologischer Varianz. Wer biologische Fehlerbalken will, ruft
-  sie mit `replicate_id_col="replicate"` auf.
+* `aggregate_robustness_over_replicates()` (alle `40_*_aggregated`) aggregiert
+  seit der Umstellung auf `replicate_id_col="replicate"` **dreistufig**:
+  Frame → Kammer → Replikat. Vorher war `exp_id` der Default, das laut
+  `data_loading.py` auch `chamber` enthält — die Aggregation endete also auf
+  Kammer-Ebene und zählte jede Kammer als biologisches Replikat (bei 3×2 stand
+  in `n_replicates` eine 6, und `sd` mischte technische mit biologischer
+  Varianz). `n_replicates` nennt jetzt die echte Replikatzahl, und `sd`
+  beschreibt die Streuung zwischen Replikaten. Wer die alte Kammer-Ebene
+  braucht, ruft mit `replicate_id_col="exp_id"` auf.
+* Mit 3 Replikaten ist `sd` **schlecht geschätzt** — das ist der Preis dafür,
+  dass sie jetzt das Richtige beschreibt. Die Fehlerbalken werden dadurch in
+  der Regel breiter und ehrlicher, nicht enger.
 * Die Mann-Whitney-Tests in den Violin-Plots laufen über die übergebenen Zeilen
   (eine Mutterzelle pro Zeile bei der Budding Ratio) und berücksichtigen die
   Replikat-Struktur ebenfalls nicht.

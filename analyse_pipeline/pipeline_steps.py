@@ -53,6 +53,14 @@ from config import (
     FLUX_CONFIG,
     MU_MAX_THRESHOLD,
     ROBUSTNESS_VALUE_COLS,
+    ENDPOINT_LAST_FRACTION,
+    ENDPOINT_VALUE_COLS,
+)
+from endpoint_trends import (
+    compute_endpoint_per_replicate,
+    summarise_per_replicate,
+    spearman_against_period,
+    plot_endpoint_vs_period,
 )
 from sensors import SENSOR_CONFIG
 from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
@@ -152,6 +160,12 @@ class PipelineContext:
     # eine irrefuehrende Abbildung zu erzeugen. run_analysis.py setzt das anhand
     # der tatsaechlich vorhandenen Batches.
     run_control_consistency: bool = True
+    # Gruppenspalte fuer Panel A. Per Default config.PANEL_A_GROUP_COL
+    # ('biosensor'); der statische Kontext setzt 'osc_freq', weil dort die
+    # Vergleichsgruppe (static_omlp/static_ypd) in osc_freq steht und
+    # plot_panel_a() diese Spalte sonst nie sieht - beide Medien landeten dann
+    # in EINEM Violin. Siehe config.PANEL_A_GROUP_COL_STATIC.
+    panel_a_group_col: str = PANEL_A_GROUP_COL
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -241,9 +255,14 @@ def step_10_growth(ctx: PipelineContext) -> None:
     # 10. Zellmorphologie & Wachstum (Fläche, µ_event, µ_area)
     # ==================================================================
     if "area" in cells.columns:
+        # reference_cells = die von cells_plot entfernten Kontrollen. Ohne sie
+        # stünden die Oszillationskurven ohne Bezugsrahmen da, obwohl genau der
+        # Vergleich gegen PosCtrl/NegCtrl die Aussage der Abbildung ist.
+        controls_only = cells[~cells.index.isin(cells_plot.index)] if not cells_plot.empty else cells
         plot_metric_over_time_by_frequency(
             cells_plot, "area", output_dir / "10_cell_area_over_time.pdf",
             freq_order=freq_order, ylabel="Cell area [px²]",
+            reference_cells=controls_only,
         )
 
     # -- µ_event: spezifische Wachstumsrate nach Eq. 2 (Blöbaum et al. 2024):
@@ -316,6 +335,59 @@ def step_10_growth(ctx: PipelineContext) -> None:
             ylabel="µ_area, mother cells [h⁻¹]",
         )
 
+        # -- µ_area über ALLE Zellen, Fehlerbalken über REPLIKATE.
+        #
+        # Zwei Unterschiede zum Mutter-Plot darüber, und beide sind der Grund
+        # für diese zusätzliche Abbildung:
+        #
+        #  1. KEIN cell_type-Filter. Der µ_area-Fit ist eine Regression über
+        #     ln(Fläche) EINES Tracks und damit von lineage.py unabhängig -
+        #     nur das cell_type-Label hängt an der unvalidierten Mutter/Bud-
+        #     Heuristik. Ein Filter auf "mother" schleppt sie ohne Gegenwert
+        #     ein; ohne Filter ist das hier die einzige Wachstumsabbildung der
+        #     Pipeline, die ganz ohne die Heuristik auskommt.
+        #  2. Fehlerbalken über biologische Replikate statt über Zellen.
+        #     summarise_area_growth() poolt einzelne Tracks, sd_mu_area
+        #     beschreibt also die Streuung über Zellen (Pseudoreplikation,
+        #     siehe config.METHOD_CAVEATS). summarise_per_replicate() mittelt
+        #     dreistufig: Kammer -> Replikat -> Bedingung.
+        #
+        # Bewusst OHNE fit_is_reliable-Filter (anders als
+        # summarise_area_growth(exclude_unreliable=True)): bei einer flachen
+        # Bedingung ist das R² niedrig, WEIL es nichts zu erklären gibt - der
+        # Filter behielte dort nur die Tracks, in denen Rauschen wie ein Trend
+        # aussieht, und verzerrte den Median nach oben. Statt zu filtern wird
+        # der Anteil zuverlässiger Fits als eigene Spalte mitgeschrieben.
+        area_rep, area_rep_summary = summarise_per_replicate(area_table, "mu_area")
+        if not area_rep_summary.empty:
+            if "fit_is_reliable" in area_table.columns:
+                frac = (area_table.groupby(
+                            [c for c in ["biosensor", "osc_type", "osc_freq", "condition"]
+                             if c in area_table.columns], dropna=False)["fit_is_reliable"]
+                        .mean().reset_index(name="frac_fit_reliable"))
+                area_rep_summary = area_rep_summary.merge(frac, how="left")
+            area_rep.to_csv(output_dir / "12_area_growth_rate_per_replicate.csv", index=False)
+            area_rep_summary.to_csv(output_dir / "12_area_growth_rate_summary_per_replicate.csv",
+                                    index=False)
+            logger.info("Tabellen gespeichert: 12_area_growth_rate_per_replicate.csv / "
+                        "_summary_per_replicate.csv")
+
+            plot_point_errorbar(
+                exclude_controls(area_rep_summary), value_col="mean", sd_col="sem",
+                out_path=output_dir / "12_area_growth_rate_all.pdf",
+                x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+                x_order=freq_order,
+                ylabel="µ_area, all cells [h⁻¹]",
+                title="µ_area over all cells — mean ± SEM over biological replicates\n"
+                      "(no mother/bud filter, so independent of the lineage heuristic)",
+            )
+
+            area_trend = spearman_against_period(area_rep)
+            if not area_trend.empty:
+                area_trend.to_csv(output_dir / "12_area_growth_rate_spearman.csv", index=False)
+                logger.info("Tabelle gespeichert: 12_area_growth_rate_spearman.csv\n%s",
+                            area_trend.to_string(index=False))
+
         # Scatter: µ_event vs. µ_area (ebenfalls ohne Kontrollen)
         if not mu_summary.empty:
             plot_mu_event_vs_mu_area(
@@ -325,6 +397,77 @@ def step_10_growth(ctx: PipelineContext) -> None:
                 mu_event_table=exclude_controls(mu_table), mu_area_table=exclude_controls(area_table),
             )
 
+
+
+def step_13_endpoint(ctx: PipelineContext) -> None:
+    """Kumulativer Endzustand gegen die Zyklusperiode (+ Spearman-Trendtest)."""
+    cells = ctx.cells
+    output_dir = ctx.output_dir
+
+    # ==================================================================
+    # 13. Kumulativer Endzustand gegen die Periode
+    #
+    # Die einzige Auswertungsform, die bei dieser Abtastung interpretierbar
+    # ist: einzelne Zyklen liegen unter dem Nyquist-Limit (siehe config.py),
+    # ein Zyklusverlauf ist also nicht beobachtbar - die Wirkung ueber
+    # Stunden dagegen schon. Vorher gab es dafuer keine Abbildung: 10_/30_/31_
+    # sind Zeitreihen, 40_ sind Varianzmasse, und 50_summary_statistics.csv
+    # bekommt nur intensity_cols uebergeben, sieht die ratio_*-Spalten also
+    # nie. Fuer die Sensor-Daten ist das hier die erste kumulative Auswertung
+    # ueberhaupt.
+    #
+    # Getestet wird mit SPEARMAN gegen die Periode, weil die Vorhersage
+    # monoton ist (laengere Famine-Halbzyklen belasten mehr) - nicht mit
+    # Kruskal-Wallis, das nur "irgendeine Gruppe unterscheidet sich" prueft.
+    # ==================================================================
+    value_cols = [c for c in list(dict.fromkeys(list(ENDPOINT_VALUE_COLS) + ctx.ratio_cols))
+                  if c in cells.columns]
+    if not value_cols:
+        logger.warning("Schritt 13: keine der Spalten %s in den Daten - uebersprungen.",
+                       list(ENDPOINT_VALUE_COLS) + ctx.ratio_cols)
+        return
+
+    logger.info("Endzustand (letzte %.0f%% der Frames) wird gebildet fuer: %s",
+                100 * ENDPOINT_LAST_FRACTION, value_cols)
+
+    all_per_replicate, all_summary, all_trend = [], [], []
+    for value_col in value_cols:
+        per_replicate, summary = compute_endpoint_per_replicate(
+            cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION,
+        )
+        if summary.empty:
+            continue
+        trend = spearman_against_period(per_replicate)
+        all_per_replicate.append(per_replicate)
+        all_summary.append(summary)
+        if not trend.empty:
+            all_trend.append(trend)
+
+        plot_endpoint_vs_period(
+            summary, output_dir / f"13_endpoint_vs_period_{value_col}.pdf",
+            value_col=value_col, trend=trend, ylabel=f"{pretty_label(value_col)}\n(endpoint)",
+        )
+
+    if not all_summary:
+        logger.warning("Schritt 13: kein Endzustand berechenbar - keine Dateien geschrieben.")
+        return
+
+    pd.concat(all_per_replicate, ignore_index=True).to_csv(
+        output_dir / "13_endpoint_per_replicate.csv", index=False)
+    pd.concat(all_summary, ignore_index=True).to_csv(
+        output_dir / "13_endpoint_summary.csv", index=False)
+    logger.info("Tabellen gespeichert: 13_endpoint_per_replicate.csv / 13_endpoint_summary.csv")
+
+    if all_trend:
+        trend_all = pd.concat(all_trend, ignore_index=True)
+        trend_all.to_csv(output_dir / "13_endpoint_spearman.csv", index=False)
+        logger.info("Tabelle gespeichert: 13_endpoint_spearman.csv\n%s",
+                    trend_all.to_string(index=False))
+    else:
+        logger.info(
+            "Schritt 13: kein Spearman-Trendtest geschrieben - dafuer braucht es mindestens "
+            "drei numerische Perioden (bei statischen Daten und beim PKO-Zweig erwartet)."
+        )
 
 
 def step_20_lineage(ctx: PipelineContext) -> None:
@@ -357,7 +500,7 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
-            group_col=PANEL_A_GROUP_COL, facet_col=PANEL_A_FACET_COL,
+            group_col=ctx.panel_a_group_col, facet_col=PANEL_A_FACET_COL,
         )
     else:
         logger.warning("compute_budding_ratio() lieferte keine per_mother-Tabelle - Panel A wird übersprungen.")
@@ -502,6 +645,30 @@ def step_40_robustness(ctx: PipelineContext) -> None:
             label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
         )
 
+        # Trendtest gegen die Periode - NUR fuer R(p), absichtlich nicht fuer R(t).
+        #
+        # R(t) ist die Varianz UEBER DIE ZEIT. Ein Frame tastet eine
+        # Oszillation unter dem Nyquist-Limit bei zufaelliger Phase ab, und der
+        # Alias-Beitrag ist bei der LAENGSTEN Periode am groessten (24 min bei
+        # 10 min/Frame = 2.4 Abtastungen pro Zyklus) - also in derselben
+        # Richtung wie der erwartete biologische Effekt. Ein R(t)-Trend gegen
+        # die Periode laesst sich deshalb nicht von einem Alias-Artefakt
+        # unterscheiden, und ein p-Wert dazu wuerde genau diese Verwechslung
+        # nur amtlich aussehen lassen.
+        #
+        # R(p) ist die Varianz UEBER DIE ZELLEN innerhalb eines Frames. Alle
+        # Zellen einer Kammer sehen dieselbe Medienphase, die Phase traegt zur
+        # Streuung zwischen ihnen also nichts bei - R(p) ist gegen das
+        # Aliasing robust und damit die Groesse, bei der ein Trendtest zulaessig
+        # ist.
+        rp_per_replicate, _ = summarise_per_replicate(rp, "R_p")
+        rp_trend = spearman_against_period(rp_per_replicate)
+        if not rp_trend.empty:
+            rp_trend = rp_trend.assign(value_col=value_col)
+            rp_trend.to_csv(output_dir / f"40_Rp_{value_col}_spearman.csv", index=False)
+            logger.info("Tabelle gespeichert: 40_Rp_%s_spearman.csv\n%s",
+                        value_col, rp_trend.to_string(index=False))
+
         # Kontroll-Konsistenz für R(t)/R(p), analog zur Wachstumsrate oben.
         if ctx.run_control_consistency:
             rt_control_test = test_control_consistency_across_freq(rt_pop, value_col="R_t_population")
@@ -578,6 +745,15 @@ def step_40_robustness(ctx: PipelineContext) -> None:
             x_order=freq_order,
             ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
         )
+
+        # Trendtest gegen die Periode, siehe Begruendung oben (R(p), nicht R(t)).
+        rp_mu_area_rep, _ = summarise_per_replicate(rp_mu_area, "R_p")
+        rp_mu_area_trend = spearman_against_period(rp_mu_area_rep)
+        if not rp_mu_area_trend.empty:
+            rp_mu_area_trend = rp_mu_area_trend.assign(value_col="mu_area")
+            rp_mu_area_trend.to_csv(output_dir / "40_Rp_mu_area_spearman.csv", index=False)
+            logger.info("Tabelle gespeichert: 40_Rp_mu_area_spearman.csv\n%s",
+                        rp_mu_area_trend.to_string(index=False))
 
         if ctx.run_control_consistency:
             rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
@@ -753,6 +929,7 @@ class Step:
 STEPS: list[Step] = [
     Step("00_overview", "Übersicht / Sanity-Check", step_00_overview),
     Step("10_growth", "Zellfläche, µ_event und µ_area", step_10_growth),
+    Step("13_endpoint", "Kumulativer Endzustand gegen die Periode (+ Spearman)", step_13_endpoint),
     Step("20_lineage", "Budding-Events, Budding Ratio, Panel A, Stammbaum", step_20_lineage),
     Step("30_sensors", "Sensor-Intensitäten und Ratios über die Zeit", step_30_sensors),
     Step("40_robustness", "Robustness R(t)/R(p)", step_40_robustness),
