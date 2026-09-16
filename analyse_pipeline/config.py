@@ -68,6 +68,7 @@ OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / "analysis
 CACHE_PATH: Path = OUTPUT_DIR.parent / "combined_results_cache.parquet"
 QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
+OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
 
 FORCE_RELOAD = False  # auf True setzen, wenn neue Rohdaten dazugekommen sind
 
@@ -105,6 +106,22 @@ FREQ_ORDER = ["0.75", "1.5", "3", "6", "12", "24"]
 # ausgewertet (eigener Output-Ordner OUTPUT_DIR_STATIC). Dort steht in
 # 'osc_freq' statt einer Frequenz die Vergleichsgruppe St.omlp vs. St.ypd.
 STATIC_ORDER = ["static_omlp", "static_ypd"]
+
+# --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
+# Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
+# Kontrollen sich ohne Exopolysaccharid korrekt verhalten (Clogging-Hypothese,
+# siehe pko_comparison.py).
+#
+# PKO liegt als eigener Ordner auf der BIOSENSOR-Ebene
+# (Data/PKO/<osc_type>/<periode>/03_results/...) und landet damit in der Spalte
+# 'biosensor' - eine echte 'strain'-Spalte liefert Combined_Results nicht
+# (siehe PANEL_A_GROUP_COL unten). Ohne die Abtrennung in run_analysis.py wuerde
+# PKO deshalb als zusaetzliche Farbe in JEDEN bestehenden Oszillations-Plot
+# laufen (PANEL_A_GROUP_COL ist dort auch color_col) und als zusaetzliches
+# Violin in Panel A - die vorhandenen Ergebnisse wuerden sich also aendern.
+# Genau das soll nicht passieren: PKO bekommt einen eigenen Kontext und einen
+# eigenen Output-Ordner, exakt wie die statischen Daten.
+PKO_BIOSENSOR_NAME = "PKO"
 
 # Oszillationen starten nach einer zweistündigen Kontrollphase. ANGABE IN
 # MINUTEN - queen_controls._minutes_to_hours() rechnet auf die 'time_h'-Achse um.
@@ -198,8 +215,16 @@ METHOD_CAVEATS: list[str] = [
     "Zellen/Intervalle, nicht erst pro Replikat. sd_mu/sd_mu_area und n_values in "
     "11_*_summary.csv und 12_*_summary_*.csv beschreiben daher die Streuung über Zellen "
     "(Pseudoreplikation), nicht über biologische Replikate. "
-    "aggregate_robustness_over_replicates() und analysis._aggregate_over_replicates() "
-    "mitteln dagegen korrekt zweistufig.",
+    "analysis._aggregate_over_replicates() (Schritte 10/30/31) und "
+    "queen_controls.summarise_sensor_controls() (Schritt 95) gruppieren dagegen auf "
+    "'replicate' und mitteln korrekt.",
+    "aggregate_robustness_over_replicates() (alle 40_*_aggregated) ist nur HALB korrekt: "
+    "der Default replicate_id_col='exp_id' behebt die Frame-Pseudoreplikation, aber "
+    "exp_id enthaelt laut data_loading.py auch 'chamber'. Es wird also auf KAMMER-Ebene "
+    "gemittelt und jede Kammer danach als biologisches Replikat gezaehlt - bei 3 "
+    "Replikaten x 2 Kammern steht in n_replicates eine 6, und die ausgewiesene sd mischt "
+    "technische mit biologischer Varianz. Fuer biologische Fehlerbalken mit "
+    "replicate_id_col='replicate' aufrufen.",
     "Robustness R ist eine RELATIVE Größe: der Normalisierungsfaktor m wird über den "
     "GESAMTEN übergebenen Datensatz gebildet. R-Werte aus Läufen mit unterschiedlichem "
     "Datenumfang sind nicht miteinander vergleichbar (siehe robustness.py).",

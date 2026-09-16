@@ -15,15 +15,27 @@ z.B.:
     Data/BSG/Glc/1.5/03_results/Combined_Results.csv
     Data/BSA/pH/24/03_results/Combined_Results.csv
 
-Dieses Modul macht nur noch das Drumherum: laden, QC anwenden, Oszillations-
-von statischen Daten trennen, und dann die Schritte aus pipeline_steps.py
-ausfuehren. Die Auswertung selbst steht dort, ein Schritt pro Funktion.
+Dieses Modul macht nur noch das Drumherum: laden, QC anwenden, die drei
+Zweige trennen, und dann die Schritte aus pipeline_steps.py ausfuehren. Die
+Auswertung selbst steht dort, ein Schritt pro Funktion.
+
+DREI UNABHAENGIGE ZWEIGE, drei Output-Ordner:
+
+    Oszillation   analysis_output/          osc_type != 'static', biosensor != 'PKO'
+    statisch      analysis_output/static/   osc_type == 'static'
+    PKO           analysis_output/pko/      biosensor == 'PKO'  (Data/PKO/...)
+
+Sie laufen durch DIESELBEN Schritte, teilen aber keine Zahlen: jeder Zweig
+bekommt seinen eigenen PipelineContext. Der PKO-Zweig kommt zusaetzlich mit
+einem WT-gegen-PKO-Vergleich (pko_comparison.py) fuer die Clogging-Hypothese -
+der braucht beide Teilmengen und laeuft deshalb ausserhalb der Schritt-Schleife.
 
 Ablauf:
     1. Alle Combined_Results einlesen (gecacht als .parquet)
     2. Track-Merges DANN QC-Exclusions anwenden (nicht-destruktiv)
-    3. Oszillations- und statische Daten trennen
-    4. pipeline_steps.STEPS auf beide Teilmengen anwenden
+    3. PKO abtrennen, dann Oszillations- und statische Daten trennen
+    4. pipeline_steps.STEPS auf alle drei Teilmengen anwenden
+    5. WT gegen PKO vergleichen, falls PKO-Daten vorhanden sind
 
 Konfiguration: config.py (oder AUREO_DATA_ROOT / AUREO_OUTPUT_DIR).
 """
@@ -48,12 +60,15 @@ from config import (
     DATA_ROOT,
     OUTPUT_DIR,
     OUTPUT_DIR_STATIC,
+    OUTPUT_DIR_PKO,
+    PKO_BIOSENSOR_NAME,
     CACHE_PATH,
     QC_EXCLUSIONS_PATH,
     FORCE_RELOAD,
     MIN_PER_FRAME,
     FREQ_ORDER,
     STATIC_ORDER,
+    OSCILLATION_START_MIN,
     log_active_configuration,
 )
 from data_loading import load_all_results
@@ -68,6 +83,7 @@ from qc_exclusions import (
 from sensors import compute_ratios, SENSOR_CONFIG
 from analysis import add_time_column, find_intensity_columns
 from pipeline_steps import STEPS, PipelineContext
+from pko_comparison import run_pko_comparison
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -174,6 +190,11 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-static", action="store_true",
         help="Die statischen Daten (osc_type == 'static') nicht auswerten.",
     )
+    parser.add_argument(
+        "--skip-pko", action="store_true",
+        help=f"Die PKO-Daten (biosensor == '{PKO_BIOSENSOR_NAME}') nicht auswerten, "
+             "inklusive des WT-gegen-PKO-Vergleichs.",
+    )
     args = parser.parse_args(argv)
 
     if args.list_steps:
@@ -193,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR_STATIC.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR_PKO.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
     # 1. Daten laden
@@ -255,14 +277,34 @@ def main(argv: list[str] | None = None) -> int:
     # Groß-/Kleinschreibung ("Static"/"STATIC") oder versehentliche
     # Leerzeichen im Ordnernamen - sonst landen statische Zeilen fälschlich
     # (und unbemerkt) in cells_osc statt in cells_static.
-    is_static = cells["osc_type"].astype(str).str.strip().str.lower() == "static"
-    cells_osc = cells[~is_static].copy()
-    cells_static = cells[is_static].copy()
+    # PKO ZUERST abtrennen, VOR der statisch/Oszillations-Trennung: PKO liegt
+    # auf der Biosensor-Ebene (Data/PKO/...) und landet damit in 'biosensor',
+    # nicht in 'osc_type'. Ohne diesen Schnitt liefe PKO durch is_static
+    # hindurch in cells_osc und erschiene - weil PANEL_A_GROUP_COL == 'biosensor'
+    # auch color_col ist - als zusaetzliche Farbe in JEDEM bestehenden
+    # Oszillations-Plot und als zusaetzliches Violin in Panel A. Die
+    # vorhandenen Ergebnisse wuerden sich also aendern, was der Sinn eines
+    # dritten, unabhaengigen Zweigs gerade nicht ist. Siehe config.PKO_BIOSENSOR_NAME.
+    is_pko = cells["biosensor"].astype(str).str.strip().str.upper() == PKO_BIOSENSOR_NAME.upper()
+    cells_pko = cells[is_pko].copy()
+    cells_rest = cells[~is_pko]
+
+    is_static = cells_rest["osc_type"].astype(str).str.strip().str.lower() == "static"
+    cells_osc = cells_rest[~is_static].copy()
+    cells_static = cells_rest[is_static].copy()
 
     logger.info(
-        "Aufgeteilt: %d Zeilen Oszillationsdaten, %d Zeilen statische Daten (osc_type == 'static').",
-        len(cells_osc), len(cells_static),
+        "Aufgeteilt: %d Zeilen Oszillationsdaten, %d Zeilen statische Daten "
+        "(osc_type == 'static'), %d Zeilen PKO-Daten (biosensor == '%s').",
+        len(cells_osc), len(cells_static), len(cells_pko), PKO_BIOSENSOR_NAME,
     )
+    if cells_pko.empty:
+        logger.info(
+            "Keine PKO-Daten gefunden - der PKO-Zweig und der WT-gegen-PKO-Vergleich "
+            "entfallen. Das ist der normale Zustand, solange unter %s/%s/ keine Daten "
+            "liegen; die uebrigen Auswertungen sind davon unberuehrt.",
+            DATA_ROOT.name, PKO_BIOSENSOR_NAME,
+        )
 
     # ------------------------------------------------------------------
     # 2c. Zell-Positionen für die QC-Kalibrierung exportieren
@@ -287,15 +329,17 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # ------------------------------------------------------------------
-    # 3. Schritte ausfuehren - erst Oszillation, dann statisch
+    # 3. Schritte ausfuehren - erst Oszillation, dann statisch, dann PKO
     # ------------------------------------------------------------------
     failed = []
 
+    osc_freq_order = resolve_x_order(cells_osc, "osc_freq", FREQ_ORDER)
     osc_ctx = PipelineContext(
         cells=cells_osc, output_dir=OUTPUT_DIR,
-        freq_order=resolve_x_order(cells_osc, "osc_freq", FREQ_ORDER),
+        freq_order=osc_freq_order,
         intensity_cols=intensity_cols, ratio_cols=ratio_cols,
         run_sensor_controls=True,
+        run_control_consistency=len(osc_freq_order) >= 2,
     )
     run_steps(osc_ctx, steps)
     failed += [f"Oszillation/{k}" for k in osc_ctx.failed_steps]
@@ -312,21 +356,70 @@ def main(argv: list[str] | None = None) -> int:
         # der Wildtyp kultiviert, es gibt also keine Fluoreszenzkanäle -
         # daher intensity_cols/ratio_cols leer und run_sensor_controls=False,
         # statt auf durchgehend NaN-Spalten zu rechnen.
+        static_freq_order = resolve_x_order(cells_static, "osc_freq", STATIC_ORDER)
         static_ctx = PipelineContext(
             cells=cells_static, output_dir=OUTPUT_DIR_STATIC,
-            freq_order=resolve_x_order(cells_static, "osc_freq", STATIC_ORDER),
+            freq_order=static_freq_order,
             intensity_cols=[], ratio_cols=[],
             run_sensor_controls=False,
+            run_control_consistency=len(static_freq_order) >= 2,
         )
         run_steps(static_ctx, steps)
         failed += [f"statisch/{k}" for k in static_ctx.failed_steps]
+
+    # ------------------------------------------------------------------
+    # 3b. PKO: dritter, unabhaengiger Zweig (Clogging-Hypothese)
+    # ------------------------------------------------------------------
+    # Laeuft durch DIESELBEN Schritte wie die statischen Daten und landet in
+    # einem eigenen Output-Ordner. Wie bei static: keine Fluoreszenzkanaele,
+    # also intensity_cols/ratio_cols leer und run_sensor_controls=False -
+    # die Schritte 30/31/95 fallen damit von selbst aus.
+    #
+    # Zusaetzlich run_control_consistency=False, sobald PKO nur EINE Periode
+    # abdeckt: test_control_consistency_across_freq() braucht mindestens zwei
+    # osc_freq-Batches und liefert sonst p = NaN, und plot_control_consistency()
+    # zeichnet dann einen einzelnen Punkt pro Kontrollart - eine trivial flache
+    # Linie, die wie "PKO-Kontrollen sind konsistent" aussieht, obwohl sie
+    # keine Information enthaelt. Der eigentliche Vergleich laeuft stattdessen
+    # ueber pko_comparison.run_pko_comparison() (siehe dort).
+    if args.skip_pko:
+        logger.info("PKO-Daten uebersprungen (--skip-pko).")
+    elif cells_pko.empty:
+        pass  # oben schon gemeldet
+    else:
+        pko_freq_order = resolve_x_order(cells_pko, "osc_freq", FREQ_ORDER)
+        pko_ctx = PipelineContext(
+            cells=cells_pko, output_dir=OUTPUT_DIR_PKO,
+            freq_order=pko_freq_order,
+            intensity_cols=[], ratio_cols=[],
+            run_sensor_controls=False,
+            run_control_consistency=len(pko_freq_order) >= 2,
+        )
+        run_steps(pko_ctx, steps)
+        failed += [f"PKO/{k}" for k in pko_ctx.failed_steps]
+
+        # WT gegen PKO: braucht BEIDE Teilmengen und laeuft deshalb ausserhalb
+        # der Schritt-Schleife. Die area_table-Objekte kommen aus den bereits
+        # gerechneten Kontexten (lazy properties), damit die ln(Flaeche)-Fits
+        # nicht zweimal laufen.
+        try:
+            run_pko_comparison(
+                cells_wt=cells_osc, cells_pko=cells_pko,
+                area_wt=osc_ctx.area_table, area_pko=pko_ctx.area_table,
+                output_dir=OUTPUT_DIR_PKO,
+                pko_biosensor=PKO_BIOSENSOR_NAME,
+                analysis_start_min=OSCILLATION_START_MIN,
+            )
+        except Exception:
+            logger.exception("WT-gegen-PKO-Vergleich fehlgeschlagen - wird uebersprungen.")
+            failed.append("PKO/wt_vs_pko_comparison")
 
     if failed:
         logger.error("=== Mit Fehlern beendet. Fehlgeschlagen: %s ===", ", ".join(failed))
         return 1
 
-    logger.info("=== Fertig! Oszillationsdaten: %s | statische Daten: %s ===",
-                OUTPUT_DIR, OUTPUT_DIR_STATIC)
+    logger.info("=== Fertig! Oszillationsdaten: %s | statische Daten: %s | PKO: %s ===",
+                OUTPUT_DIR, OUTPUT_DIR_STATIC, OUTPUT_DIR_PKO)
     return 0
 
 

@@ -143,6 +143,15 @@ class PipelineContext:
     intensity_cols: list[str]
     ratio_cols: list[str]
     run_sensor_controls: bool
+    # Kontroll-Konsistenz ueber die osc_freq-Batches (control_consistency.py).
+    # Braucht MINDESTENS ZWEI Batches: test_control_consistency_across_freq()
+    # liefert bei einem einzigen p = NaN, und plot_control_consistency() zeichnet
+    # dann einen einzelnen Punkt pro Kontrollart - eine trivial flache Linie, die
+    # wie "Kontrollen sind konsistent" aussieht und nichts enthaelt. Fuer solche
+    # Teilmengen (z.B. der PKO-Zweig mit nur einer Periode) deshalb False, statt
+    # eine irrefuehrende Abbildung zu erzeugen. run_analysis.py setzt das anhand
+    # der tatsaechlich vorhandenen Batches.
+    run_control_consistency: bool = True
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -266,15 +275,21 @@ def step_10_growth(ctx: PipelineContext) -> None:
         # hinweg, obwohl sie eigentlich unabhängig von der Oszillation sein
         # sollten? Test auf Replikat-Ebene (mu_table), Plot auf aggregierter
         # Ebene (mu_summary) - siehe control_consistency.py Docstring.
-        mu_control_test = test_control_consistency_across_freq(mu_table, value_col="mu")
-        if not mu_control_test.empty:
-            mu_control_test.to_csv(output_dir / "11_control_consistency_mu_kruskal.csv", index=False)
-            logger.info("Tabelle gespeichert: 11_control_consistency_mu_kruskal.csv")
+        if ctx.run_control_consistency:
+            mu_control_test = test_control_consistency_across_freq(mu_table, value_col="mu")
+            if not mu_control_test.empty:
+                mu_control_test.to_csv(output_dir / "11_control_consistency_mu_kruskal.csv", index=False)
+                logger.info("Tabelle gespeichert: 11_control_consistency_mu_kruskal.csv")
 
-        plot_control_consistency(
-            mu_summary, value_col="mean_mu", out_path=output_dir / "11_control_consistency_mu.pdf",
-            x_order=freq_order, ylabel="Specific growth rate µ [h⁻¹] (controls)",
-        )
+            plot_control_consistency(
+                mu_summary, value_col="mean_mu", out_path=output_dir / "11_control_consistency_mu.pdf",
+                x_order=freq_order, ylabel="Specific growth rate µ [h⁻¹] (controls)",
+            )
+        else:
+            logger.info(
+                "Kontroll-Konsistenz fuer µ uebersprungen (run_control_consistency=False) - "
+                "siehe PipelineContext."
+            )
     else:
         logger.warning("Keine µ-Werte berechnet - benötigt Mutterzellen mit >= 2 Budding-Events.")
 
@@ -488,21 +503,22 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         )
 
         # Kontroll-Konsistenz für R(t)/R(p), analog zur Wachstumsrate oben.
-        rt_control_test = test_control_consistency_across_freq(rt_pop, value_col="R_t_population")
-        if not rt_control_test.empty:
-            rt_control_test.to_csv(output_dir / f"40_control_consistency_Rt_population_{value_col}_kruskal.csv", index=False)
-        plot_control_consistency(
-            rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
-            x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
-        )
+        if ctx.run_control_consistency:
+            rt_control_test = test_control_consistency_across_freq(rt_pop, value_col="R_t_population")
+            if not rt_control_test.empty:
+                rt_control_test.to_csv(output_dir / f"40_control_consistency_Rt_population_{value_col}_kruskal.csv", index=False)
+            plot_control_consistency(
+                rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
+                x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
+            )
 
-        rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
-        if not rp_control_test.empty:
-            rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
-        plot_control_consistency(
-            rp_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rp_{value_col}.pdf",
-            x_order=freq_order, ylabel=f"R(p) — {value_col} (controls)",
-        )
+            rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
+            if not rp_control_test.empty:
+                rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
+            plot_control_consistency(
+                rp_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rp_{value_col}.pdf",
+                x_order=freq_order, ylabel=f"R(p) — {value_col} (controls)",
+            )
 
         logger.info("Robustness R(t)/R(p) für '%s' berechnet und gespeichert.", value_col)
 
@@ -563,13 +579,14 @@ def step_40_robustness(ctx: PipelineContext) -> None:
             ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
         )
 
-        rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
-        if not rp_mu_area_control_test.empty:
-            rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
-        plot_control_consistency(
-            rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
-            x_order=freq_order, ylabel="R(p) — µ_area (controls)",
-        )
+        if ctx.run_control_consistency:
+            rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
+            if not rp_mu_area_control_test.empty:
+                rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
+            plot_control_consistency(
+                rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
+                x_order=freq_order, ylabel="R(p) — µ_area (controls)",
+            )
         logger.info("R(p) für µ_area berechnet und gespeichert (%d zuverlässige Tracks).", len(area_reliable))
     else:
         logger.warning("area_table ist leer - R(p) für µ_area wird übersprungen.")

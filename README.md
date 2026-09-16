@@ -68,12 +68,22 @@ Beispiele:
   Data/BSG/Glc/6/03_results/Combined_Results.csv
   Data/BSA/pH/24/03_results/Combined_Results.csv
   Data/BSG/static/static_ypd/03_results/Combined_Results.csv
+  Data/PKO/Glc/3/03_results/Combined_Results.csv
 ```
 
 Die Metadaten `biosensor`/`osc_type`/`osc_freq` kommen aus dem **Ordnerpfad**,
-nicht aus dem Dateinamen (siehe `data_loading.py`). Ordner mit
-`osc_type == "static"` laufen durch dieselbe Auswertung, landen aber in
-`analysis_output/static/`.
+nicht aus dem Dateinamen (siehe `data_loading.py`).
+
+Daraus entstehen **drei unabhängige Zweige** mit je eigenem Output-Ordner. Sie
+laufen durch dieselben Schritte, teilen aber keine Zahlen:
+
+| Zweig | Erkennungsmerkmal | Output |
+| --- | --- | --- |
+| Oszillation | alles übrige | `analysis_output/` |
+| statisch | `osc_type == "static"` | `analysis_output/static/` |
+| PKO | `biosensor == "PKO"` (`Data/PKO/…`) | `analysis_output/pko/` |
+
+Einzeln abschaltbar mit `--skip-static` bzw. `--skip-pko`.
 
 Benötigte Spalten in `Combined_Results`: `track_id`, `frame`, `centroid_x`,
 `centroid_y`, `area`, `condition`, `replicate`, `chamber`.
@@ -95,6 +105,7 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 | `robustness.py` | R(t)/R(p) nach Eq. 1 |
 | `control_consistency.py` | Kruskal-Wallis: driften PosCtrl/NegCtrl über Batches? |
 | `queen_controls.py` | PosCtrl-vs-NegCtrl-Validierung der Sensoren selbst |
+| `pko_comparison.py` | **WT gegen PKO**: Kammer-Übereinstimmung, Kontroll-Bracket, Zell-Ausbeute |
 | `analysis.py`, `summary_plots.py`, `violin_plots.py`, `mother_trajectories.py` | Plots & gemeinsame Helfer |
 | `inspect_lineage.py` | Interaktive Kalibrierung der Lineage-Parameter |
 | `validate_lineage.py` | **Quantitative** Validierung der Mutter/Bud-Heuristik (alle Kammern) |
@@ -115,9 +126,11 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `50_` | Zusammenfassungstabelle |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
+| `60_`–`62_` | **Nur in `pko/`**: WT-gegen-PKO-Vergleich (siehe unten) |
 
-Statische Daten landen in denselben Präfixen unter `analysis_output/static/`
-(ohne `30_`/`31_`/`95_`, da dort nur der Wildtyp ohne Fluoreszenzkanäle läuft).
+Statische Daten und PKO-Daten landen in denselben Präfixen unter
+`analysis_output/static/` bzw. `analysis_output/pko/` — beide ohne
+`30_`/`31_`/`95_`, da dort keine Fluoreszenzkanäle vorliegen.
 
 ---
 
@@ -154,6 +167,86 @@ Zelle sieht praktisch ein konstantes, gemitteltes Medium. Bei 24 min sind es
 12 min, lang genug für echte Verarmung und eine Hungerantwort, 25-mal in 10 h.
 **Die stärkere Belastung wird bei den langsamen Zyklen erwartet**, nicht bei den
 schnellen.
+
+## PKO: verstopft Pullulan den Chip? (Zweig 3)
+
+Die Kontrollkammern verhalten sich im Wildtyp nicht wie erwartet. Arbeits-
+hypothese: **Pullulan** — das Exopolysaccharid, das der WT ausscheidet — setzt
+die Chip-Strukturen zu und erzeugt unerwartete Strömungsprofile. Der
+**PKO-Stamm produziert kein Pullulan**; verhalten sich *seine* Kontrollen
+korrekt, stützt das die Clogging-Erklärung.
+
+### Was nicht geht: der Test über die Frequenz-Batches
+
+`test_control_consistency_across_freq()` vergleicht die Kontrollen **über die
+`osc_freq`-Batches hinweg** und braucht dafür mindestens zwei. PKO deckt nur
+**eine Periode** ab — der Test liefert dort `p = NaN`, und
+`plot_control_consistency()` zeichnet einen *einzelnen Punkt* pro Kontrollart,
+also eine trivial flache Linie, die wie „PKO-Kontrollen sind konsistent“
+aussieht und nichts enthält.
+
+Der PKO-Zweig schaltet die Kontroll-Konsistenz deshalb ab
+(`PipelineContext.run_control_consistency=False`, automatisch gesetzt, sobald
+weniger als zwei Batches vorliegen), statt eine irreführende Abbildung zu
+erzeugen. Der Vergleich läuft stattdessen **innerhalb des gemeinsamen
+Perioden-Batches, WT gegen PKO**. Das ist kein Notbehelf:
+
+* PosCtrl ist durchgehend Feast, NegCtrl durchgehend Starvation — der
+  Medienverlauf einer *Kontrollkammer* hängt gar nicht an der Periode des
+  Batches, in dem sie mitlief.
+* In den Kontrollkammern fällt am meisten Pullulan an: PosCtrl wächst 10 h
+  durch. Wenn Verstopfung das Problem ist, ist das der Ort dafür.
+
+### Drei Größen, keine davon lineage-abhängig
+
+| Datei | Inhalt |
+| --- | --- |
+| `60_pko_control_chambers.csv` | ein Wert pro Kontrollkammer (zweistufiger Median) |
+| `60_pko_chamber_agreement_per_replicate.csv` / `_per_strain.csv` | Kammer-zu-Kammer-CV **innerhalb** eines Replikats |
+| `60_pko_control_bracket_per_replicate.csv` / `_per_strain.csv` | PosCtrl-vs-NegCtrl als Cliff's δ auf µ_area |
+| `60_pko_cell_yield_timeseries.csv` / `_slopes.csv` | verfolgbare Zellen pro Kammer über die Zeit |
+| `61_pko_control_agreement.pdf` | **Hauptabbildung**: Kammer-Übereinstimmung + Bracket, WT gegen PKO |
+| `62_pko_cell_yield.pdf` | Zell-Ausbeute pro Kontrollkammer, WT gegen PKO |
+
+Bewusst **ohne** Mutter/Bud-Heuristik: µ_area ist eine Regression über
+ln(Fläche) eines Tracks und damit von `lineage.py` unabhängig — nur das
+`cell_type`-Label hängt daran. Damit steht dieser Vergleich nicht auf einer
+unvalidierten Heuristik (siehe `validate_lineage.py`).
+
+Die Kammer-Streuung wird **innerhalb** eines Replikats gebildet: Kammern eines
+Replikats sind technische Messungen desselben Chips, ihre Streuung ist der
+hydraulische Anteil. Die Streuung *zwischen* Replikaten ist biologisch und
+würde den gesuchten Effekt nur verwässern.
+
+### Was dieses Design statistisch trägt
+
+PKO ist **ein Stamm**. Ein Signifikanztest WT-gegen-PKO auf Stammebene hat
+n = 1 in einer Gruppe und wird deshalb **bewusst nicht gerechnet** — auch nicht
+über Replikate oder Kammern hinweg, das wäre Pseudoreplikation auf Stammebene.
+
+Getragen wird eine **deskriptive** Aussage: die vier WT-Biosensor-Stämme
+liefern vier voneinander unabhängige WT-Werte, und der PKO-Wert liegt
+innerhalb oder außerhalb dieser Spanne. Die vier WT-Stämme sind damit die
+interne Replikation der WT-Seite — stimmen sie untereinander nicht überein,
+ist schon das Zusammenfassen zu „WT“ falsch, und `61_` zeigt genau das.
+
+### Confound, der in die Diskussion gehört
+
+PKO ist nicht „Wildtyp ohne Verstopfung“, sondern eine Mutante mit verändertem
+Kohlenstofffluss und veränderten Oberflächeneigenschaften. **Jeder** WT-PKO-
+Unterschied lässt sich auch direkt physiologisch erklären — einen Unterschied
+zu finden ist noch kein Beleg für Verstopfung. Unterscheidbar sind die beiden
+Erklärungen nur über das **Muster**:
+
+| Ursache | Vorhersage |
+| --- | --- |
+| hydraulisch | hohe Kammer-zu-Kammer-Streuung, wegbrechende Zell-Ausbeute, kaputtes Bracket |
+| metabolisch | gleichmäßige Niveau-Verschiebung, Kammer-Übereinstimmung bleibt erhalten |
+
+Deshalb berichtet `pko_comparison.py` Streuungen und Steigungen, nicht nur
+Mittelwerte.
+
+---
 
 ## Die Lineage-Heuristik validieren
 
@@ -236,14 +329,43 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
   einzelne Zellen/Intervalle, **nicht** erst pro Replikat. `sd_mu`, `sd_mu_area`
   und `n_values` in `11_*_summary.csv` / `12_*_summary_*.csv` beschreiben damit
   die Streuung über Zellen (Pseudoreplikation), nicht über biologische
-  Replikate. `aggregate_robustness_over_replicates()` und
-  `analysis._aggregate_over_replicates()` mitteln dagegen korrekt zweistufig.
+  Replikate. `analysis._aggregate_over_replicates()` (Schritte `10_`/`30_`/`31_`)
+  und `queen_controls.summarise_sensor_controls()` (Schritt `95_`) gruppieren
+  dagegen auf `replicate` und mitteln damit korrekt.
+* `aggregate_robustness_over_replicates()` (alle `40_*_aggregated`) ist nur
+  **halb** korrekt: der Default `replicate_id_col="exp_id"` behebt die
+  Frame-Pseudoreplikation, aber `exp_id` enthält laut `data_loading.py` auch
+  `chamber`. Die Funktion mittelt also auf **Kammer**-Ebene und behandelt
+  anschließend jede Kammer als biologisches Replikat — bei 3 Replikaten mit je
+  2 Kammern steht in `n_replicates` eine 6, und die ausgewiesene `sd` mischt
+  technische mit biologischer Varianz. Wer biologische Fehlerbalken will, ruft
+  sie mit `replicate_id_col="replicate"` auf.
 * Die Mann-Whitney-Tests in den Violin-Plots laufen über die übergebenen Zeilen
   (eine Mutterzelle pro Zeile bei der Budding Ratio) und berücksichtigen die
   Replikat-Struktur ebenfalls nicht.
 * Robustheit **R ist relativ**: der Normalisierungsfaktor `m` wird über den
   gesamten übergebenen Datensatz gebildet. R-Werte aus Läufen mit
-  unterschiedlichem Datenumfang sind nicht miteinander vergleichbar.
+  unterschiedlichem Datenumfang sind nicht miteinander vergleichbar. Das gilt
+  auch **zwischen den drei Zweigen**: Oszillation, statisch und PKO bekommen
+  je einen eigenen `PipelineContext` und damit je ein eigenes `m` — R-Werte aus
+  `analysis_output/`, `static/` und `pko/` dürfen **nicht** gegeneinander
+  gelesen werden. Genau deshalb benutzt `pko_comparison.py` für den
+  WT-gegen-PKO-Vergleich gewöhnliche Kammer-Statistiken (Median, CV) statt R.
+* `fit_is_reliable` heißt `R² >= min_r_squared` (Default 0.5, siehe
+  `area_growth.compute_area_growth_rate()`). Bei einer Bedingung, die
+  **tatsächlich flach ist**, erklärt die Regressionsgerade per Konstruktion
+  kaum Varianz — das R² ist niedrig, *weil es nichts zu erklären gibt*. Der
+  Filter wirft dann die ehrlichen flachen Fits weg und behält die, in denen
+  Rauschen wie ein Trend aussieht; der überlebende Median ist nach **oben**
+  verzerrt (Survivorship Bias). Das trifft genau `NegCtrl`: durchgehende
+  Starvation *soll* µ_area ≈ 0 liefern. Betroffen sind
+  `summarise_area_growth(exclude_unreliable=True)` (also
+  `12_area_growth_rate_summary_*.csv`) und die R(p)-Rechnung für µ_area in
+  Schritt 40. `pko_comparison.compute_control_bracket()` filtert deshalb
+  **nicht** und berichtet stattdessen den Anteil zuverlässiger Fits pro Arm
+  (`frac_reliable_*`) — ein niedriger Anteil in NegCtrl ist selbst ein Befund.
+  In den übrigen Schritten ist das **nicht** korrigiert: die Entscheidung
+  darüber ist eine fachliche.
 
 **Einheiten & Proxys**
 
