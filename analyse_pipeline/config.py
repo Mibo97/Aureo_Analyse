@@ -91,8 +91,8 @@ MIN_PER_FRAME = 10.0  # Minuten pro Frame
 # Die Oszillation ist damit eine BEHANDLUNG, keine Messgroesse: bei gleicher
 # Gesamtdauer erfahren die Bedingungen ~800 (0.75 min) bis ~25 (24 min)
 # Zyklen in 10 h - ein 32-facher Dosisbereich bei identischer Gesamt-Feast-
-# und Gesamt-Famine-Zeit. Ausgewertet wird entsprechend die KUMULATIVE
-# Wirkung (siehe morphology.py), nicht der Verlauf innerhalb eines Zyklus.
+# und Gesamt-Famine-Zeit. Interpretiert werden kann entsprechend nur die
+# KUMULATIVE Wirkung ueber Stunden, nicht der Verlauf innerhalb eines Zyklus.
 OSC_FREQ_IS_PERIOD_IN_MINUTES = True
 
 # Reihenfolge der Oszillationsfrequenzen auf der x-Achse.
@@ -159,19 +159,6 @@ FLUX_CONFIG: FluxChannelConfig | None = None
 # Spezifische Wachstumsrate (Eq. 2): µ-Werte über dieser Schwelle [h^-1] werden
 # als Artefakt markiert (mu_is_artefact=True), aber NICHT gelöscht.
 MU_MAX_THRESHOLD = 10.0
-
-# --- Morphologie (morphology.py) ---------------------------------------------
-# Das "normale" Morphospace-Fenster wird aus dieser Bedingung abgeleitet -
-# per Default PosCtrl (durchgehend Feast), also Zellen ohne Oszillation.
-# Bewusst NICHT aus dem Gesamtdatensatz: sonst definierten die
-# Oszillationszellen mit, was 'normal' heisst.
-MORPHOLOGY_REFERENCE_CONDITIONS = ("PosCtrl",)
-# Perzentil der Referenzverteilung, ab dem eine Zelle als aberrant gilt.
-# 95 heisst: die obersten 5% Exzentrizitaet/Flaeche und die untersten 5%
-# Solidity der Referenz gelten bereits als abweichend.
-MORPHOLOGY_PERCENTILE = 95.0
-# Anteil der Frames am Ende jeder Kammer, der den "Endzustand" bildet.
-MORPHOLOGY_ENDPOINT_LAST_FRACTION = 0.25
 
 # Robustness R(t)/R(p) (siehe robustness.py): für welche Spalten berechnen?
 # Die zur Laufzeit erkannten ratio_*-Spalten kommen in run_analysis.py dazu.
@@ -250,8 +237,8 @@ def log_active_configuration() -> None:
                 "ABTASTUNG: 'osc_freq' ist die Periode in Minuten. Bei %.0f min/Frame liegt die "
                 "kuerzeste aufloesbare Periode bei %.0f min - %d von %d Bedingungen (%s) liegen "
                 "darunter. Einzelne Zyklen sind NICHT beobachtbar; scheinbare Periodizitaet in "
-                "den Sensor-Zeitreihen ist ein Alias-Artefakt. Ausgewertet wird die kumulative "
-                "Wirkung (morphology.py), nicht der Zyklusverlauf.",
+                "den Sensor-Zeitreihen ist ein Alias-Artefakt. Interpretierbar ist nur die "
+                "kumulative Wirkung ueber Stunden, nicht der Zyklusverlauf.",
                 MIN_PER_FRAME, nyquist_min, len(unresolved), len(periods),
                 ", ".join(f"{p:g}" for p in unresolved),
             )
