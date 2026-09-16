@@ -304,20 +304,60 @@ def _aggregate_over_replicates(
     return agg
 
 
+CONTROL_REFERENCE_STYLE = {
+    "NegCtrl": {"color": "#4C78A8", "linestyle": (0, (5, 2))},
+    "PosCtrl": {"color": "#E45756", "linestyle": (0, (3, 1, 1, 1))},
+}
+
+
 def plot_metric_over_time_by_frequency(
     df: pd.DataFrame,
     value_col: str,
     out_path: Path,
     freq_order: Optional[Sequence[str]] = None,
     ylabel: Optional[str] = None,
+    reference_cells: Optional[pd.DataFrame] = None,
 ) -> None:
     """
     Zeitverlauf einer Metrik (z.B. Sensor-Intensität, Zellfläche), facettiert
     nach Biosensor x Oszillationstyp, Farbe = Oszillationsfrequenz.
     Linie = Mittelwert über Replikate, Band = SEM.
+
+    reference_cells : optional die PosCtrl-/NegCtrl-Zeilen (Spalte 'condition'
+        genügt). Sie werden in JEDER Facette als gestrichelte Referenzkurven
+        mitgezeichnet - ohne sie steht der Plot ohne Bezugsrahmen da.
+
+        Hintergrund: die Aufrufer übergeben hier `cells_plot`, aus dem
+        exclude_controls() PosCtrl/NegCtrl bereits entfernt hat. Die
+        Oszillationskurven waren damit gegen NICHTS zu lesen, obwohl genau der
+        Vergleich "wo liegt eine Periode relativ zu durchgehend Feast bzw.
+        durchgehend Starvation" die Aussage der Abbildung ist. Die Kontrollen
+        bleiben absichtlich eine SEPARATE Eingabe und keine weitere Kategorie
+        auf der Frequenzachse: sie haben keine Periode.
     """
     group_cols = ["biosensor", "osc_type", "osc_freq", "time_h"]
     agg = _aggregate_over_replicates(df, value_col, group_cols)
+
+    ref_agg = None
+    if reference_cells is not None and not reference_cells.empty:
+        ref = reference_cells.copy()
+        if "condition_type" not in ref.columns:
+            if "condition" in ref.columns:
+                from growth_rate import classify_condition_type
+                ref["condition_type"] = ref["condition"].map(classify_condition_type)
+            else:
+                logger.warning(
+                    "plot_metric_over_time_by_frequency(): reference_cells ohne 'condition'/"
+                    "'condition_type' - Referenzkurven werden übersprungen."
+                )
+                ref = ref.iloc[0:0]
+        ref = ref[ref.get("condition_type", pd.Series(dtype=str)).isin(CONTROL_REFERENCE_STYLE)]
+        if not ref.empty and value_col in ref.columns:
+            ref_agg = _aggregate_over_replicates(
+                ref, value_col, ["biosensor", "osc_type", "condition_type", "time_h"]
+            ).dropna(subset=["mean"])
+            if ref_agg.empty:
+                ref_agg = None
 
     # Nur Biosensoren/Oszillationstypen mit tatsächlichen (nicht-NaN) Werten
     # für DIESE value_col anzeigen - sonst entstehen leere Panels für
@@ -342,6 +382,23 @@ def plot_metric_over_time_by_frequency(
     for i, osc_type in enumerate(osc_types):
         for j, biosensor in enumerate(biosensors):
             ax = axes[i][j]
+
+            # Kontrollen zuerst und im Hintergrund (zorder), damit die
+            # Oszillationskurven darüber liegen und lesbar bleiben.
+            if ref_agg is not None:
+                rsub = ref_agg[(ref_agg["osc_type"] == osc_type)
+                               & (ref_agg["biosensor"] == biosensor)]
+                for ctype, style in CONTROL_REFERENCE_STYLE.items():
+                    rline = rsub[rsub["condition_type"] == ctype].sort_values("time_h")
+                    if rline.empty:
+                        continue
+                    ax.plot(rline["time_h"], rline["mean"], label=ctype, linewidth=1.9,
+                            zorder=1, **style)
+                    ax.fill_between(
+                        rline["time_h"], rline["mean"] - rline["sem"], rline["mean"] + rline["sem"],
+                        color=style["color"], alpha=0.10, zorder=0,
+                    )
+
             sub = agg[(agg["osc_type"] == osc_type) & (agg["biosensor"] == biosensor)]
             for freq in freqs:
                 line = sub[sub["osc_freq"] == freq].sort_values("time_h")
@@ -359,8 +416,20 @@ def plot_metric_over_time_by_frequency(
                 ax.set_ylabel(ylabel or value_col)
 
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, title="Osc. frequency", loc="lower center", ncol=min(len(freqs), 6), bbox_to_anchor=(0.5, -0.05))
-    fig.suptitle(f"{value_col} over time, by oscillation frequency\n(line = mean over replicates; band = ± SEM)", y=1.02)
+    # Perioden zuerst, Kontrollen hinten - die Kontrollen sind der Bezugsrahmen,
+    # nicht eine weitere Stufe der Dosis.
+    order = ([k for k in range(len(labels)) if labels[k] not in CONTROL_REFERENCE_STYLE]
+             + [k for k in range(len(labels)) if labels[k] in CONTROL_REFERENCE_STYLE])
+    handles = [handles[k] for k in order]
+    labels = [labels[k] for k in order]
+    legend_title = "Cycle period [min]" + ("  /  controls" if ref_agg is not None else "")
+    # -0.12 statt -0.05: mit den Kontrollen sind es bis zu 8 Legendeneinträge,
+    # und bei -0.05 lag die Legende auf den "Time [h]"-Achsenbeschriftungen.
+    fig.legend(handles, labels, title=legend_title, loc="lower center",
+               ncol=min(len(labels), 8), bbox_to_anchor=(0.5, -0.12))
+    subtitle = "(line = mean over replicates; band = ± SEM"
+    subtitle += "; dashed = constant-medium controls)" if ref_agg is not None else ")"
+    fig.suptitle(f"{value_col} over time, by feast/famine cycle period\n{subtitle}", y=1.02)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)

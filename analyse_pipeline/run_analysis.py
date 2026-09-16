@@ -68,6 +68,7 @@ from config import (
     MIN_PER_FRAME,
     FREQ_ORDER,
     STATIC_ORDER,
+    PANEL_A_GROUP_COL_STATIC,
     OSCILLATION_START_MIN,
     log_active_configuration,
 )
@@ -363,6 +364,13 @@ def main(argv: list[str] | None = None) -> int:
             intensity_cols=[], ratio_cols=[],
             run_sensor_controls=False,
             run_control_consistency=len(static_freq_order) >= 2,
+            # Panel A muss hier nach 'osc_freq' gruppieren: bei den statischen
+            # Daten steht die Vergleichsgruppe (static_omlp/static_ypd) dort,
+            # und plot_panel_a() sieht nur group_col/facet_col. Mit dem
+            # Default 'biosensor' landeten BEIDE Medien in EINEM Violin, und
+            # die Abbildung konnte die Frage des statischen Experiments
+            # ("komplexes vs. minimales Medium") gar nicht beantworten.
+            panel_a_group_col=PANEL_A_GROUP_COL_STATIC,
         )
         run_steps(static_ctx, steps)
         failed += [f"statisch/{k}" for k in static_ctx.failed_steps]

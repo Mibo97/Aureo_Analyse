@@ -138,6 +138,19 @@ def plot_violin_with_significance(
         ax.set_ylabel(ylabel or value_col)
         ax.tick_params(axis="x", rotation=30)
 
+    # Die Sternchen stammen aus einem Mann-Whitney-U ueber die uebergebenen
+    # ZEILEN (Zellen bzw. Mutterzellen), nicht ueber biologische Replikate -
+    # ihr p haengt damit fast nur an der Zellzahl und ist keine Inferenz
+    # ueber Replikate (siehe Modul-Docstring und config.METHOD_CAVEATS). Das
+    # gehoert AUF die Abbildung: sie sieht sonst aus wie ein Test, der sie
+    # nicht ist.
+    fig.text(
+        0.5, -0.015,
+        "Significance stars: Mann-Whitney-U over individual cells/mother cells, NOT over "
+        "biological replicates —\nthe p-value scales with cell count and is descriptive only. "
+        "The distributions, not the stars, are the content.",
+        ha="center", fontsize=8,
+    )
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=150)
     plt.close(fig)
@@ -228,6 +241,19 @@ def plot_panel_a(
             ax.tick_params(axis="x", rotation=30)
         row += 1
 
+    # Die Sternchen stammen aus einem Mann-Whitney-U ueber die uebergebenen
+    # ZEILEN (Zellen bzw. Mutterzellen), nicht ueber biologische Replikate -
+    # ihr p haengt damit fast nur an der Zellzahl und ist keine Inferenz
+    # ueber Replikate (siehe Modul-Docstring und config.METHOD_CAVEATS). Das
+    # gehoert AUF die Abbildung: sie sieht sonst aus wie ein Test, der sie
+    # nicht ist.
+    fig.text(
+        0.5, -0.015,
+        "Significance stars: Mann-Whitney-U over individual cells/mother cells, NOT over "
+        "biological replicates —\nthe p-value scales with cell count and is descriptive only. "
+        "The distributions, not the stars, are the content.",
+        ha="center", fontsize=8,
+    )
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=150)
     plt.close(fig)

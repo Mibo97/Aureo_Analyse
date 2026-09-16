@@ -221,24 +221,43 @@ def aggregate_robustness_over_replicates(
     robustness_df: pd.DataFrame,
     value_col: str,
     group_cols: Optional[list[str]] = None,
-    replicate_id_col: str = "exp_id",
+    replicate_id_col: str = "replicate",
+    chamber_id_col: str = "exp_id",
 ) -> pd.DataFrame:
     """
     Mittelt einen Robustness-Wert (R_t_population, R_t_single_cell oder R_p)
-    über Replikat-Kammern, analog zu den Punkt+Errorbar-Plots im Paper
+    über biologische Replikate, analog zu den Punkt+Errorbar-Plots im Paper
     (Fig. 6, 7b: Mittelwert ± SD über Triplikate).
 
-    ZWEISTUFIGE Aggregation, analog zu analysis._aggregate_over_replicates():
-      1) pro Kammer (replicate_id_col, Standard 'exp_id') mitteln.
-      2) über Kammern: Mittelwert + SD, n_replicates = echte Kammer-Anzahl.
+    DREISTUFIGE Aggregation:
+      1) pro Kammer (chamber_id_col, Standard 'exp_id') mitteln.
+      2) pro Replikat (replicate_id_col, Standard 'replicate') mitteln.
+      3) über Replikate: Mittelwert + SD, n_replicates = echte Replikat-Anzahl.
 
     Schritt 1 ist für R_t_population/R_t_single_cell ein No-Op (compute_rt_*()
     liefert dort bereits genau eine Zeile pro Kammer). Für R_p dagegen ist er
     NOTWENDIG: compute_rp() liefert eine Zeile pro Kammer x Frame, d.h. ohne
-    diesen Zwischenschritt würde jeder FRAME als eigenes "Replikat" gezählt
-    (Pseudoreplikation) - n_replicates wäre "Kammern x Frames" statt der
-    echten Kammer-/Replikat-Anzahl, und die ausgewiesene SD würde Frame- und
-    Kammer-Varianz vermischen.
+    diesen Zwischenschritt würde jeder FRAME als eigenes "Replikat" gezählt -
+    n_replicates wäre "Kammern x Frames", und die ausgewiesene SD würde Frame-
+    und Kammer-Varianz vermischen.
+
+    WARUM SCHRITT 2 DAZUGEKOMMEN IST
+    --------------------------------
+    Vorher war replicate_id_col='exp_id' der Default, und damit endete die
+    Aggregation auf KAMMER-Ebene: 'exp_id' wird in data_loading.py aus
+    biosensor + osc_type + osc_freq + condition + replicate + chamber gebaut,
+    ist also eine Kammer-ID und keine Replikat-ID. Jede Kammer zählte danach
+    als eigenes biologisches Replikat - bei 3 Replikaten mit je 2 Kammern
+    stand in n_replicates eine 6, und die ausgewiesene SD mischte technische
+    (Kammer-zu-Kammer) mit biologischer (Replikat-zu-Replikat) Varianz.
+    Kammern eines Replikats sind technische Messungen desselben Chips, nicht
+    unabhängige biologische Wiederholungen.
+
+    Das ändert die Zahlen in allen 40_*_aggregated.csv: 'sd' und
+    'n_replicates' fallen, und 'mean' verschiebt sich leicht, weil Kammern
+    jetzt gleich gewichtet werden statt nach ihrer Zeilenzahl. Die Änderung
+    ist gewollt - die Fehlerbalken beschreiben ab jetzt biologische Replikate.
+    Wer die alte Kammer-Ebene braucht, ruft mit replicate_id_col='exp_id' auf.
 
     Parameters
     ----------
@@ -246,8 +265,10 @@ def aggregate_robustness_over_replicates(
     value_col : welche Spalte gemittelt wird (z.B. 'R_t_population')
     group_cols : Spalten, die EINE Bedingung definieren (ohne 'replicate'/'chamber').
                  Standard: biosensor, osc_type, osc_freq, condition - falls vorhanden.
-    replicate_id_col : Spalte, die EINE Kammer/EIN biologisches Replikat
-                 eindeutig identifiziert (Standard 'exp_id').
+    replicate_id_col : Spalte, die EIN biologisches Replikat identifiziert
+                 (Standard 'replicate'). Fehlt sie, wird mit Warnung auf die
+                 Kammer-Ebene zurückgefallen.
+    chamber_id_col : Spalte, die EINE Kammer identifiziert (Standard 'exp_id').
     """
     if group_cols is None:
         group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition"]
@@ -255,20 +276,28 @@ def aggregate_robustness_over_replicates(
 
     df = robustness_df.dropna(subset=[value_col])
 
-    if replicate_id_col in df.columns:
+    # Stufe 1: pro Kammer - entfernt die Frame-Pseudoreplikation bei R_p.
+    if chamber_id_col in df.columns:
+        keys = group_cols + [c for c in (replicate_id_col, chamber_id_col) if c in df.columns]
+        per_chamber = df.groupby(keys, dropna=False)[value_col].mean().reset_index()
+    else:
+        per_chamber = df
+
+    # Stufe 2: pro Replikat - entfernt die Kammer-Pseudoreplikation.
+    if replicate_id_col in per_chamber.columns:
         per_replicate = (
-            df.groupby(group_cols + [replicate_id_col])[value_col]
+            per_chamber.groupby(group_cols + [replicate_id_col], dropna=False)[value_col]
             .mean()
             .reset_index()
         )
     else:
         logger.warning(
-            "aggregate_robustness_over_replicates(): Spalte '%s' fehlt - kann Pseudoreplikation "
-            "(z.B. mehrere Frames pro Kammer bei R_p) nicht ausschließen. n_replicates ist dann "
-            "u.U. zu hoch.",
-            replicate_id_col,
+            "aggregate_robustness_over_replicates(): Spalte '%s' fehlt - es wird nur bis auf "
+            "die Kammer-Ebene ('%s') aggregiert. 'n_replicates' zaehlt dann Kammern statt "
+            "biologische Replikate, und 'sd' mischt technische mit biologischer Varianz.",
+            replicate_id_col, chamber_id_col,
         )
-        per_replicate = df
+        per_replicate = per_chamber
 
     agg = (
         per_replicate.groupby(group_cols)[value_col]
