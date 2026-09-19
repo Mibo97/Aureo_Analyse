@@ -201,6 +201,13 @@ def plot_point_errorbar(
         solche Zeilen beim Reindex auf x_order kollidieren (Duplicate-Label-Fehler).
     x_order : Reihenfolge der x-Achse (None = natürliche Frequenzsortierung)
     """
+    if summary is None or summary.empty or value_col not in summary.columns:
+        logger.warning(
+            "plot_point_errorbar(): leere Tabelle oder Spalte '%s' fehlt - Plot '%s' übersprungen.",
+            value_col, out_path.name,
+        )
+        return
+
     df = summary.dropna(subset=[value_col]).copy()
     if df.empty:
         logger.warning("plot_point_errorbar(): keine gültigen Werte in '%s' - Plot übersprungen.", value_col)

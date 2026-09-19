@@ -243,7 +243,8 @@ def compute_specific_growth_rate(
             n_artefacts, len(out), mu_max_threshold,
         )
 
-    meta_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
+    meta_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber",
+                             "chip", "chip_family", "medium", "date"]
                  if c in cells.columns]
     if meta_cols:
         meta = cells[["exp_id"] + meta_cols].drop_duplicates("exp_id")
@@ -285,7 +286,8 @@ def summarise_growth_rate(
         df = df[~df["mu_is_artefact"]]
 
     if group_cols is None:
-        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition"] if c in df.columns]
+        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition",
+                                   "medium", "chip_family"] if c in df.columns]
 
     summary = (
         df.groupby(group_cols)

@@ -55,12 +55,19 @@ from config import (
     ROBUSTNESS_VALUE_COLS,
     ENDPOINT_LAST_FRACTION,
     ENDPOINT_VALUE_COLS,
+    STATIC_SATURATION_LEVEL,
+    STATIC_SATURATION_SMOOTH_FRAMES,
+    STATIC_SATURATION_MIN_GROWTH,
 )
+from experiment_units import summarise_hierarchical
 from endpoint_trends import (
     compute_endpoint_per_replicate,
     summarise_per_replicate,
     spearman_against_period,
     plot_endpoint_vs_period,
+    bracket_normalise,
+    detect_saturation_frame,
+    static_endpoint_window,
 )
 from sensors import SENSOR_CONFIG
 from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
@@ -136,6 +143,20 @@ def exclude_controls(df: pd.DataFrame) -> pd.DataFrame:
     return df[~ctype.isin(["PosCtrl", "NegCtrl"])].copy()
 
 
+def _per_facet(ctx, cells_plot, controls):
+    """Zerlegt die Zeitreihen-Plots des Oszillationszweigs in eine Datei pro
+    osc_type (Glc / pH): fuenf Staemme in einer Reihe statt eines 5 x 2-Gitters.
+    Bei den statischen Daten (facet_col = chip_family, zwei Werte) bleibt es bei
+    einer Datei - dort ist das Gitter klein."""
+    if ctx.facet_col != "osc_type" or cells_plot is None or cells_plot.empty:
+        yield "", cells_plot, controls
+        return
+    for value in sorted(cells_plot[ctx.facet_col].dropna().unique()):
+        sel = cells_plot[cells_plot[ctx.facet_col] == value]
+        csel = controls[controls[ctx.facet_col] == value] if controls is not None else None
+        yield f"_{value}", sel, csel
+
+
 @dataclass
 class PipelineContext:
     """Alles, was die Schritte gemeinsam brauchen - Eingaben und Zwischenergebnisse.
@@ -166,6 +187,17 @@ class PipelineContext:
     # plot_panel_a() diese Spalte sonst nie sieht - beide Medien landeten dann
     # in EINEM Violin. Siehe config.PANEL_A_GROUP_COL_STATIC.
     panel_a_group_col: str = PANEL_A_GROUP_COL
+    # x-Achse und Facette der Punkt/Errorbar-Plots. Oszillation: Periode x
+    # osc_type. Statisch: Medium x Chip-Familie - dort ist 'osc_freq' die
+    # Chip-Familie und traegt bei W65 BEIDE Medien, weshalb plot_point_errorbar()
+    # mit x_col='osc_freq' auf "mehrdeutige osc_freq-Werte" lief und die
+    # Schritte 10 und 40 fuer die statischen Daten komplett ausfielen.
+    x_col: str = "osc_freq"
+    facet_col: str = "osc_type"
+    # Facette fuer Panel A und die Budding-Ratio-Zeitreihe. Oszillation:
+    # osc_type. Statisch: Chip-Familie (W109/W65), damit die beiden Chips
+    # nebeneinander stehen statt in einer Facette 'Static' zu verschwinden.
+    panel_a_facet_col: str = PANEL_A_FACET_COL
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -259,11 +291,12 @@ def step_10_growth(ctx: PipelineContext) -> None:
         # stünden die Oszillationskurven ohne Bezugsrahmen da, obwohl genau der
         # Vergleich gegen PosCtrl/NegCtrl die Aussage der Abbildung ist.
         controls_only = cells[~cells.index.isin(cells_plot.index)] if not cells_plot.empty else cells
-        plot_metric_over_time_by_frequency(
-            cells_plot, "area", output_dir / "10_cell_area_over_time.pdf",
-            freq_order=freq_order, ylabel="Cell area [px²]",
-            reference_cells=controls_only,
-        )
+        for facet_value, plot_sel, ctrl_sel in _per_facet(ctx, cells_plot, controls_only):
+            plot_metric_over_time_by_frequency(
+                plot_sel, "area", output_dir / f"10_cell_area_over_time{facet_value}.pdf",
+                freq_order=freq_order, ylabel="Cell area [px²]",
+                reference_cells=ctrl_sel, x_col=ctx.x_col, facet_col=ctx.facet_col,
+            )
 
     # -- µ_event: spezifische Wachstumsrate nach Eq. 2 (Blöbaum et al. 2024):
     #    µ = ln(2)/t, aus der Zeit zwischen aufeinanderfolgenden Budding-
@@ -285,7 +318,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
 
         plot_point_errorbar(
             exclude_controls(mu_summary), value_col="mean_mu", out_path=output_dir / "11_specific_growth_rate.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel="Specific growth rate µ [h⁻¹]",
         )
@@ -330,7 +363,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
         plot_point_errorbar(
             exclude_controls(area_summary_mother), value_col="mean_mu_area",
             out_path=output_dir / "12_area_growth_rate_mother.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel="µ_area, mother cells [h⁻¹]",
         )
@@ -360,22 +393,26 @@ def step_10_growth(ctx: PipelineContext) -> None:
         # der Anteil zuverlässiger Fits als eigene Spalte mitgeschrieben.
         area_rep, area_rep_summary = summarise_per_replicate(area_table, "mu_area")
         if not area_rep_summary.empty:
+            # Kammer-Ebene zusaetzlich: Grundlage fuer den QC-Vergleich (qc_comparison.py),
+            # der Kammern paarweise mit und ohne QC gegenueberstellt.
+            area_chamber, _, _ = summarise_hierarchical(area_table, "mu_area")
+            area_chamber.to_csv(output_dir / "12_area_growth_rate_per_chamber.csv", index=False)
             if "fit_is_reliable" in area_table.columns:
                 frac = (area_table.groupby(
                             [c for c in ["biosensor", "osc_type", "osc_freq", "condition"]
                              if c in area_table.columns], dropna=False)["fit_is_reliable"]
                         .mean().reset_index(name="frac_fit_reliable"))
                 area_rep_summary = area_rep_summary.merge(frac, how="left")
-            area_rep.to_csv(output_dir / "12_area_growth_rate_per_replicate.csv", index=False)
-            area_rep_summary.to_csv(output_dir / "12_area_growth_rate_summary_per_replicate.csv",
+            area_rep.to_csv(output_dir / "12_area_growth_rate_per_chip.csv", index=False)
+            area_rep_summary.to_csv(output_dir / "12_area_growth_rate_summary_per_chip.csv",
                                     index=False)
-            logger.info("Tabellen gespeichert: 12_area_growth_rate_per_replicate.csv / "
-                        "_summary_per_replicate.csv")
+            logger.info("Tabellen gespeichert: 12_area_growth_rate_per_chip.csv / "
+                        "_summary_per_chip.csv")
 
             plot_point_errorbar(
                 exclude_controls(area_rep_summary), value_col="mean", sd_col="sem",
                 out_path=output_dir / "12_area_growth_rate_all.pdf",
-                x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+                x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
                 x_order=freq_order,
                 ylabel="µ_area, all cells [h⁻¹]",
                 title="µ_area over all cells — mean ± SEM over biological replicates\n"
@@ -393,7 +430,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
             plot_mu_event_vs_mu_area(
                 exclude_controls(mu_summary), exclude_controls(area_summary_mother),
                 output_dir / "12_mu_event_vs_mu_area.pdf",
-                label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
+                label_col=ctx.x_col, facet_col=PANEL_A_GROUP_COL,
                 mu_event_table=exclude_controls(mu_table), mu_area_table=exclude_controls(area_table),
             )
 
@@ -427,36 +464,98 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                        list(ENDPOINT_VALUE_COLS) + ctx.ratio_cols)
         return
 
-    logger.info("Endzustand (letzte %.0f%% der Frames) wird gebildet fuer: %s",
-                100 * ENDPOINT_LAST_FRACTION, value_cols)
+    # Statischer Zweig: absolutes Fenster VOR der Saettigung (config.py,
+    # STATIC_SATURATION_*), sonst relatives Fenster (letzte 25 % je Kammer).
+    frame_window = None
+    if ctx.x_col != "osc_freq":
+        saturation = detect_saturation_frame(
+            cells, level=STATIC_SATURATION_LEVEL, smooth_frames=STATIC_SATURATION_SMOOTH_FRAMES,
+            min_growth=STATIC_SATURATION_MIN_GROWTH,
+        )
+        if not saturation.empty:
+            saturation.to_csv(output_dir / "13_endpoint_saturation_per_chamber.csv", index=False)
+            frame_window = static_endpoint_window(
+                saturation, last_fraction=ENDPOINT_LAST_FRACTION,
+                min_frame=int(round(OSCILLATION_START_MIN / MIN_PER_FRAME)),
+            )
+            logger.info(
+                "Schritt 13 (statisch): Endfenster = Frames %d-%d (vor der fruehesten "
+                "Saettigung; Details in 13_endpoint_saturation_per_chamber.csv).", *frame_window,
+            )
+    if frame_window is None:
+        logger.info("Endzustand (letzte %.0f%% der Frames je Kammer) wird gebildet fuer: %s",
+                    100 * ENDPOINT_LAST_FRACTION, value_cols)
 
-    all_per_replicate, all_summary, all_trend = [], [], []
+    all_per_replicate, all_summary, all_trend, all_scores, all_chambers = [], [], [], [], []
     for value_col in value_cols:
         per_replicate, summary = compute_endpoint_per_replicate(
-            cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION,
+            cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION, frame_window=frame_window,
         )
         if summary.empty:
             continue
+        # Kammer-Ebene fuer den QC-Vergleich (paarweise Kammern mit/ohne QC).
+        if frame_window is not None:
+            lo, hi = frame_window
+            ep_rows = cells[(cells["frame"] >= lo) & (cells["frame"] <= hi)]
+        else:
+            fmin = cells.groupby("exp_id")["frame"].transform("min")
+            fmax = cells.groupby("exp_id")["frame"].transform("max")
+            ep_rows = cells[cells["frame"] > fmax - (fmax - fmin + 1) * ENDPOINT_LAST_FRACTION]
+        per_chamber, _, _ = summarise_hierarchical(ep_rows, value_col)
+        all_chambers.append(per_chamber)
         trend = spearman_against_period(per_replicate)
         all_per_replicate.append(per_replicate)
         all_summary.append(summary)
         if not trend.empty:
             all_trend.append(trend)
 
-        plot_endpoint_vs_period(
-            summary, output_dir / f"13_endpoint_vs_period_{value_col}.pdf",
-            value_col=value_col, trend=trend, ylabel=f"{pretty_label(value_col)}\n(endpoint)",
-        )
+        if ctx.x_col == "osc_freq":
+            # Bracket-Score: jede Periode relativ zu den Kontrollen IHRES Chips.
+            score = bracket_normalise(per_replicate)
+            score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
+            if not score.empty:
+                all_scores.append(score)
+            if not score_trend.empty:
+                all_trend.append(score_trend.assign(value_col=f"{value_col}__bracket_score"))
+            # Eine Datei pro osc_type: die Staemme nebeneinander statt in einem
+            # Staemme x osc_type-Gitter, das bei 5 Staemmen unlesbar wird.
+            for osc_type in sorted(per_replicate["osc_type"].dropna().unique()):
+                sel = per_replicate["osc_type"] == osc_type
+                plot_endpoint_vs_period(
+                    per_replicate[sel], output_dir / f"13_endpoint_vs_period_{value_col}_{osc_type}.pdf",
+                    value_col=value_col, trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
+                    score=score[score["osc_type"] == osc_type] if not score.empty else None,
+                    score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
+                    ylabel=f"{pretty_label(value_col)}\n(endpoint)",
+                )
+        else:
+            # Kategoriale x-Achse (Medium), Facette Chip-Familie, Fehler ueber Chips.
+            plot_point_errorbar(
+                summary, value_col="mean", sd_col="sem",
+                out_path=output_dir / f"13_endpoint_vs_{ctx.x_col}_{value_col}.pdf",
+                x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
+                x_order=ctx.freq_order,
+                ylabel=f"{pretty_label(value_col)} (endpoint)",
+                title=f"{value_col}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]})\n"
+                      "mean ± SEM over chips" if frame_window else f"{value_col}: endpoint, mean ± SEM",
+            )
 
     if not all_summary:
         logger.warning("Schritt 13: kein Endzustand berechenbar - keine Dateien geschrieben.")
         return
 
     pd.concat(all_per_replicate, ignore_index=True).to_csv(
-        output_dir / "13_endpoint_per_replicate.csv", index=False)
+        output_dir / "13_endpoint_per_chip.csv", index=False)
+    if all_chambers:
+        pd.concat(all_chambers, ignore_index=True).to_csv(
+            output_dir / "13_endpoint_per_chamber.csv", index=False)
+    if all_scores:
+        pd.concat(all_scores, ignore_index=True).to_csv(
+            output_dir / "13_endpoint_bracket_score.csv", index=False)
+        logger.info("Tabelle gespeichert: 13_endpoint_bracket_score.csv")
     pd.concat(all_summary, ignore_index=True).to_csv(
         output_dir / "13_endpoint_summary.csv", index=False)
-    logger.info("Tabellen gespeichert: 13_endpoint_per_replicate.csv / 13_endpoint_summary.csv")
+    logger.info("Tabellen gespeichert: 13_endpoint_per_chip.csv / 13_endpoint_summary.csv")
 
     if all_trend:
         trend_all = pd.concat(all_trend, ignore_index=True)
@@ -500,7 +599,7 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
-            group_col=ctx.panel_a_group_col, facet_col=PANEL_A_FACET_COL,
+            group_col=ctx.panel_a_group_col, facet_col=ctx.panel_a_facet_col,
         )
     else:
         logger.warning("compute_budding_ratio() lieferte keine per_mother-Tabelle - Panel A wird übersprungen.")
@@ -521,7 +620,7 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
     plot_budding_ratio_timeseries(
         exclude_controls(budding_ts), output_dir / "22_budding_ratio_timeseries.pdf",
-        group_col=PANEL_A_GROUP_COL, facet_col=PANEL_A_FACET_COL, freq_order=freq_order,
+        group_col=ctx.panel_a_group_col, facet_col=ctx.panel_a_facet_col, freq_order=freq_order,
     )
 
     # -- Lineage-Baum & Generationstiefe
@@ -557,18 +656,21 @@ def step_30_sensors(ctx: PipelineContext) -> None:
         logger.warning("Keine 'mean_<kanal>' Spalten gefunden - Sensor-Intensitäts-Plots werden übersprungen.")
 
     for col in intensity_cols:
-        plot_metric_over_time_by_frequency(
-            cells_plot, col, output_dir / f"30_{col}_over_time.pdf", freq_order=freq_order,
-        )
+        for facet_value, plot_sel, _ in _per_facet(ctx, cells_plot, None):
+            plot_metric_over_time_by_frequency(
+                plot_sel, col, output_dir / f"30_{col}_over_time{facet_value}.pdf", freq_order=freq_order,
+                x_col=ctx.x_col, facet_col=ctx.facet_col,
+            )
 
     if not ratio_cols:
         logger.warning("Keine 'ratio_*' Spalten gefunden - Ratio-Plots werden übersprungen.")
 
     for col in ratio_cols:
-        plot_metric_over_time_by_frequency(
-            cells_plot, col, output_dir / f"31_{col}_over_time.pdf",
-            freq_order=freq_order, ylabel=pretty_label(col),
-        )
+        for facet_value, plot_sel, _ in _per_facet(ctx, cells_plot, None):
+            plot_metric_over_time_by_frequency(
+                plot_sel, col, output_dir / f"31_{col}_over_time{facet_value}.pdf",
+                freq_order=freq_order, ylabel=pretty_label(col), x_col=ctx.x_col, facet_col=ctx.facet_col,
+            )
 
 
 
@@ -611,7 +713,7 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         rt_cell.to_csv(output_dir / f"40_Rt_single_cell_{value_col}.csv", index=False)
         plot_rt_single_cell_distribution(
             exclude_controls(rt_cell), output_dir / f"40_Rt_single_cell_{value_col}.pdf",
-            value_col="R_t_single_cell", facet_col="osc_freq", freq_order=freq_order,
+            value_col="R_t_single_cell", facet_col=ctx.x_col, freq_order=freq_order,
         )
 
         rp = compute_rp(cells, value_col)
@@ -630,19 +732,19 @@ def step_40_robustness(ctx: PipelineContext) -> None:
 
         plot_point_errorbar(
             rt_pop_agg_plot, value_col="mean", out_path=output_dir / f"40_Rt_population_{value_col}.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel=f"R(t) — {value_col}", title=f"R(t) population level — {value_col}",
         )
         plot_point_errorbar(
             rp_agg_plot, value_col="mean", out_path=output_dir / f"40_Rp_{value_col}.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel=f"R(p) — {value_col}", title=f"R(p) — {value_col}",
         )
         plot_rt_vs_rp_quadrant(
             rt_pop_agg_plot, rp_agg_plot, output_dir / f"40_Rt_vs_Rp_{value_col}.pdf",
-            label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
+            label_col=ctx.x_col, facet_col=PANEL_A_GROUP_COL,
         )
 
         # Trendtest gegen die Periode - NUR fuer R(p), absichtlich nicht fuer R(t).
@@ -706,7 +808,7 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         rt_cell_mu.to_csv(output_dir / "40_Rt_single_cell_mu_event.csv", index=False)
         plot_rt_single_cell_distribution(
             exclude_controls(rt_cell_mu), output_dir / "40_Rt_single_cell_mu_event.pdf",
-            value_col="R_t_single_cell", facet_col="osc_freq", freq_order=freq_order,
+            value_col="R_t_single_cell", facet_col=ctx.x_col, freq_order=freq_order,
         )
         rt_cell_mu_agg = aggregate_robustness_over_replicates(rt_cell_mu, "R_t_single_cell")
         rt_cell_mu_agg.to_csv(output_dir / "40_Rt_single_cell_mu_event_aggregated.csv", index=False)
@@ -741,7 +843,7 @@ def step_40_robustness(ctx: PipelineContext) -> None:
 
         plot_point_errorbar(
             exclude_controls(rp_mu_area_agg), value_col="mean", out_path=output_dir / "40_Rp_mu_area.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
         )

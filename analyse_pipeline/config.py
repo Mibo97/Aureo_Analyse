@@ -90,8 +90,9 @@ MIN_PER_FRAME = 10.0  # Minuten pro Frame
 # Alias-Artefakt, nicht der Medienwechsel.
 #
 # Die Oszillation ist damit eine BEHANDLUNG, keine Messgroesse: bei gleicher
-# Gesamtdauer erfahren die Bedingungen ~800 (0.75 min) bis ~25 (24 min)
-# Zyklen in 10 h - ein 32-facher Dosisbereich bei identischer Gesamt-Feast-
+# Gesamtdauer erfahren die Bedingungen ~1600 (0.75 min) bis ~50 (24 min)
+# Zyklen in ~20 h Oszillation (Aufnahmen: ~133 Frames a 10 min = ~22 h) - ein
+# 32-facher Dosisbereich bei identischer Gesamt-Feast-
 # und Gesamt-Famine-Zeit. Interpretiert werden kann entsprechend nur die
 # KUMULATIVE Wirkung ueber Stunden, nicht der Verlauf innerhalb eines Zyklus.
 OSC_FREQ_IS_PERIOD_IN_MINUTES = True
@@ -105,7 +106,19 @@ FREQ_ORDER = ["0.75", "1.5", "3", "6", "12", "24"]
 # Data/<Biosensor>/static/static_<medium>/... und werden komplett getrennt
 # ausgewertet (eigener Output-Ordner OUTPUT_DIR_STATIC). Dort steht in
 # 'osc_freq' statt einer Frequenz die Vergleichsgruppe St.omlp vs. St.ypd.
-STATIC_ORDER = ["static_omlp", "static_ypd"]
+# 'osc_freq' benennt bei den statischen Daten die CHIP-FAMILIE, nicht das
+# Medium: W109 hat pro Medium einen Ordner (static_omlp/static_ypd), W65 einen
+# gemeinsamen (static_W65) mit beiden Medien in 'condition'. Das Medium wird
+# deshalb aus 'condition' abgeleitet (St.omlp -> omlp) und ist die x-Achse
+# aller statischen Abbildungen; die Chip-Familie ist die Facette.
+# Siehe experiment_units.add_experiment_units().
+STATIC_CHIP_LABELS: dict[str, str] = {
+    "static_omlp": "W109",
+    "static_ypd": "W109",
+    "static_W65": "W65",
+}
+STATIC_MEDIUM_PREFIX = "St."
+STATIC_MEDIUM_ORDER = ["omlp", "ypd"]
 
 # --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
 # Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
@@ -144,7 +157,7 @@ PANEL_A_FACET_COL = "osc_type"
 # aber genau dort. Mit group_col='biosensor' landen deshalb BEIDE Medien in
 # EINEM Violin, und die Abbildung kann die Frage "komplexes vs. minimales
 # Medium" gar nicht beantworten. Der statische Kontext setzt daher 'osc_freq'.
-PANEL_A_GROUP_COL_STATIC = "osc_freq"
+PANEL_A_GROUP_COL_STATIC = "medium"
 
 # --- Kumulativer Endzustand (endpoint_trends.py, Schritt 13) -----------------
 # Anteil der Frames am ENDE jeder Kammer, der den "Endzustand" bildet. Relativ
@@ -156,6 +169,20 @@ ENDPOINT_LAST_FRACTION = 0.25
 # dadurch bekommen die Sensor-Daten ueberhaupt eine kumulative Auswertung
 # (50_summary_statistics.csv sieht nur intensity_cols, nie die Ratios).
 ENDPOINT_VALUE_COLS = ["area", "eccentricity"]
+# Statische Daten: ypd waechst ueber (bis zu 4000 Tracks pro Kammer) und die
+# W109-ypd-Aufnahmen wurden bei 85 Frames abgebrochen. Ein relatives Endfenster
+# ("letzte 25 % der Frames") vergleicht dann eine ueberwachsene ypd-Kammer bei
+# 14 h mit einer normalen omlp-Kammer bei 22 h. Deshalb wird fuer den statischen
+# Zweig die Saettigung PRO KAMMER aus dem Zellzahl-Verlauf bestimmt, und das
+# Endfenster endet an der fruehesten Saettigung ueber alle Kammern.
+# endpoint_trends.detect_saturation_frame(): Saettigung = erster Frame, ab dem
+# die geglaettete Zellzahl >= STATIC_SATURATION_LEVEL x ihres Maximums bleibt.
+STATIC_SATURATION_LEVEL = 0.90
+STATIC_SATURATION_SMOOTH_FRAMES = 5
+# Nur Kammern, die ueberhaupt gewachsen sind (max/Start >= dieser Faktor),
+# koennen saettigen. Eine flache Kammer (omlp) liegt sonst von Anfang an bei
+# 90 % ihres Maximums und wuerde das Fenster auf die ersten Stunden ziehen.
+STATIC_SATURATION_MIN_GROWTH = 1.5
 
 # Zusatz-Zeile unter den Kontroll-Ticks in plot_sensor_control_comparison(),
 # PRO OSZILLATIONSTYP. Die Konzentrationen gelten nur für den Oszillationstyp,
@@ -230,23 +257,20 @@ DOCUMENTED_DEFAULTS: dict[str, tuple[object, object, str]] = {
 # Methodische Eigenheiten, die kein einzelner Zahlenwert sind, aber beim Lesen
 # der Ergebnistabellen bekannt sein müssen.
 METHOD_CAVEATS: list[str] = [
-    "summarise_growth_rate() und summarise_area_growth() aggregieren über EINZELNE "
-    "Zellen/Intervalle, nicht erst pro Replikat. sd_mu/sd_mu_area und n_values in "
-    "11_*_summary.csv und 12_*_summary_*.csv beschreiben daher die Streuung über Zellen "
-    "(Pseudoreplikation), nicht über biologische Replikate. "
-    "analysis._aggregate_over_replicates() (Schritte 10/30/31) und "
-    "queen_controls.summarise_sensor_controls() (Schritt 95) gruppieren dagegen auf "
-    "'replicate' und mitteln korrekt.",
-    "aggregate_robustness_over_replicates() (alle 40_*_aggregated) aggregiert dreistufig "
-    "Frame -> Kammer -> Replikat (replicate_id_col='replicate'). n_replicates nennt damit "
-    "die echte Replikatzahl und sd die Streuung ZWISCHEN Replikaten. Bei 3 Replikaten ist "
-    "sd allerdings schlecht geschaetzt - die Fehlerbalken werden dadurch breiter und "
-    "ehrlicher, nicht enger. Die alte Kammer-Ebene gibt es mit replicate_id_col='exp_id'.",
-    "Robustness R ist eine RELATIVE Größe: der Normalisierungsfaktor m wird über den "
-    "GESAMTEN übergebenen Datensatz gebildet. R-Werte aus Läufen mit unterschiedlichem "
-    "Datenumfang sind nicht miteinander vergleichbar (siehe robustness.py).",
-    "'area' in den Zelltabellen ist die rohe Cellpose-Fläche in px². Nur area_growth.py "
-    "rechnet intern mit PX_TO_UM2 (1 µm = 13.63 px) in µm² um.",
+    "VERSUCHSEINHEITEN: pro (Stamm, osc_type, Periode) gibt es EINEN Chip aus EINER Vorkultur; "
+    "'replicate' ist ein Array-Index, kein Replikat. Innerhalb einer Oszillationsbedingung gibt "
+    "es keine biologische Replikation (n = 1 Chip). Fehlerbalken dort sind Kammer-Fehlerbalken - "
+    "siehe Spalte 'error_unit' in den Aggregaten. Statisch: jedes 'replicate' ist ein Chip.",
+    "summarise_growth_rate() und summarise_area_growth() aggregieren ueber EINZELNE Zellen/"
+    "Intervalle (11_*_summary.csv, 12_*_summary_*.csv): sd_mu/sd_mu_area sind Streuung ueber Zellen.",
+    "Spearman gegen die Periode laeuft auf Chip-Mittelwerten (n = Zahl der Perioden) und ist bei "
+    "n <= 6 eine Effektstaerke, kein Test. Die Staemme werden nicht als Replikate gepoolt.",
+    "Robustness R ist RELATIV (Normalisierung ueber den uebergebenen Datensatz): R-Werte aus "
+    "analysis_output/, static/, pko/ und no_qc/ sind nicht gegeneinander lesbar.",
+    "'area' in den Zelltabellen ist die rohe Cellpose-Flaeche in px². Nur area_growth.py rechnet "
+    "intern mit PX_TO_UM2 (1 µm = 13.63 px) in µm² um.",
+    "Kammerposition und Bedingung sind durch die Chip-Verdrahtung konfundiert (A1/A2 Feast, "
+    "A13/A14 Famine, A3-A12 Wechsel).",
 ]
 
 

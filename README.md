@@ -89,6 +89,43 @@ Benötigte Spalten in `Combined_Results`: `track_id`, `frame`, `centroid_x`,
 `centroid_y`, `area`, `condition`, `replicate`, `chamber`.
 Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 
+## Versuchseinheiten: was ist hier ein Replikat?
+
+Die Spalten `replicate` und `chamber` kommen aus dem Dateinamen der
+Bildverarbeitung und bedeuten **nicht**, was ihre Namen nahelegen.
+`experiment_units.py` leitet daraus die echten Einheiten ab und schreibt
+`00_chip_overview.csv` (eine Zeile pro Chip).
+
+| Zweig | pro (Stamm, osc_type, Periode) | `replicate` ist … | biologische Einheit | n je Bedingung |
+| --- | --- | --- | --- | --- |
+| Oszillation, PKO | **ein Chip**, ein Tag, **eine Vorkultur**; ~11 Kammern (5 Osc, 3 PosCtrl, 3 NegCtrl) auf mehreren Arrays | ein Array-Index, der gleiche Positionslabels (`ChamA13` ×3) auseinanderhält | der **Chip** (= der Batch) | **1** |
+| statisch | — | **ein eigener Chip** mit eigener Vorkultur; `chamber` ist immer `ChamA0` | der Chip | 4–5 pro Medium und Chip-Familie |
+
+Drei Folgen, die in die Arbeit gehören:
+
+1. **Innerhalb einer Oszillationsbedingung gibt es keine biologische
+   Replikation.** Alle Kammern einer Periode sind technische Wiederholungen
+   einer Kultur auf einem Chip. Jeder Fehlerbalken dort ist ein
+   Kammer-Fehlerbalken; die Tabellen sagen das in `error_unit` (`chamber`
+   vs. `chip`) und zählen `n_units` entsprechend. Die Dosis-Wirkung über die
+   Perioden ist **ein Chip pro Dosis** (6 bei Glc, 4 bei pH); Spearman läuft
+   auf Chip-Mittelwerten mit n = Zahl der Perioden und ist damit eine
+   Effektstärke, kein Test, auf den man sich stützt.
+2. **Die Kontrollen liegen auf demselben Chip wie die Behandlung.** Jede
+   Periode kann deshalb gegen *ihre eigenen* PosCtrl/NegCtrl normiert werden
+   (Bracket-Score, Schritt 13) — das entfernt den Chip-/Tages-/Kultur-Effekt,
+   ohne dass man den Chip kennen müsste.
+3. **Kammerposition und Bedingung sind konfundiert**, weil der Chip die
+   Medien fest verdrahtet: `A1/A2` = Feast, `A13/A14` = Famine, `A3–A12` =
+   Wechsel. „Die Kontrollen verhalten sich anders“ und „die Randreihen
+   verhalten sich anders“ sind innerhalb des WT dieselbe Beobachtung. PKO auf
+   demselben Layout ist das Einzige im Datensatz, das beides trennt.
+
+Die Stämme (WT, BSA, BSG, BSO, BSPH) bleiben in allen Auswertungen getrennt
+(je eine n = 1-Serie); das Datum im Dateinamen (`260630_…`) ist die
+Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
+~133 Frames à 10 min, also **~22 h**.
+
 ## Module
 
 | Datei | Aufgabe |
@@ -119,7 +156,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 | Präfix | Inhalt |
 | --- | --- |
-| `00_` | Übersicht / Sanity-Check (Tracks pro Experiment) |
+| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip** |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum |
@@ -128,7 +165,8 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `50_` | Zusammenfassungstabelle |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
-| `60_`–`62_` | **Nur in `pko/`**: WT-gegen-PKO-Vergleich (siehe unten) |
+| `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |
+| `70_` | **Nur in `qc_comparison/`**: mit QC vs. ohne QC (siehe unten) |
 
 Statische Daten und PKO-Daten landen in denselben Präfixen unter
 `analysis_output/static/` bzw. `analysis_output/pko/` — beide ohne
@@ -143,14 +181,14 @@ Die Spalte `osc_freq` enthält trotz ihres Namens die **Periode in Minuten**
 auflösbare Periode (Nyquist) bei **20 min** — fünf der sechs Bedingungen liegen
 darunter, die sechste nur knapp darüber:
 
-| Periode | Zyklen pro Frame | Zyklen in 10 h | auflösbar? |
+| Periode | Zyklen pro Frame | Zyklen in 20 h Oszillation | auflösbar? |
 | --- | --- | --- | --- |
-| 0.75 min | 13.3 | 800 | nein |
-| 1.5 min | 6.7 | 400 | nein |
-| 3 min | 3.3 | 200 | nein |
-| 6 min | 1.7 | 100 | nein |
-| 12 min | 0.8 | 50 | nein |
-| 24 min | 0.4 | 25 | grenzwertig (2.4 Frames/Zyklus) |
+| 0.75 min | 13.3 | 1600 | nein |
+| 1.5 min | 6.7 | 800 | nein |
+| 3 min | 3.3 | 400 | nein |
+| 6 min | 1.7 | 200 | nein |
+| 12 min | 0.8 | 100 | nein |
+| 24 min | 0.4 | 50 | grenzwertig (2.4 Frames/Zyklus) |
 
 Daraus folgen zwei Dinge, die in die Methodenbeschreibung gehören:
 
@@ -166,130 +204,102 @@ Daraus folgen zwei Dinge, die in die Methodenbeschreibung gehören:
 Die erwartete Richtung ergibt sich aus der Länge der Famine-Halbperiode: bei
 0.75 min sind das ~22 s, die interne Metabolitpools mühelos überbrücken — die
 Zelle sieht praktisch ein konstantes, gemitteltes Medium. Bei 24 min sind es
-12 min, lang genug für echte Verarmung und eine Hungerantwort, 25-mal in 10 h.
+12 min, lang genug für echte Verarmung und eine Hungerantwort, ~50-mal in 20 h.
 **Die stärkere Belastung wird bei den langsamen Zyklen erwartet**, nicht bei den
 schnellen.
 
 ## Kumulativer Endzustand (Schritt 13)
 
-Aus dem Abtast-Argument oben folgt, dass nur die **kumulative** Wirkung
-interpretierbar ist. Genau diese Auswertung fehlte: `10_`/`30_`/`31_` sind
-Zeitreihen, `40_` sind Varianzmaße, und `50_summary_statistics.csv` bekommt nur
-`intensity_cols` übergeben — die `ratio_*`-Spalten erscheinen dort **nie**. Für
-die Sensor-Daten ist Schritt 13 die erste kumulative Auswertung überhaupt.
+Aus dem Abtast-Argument folgt, dass nur die **kumulative** Wirkung
+interpretierbar ist. Schritt 13 bildet sie: pro Kammer der Mittelwert über ein
+Endfenster, dann Kammer → Chip → Bedingung (`experiment_units.summarise_hierarchical`).
 
-Der Endzustand ist der Mittelwert über die letzten `ENDPOINT_LAST_FRACTION`
-(Default 25 %) der Frames **jeder Kammer** — relativ zur Kammer, nicht absolut,
-weil Kammern unterschiedlich lang aufgenommen sein können. Danach wird
-dreistufig aggregiert: Kammer → Replikat → Bedingung.
+| Zweig | Endfenster |
+| --- | --- |
+| Oszillation | die letzten `ENDPOINT_LAST_FRACTION` (25 %) der Frames **jeder Kammer** |
+| statisch | ein **absolutes** Fenster vor der frühesten Sättigung: ypd wächst über (bis ~4000 Tracks) und die W109-ypd-Aufnahmen enden bei 85 Frames; `detect_saturation_frame()` findet pro Kammer den Frame, ab dem die Zellzahl ≥ 90 % ihres Maximums bleibt — nur für Kammern, die überhaupt ≥ 1.5× gewachsen sind (`STATIC_SATURATION_*`). Ergebnis in `13_endpoint_saturation_per_chamber.csv`. |
 
 | Datei | Inhalt |
 | --- | --- |
-| `13_endpoint_per_replicate.csv` | ein Wert je Replikat und Bedingung (Grundlage des Tests) |
-| `13_endpoint_summary.csv` | Mittelwert ± SEM über Replikate je Bedingung |
-| `13_endpoint_spearman.csv` | Spearman ρ und p gegen die Periode, je Stamm/Oszillationstyp |
-| `13_endpoint_vs_period_<spalte>.pdf` | die Abbildung, mit PosCtrl/NegCtrl als Referenzbändern |
+| `13_endpoint_per_chamber.csv` / `_per_chip.csv` / `_summary.csv` | die drei Aggregationsstufen |
+| `13_endpoint_bracket_score.csv` | pro Chip: `(osc − NegCtrl) / (PosCtrl − NegCtrl)`, 0 = wie Starvation, 1 = wie Feast, plus `bracket_degenerate` |
+| `13_endpoint_spearman.csv` | Spearman ρ gegen die Periode auf Chip-Mittelwerten, `n_chips` = Perioden |
+| `13_endpoint_vs_period_<spalte>_<osc_type>.pdf` | pro Periode der Chip-Wert mit **seinen** Kontrollen als Marker, gepooltes Kontrollband dahinter, Bracket-Score darunter; eine Facette pro Stamm |
+| `static/13_endpoint_vs_medium_<spalte>.pdf` | statisch: Medium × Chip-Familie, Fehler über Chips |
 
-**Spearman, nicht Kruskal-Wallis.** Die Vorhersage ist *monoton* in der Periode
-(längere Famine-Halbzyklen belasten mehr, siehe oben) — geprüft wird also eine
-Rangkorrelation. Kruskal-Wallis prüft „irgendeine Gruppe unterscheidet sich“ und
-ist dafür das falsche Werkzeug; es war bisher der einzige verdrahtete Test, und
-das nur für die Kontrollen. Getestet wird auf **Replikat**-Ebene: über Zellen
-gerechnet hängt das p fast nur an der Zellzahl.
+**Bracket-Score.** Jede Periode ist ein eigener Chip; ihre Kontrollen liegen
+auf demselben Chip und tragen denselben Chip-Effekt. Der Score entfernt ihn.
+Wo `|PosCtrl − NegCtrl|` kleiner ist als 2× die Kammer-Streuung der Kontrollen,
+trennt das Bracket nichts: der Chip wird hohl gezeichnet, der Score ist NaN und
+fällt aus dem Trendtest — das ist der Befund aus Abschnitt 4, kein Fehler.
 
-Die Kontrollen gehen **nicht** in die Korrelation ein — sie haben keine Periode,
-der Ordnername ihres Batches ist keine Behandlung. Sie erscheinen als
-waagerechte Bänder, was der Zweck einer Kontrolle ist.
+**Spearman, nicht Kruskal-Wallis**, weil die Vorhersage *monoton* in der
+Periode ist. Bei n = 6 Chips braucht p < 0.05 ein |ρ| ≥ 0.83 — ρ ist eine
+Effektstärke, die man berichtet. Kontrollen gehen nicht in die Korrelation
+ein (sie haben keine Periode); unter drei Perioden gibt es keinen Test.
 
-Die x-Achse ist **logarithmisch**: die Perioden sind geometrisch gestuft (Faktor
-2 von 0.75 bis 24 min, ein 32-facher Dosisbereich). Linear dargestellt drängen
-sich fünf der sechs Bedingungen links zusammen.
-
-Ein Trendtest braucht mindestens **drei** verschiedene Perioden — bei zwei
-Punkten ist ρ immer ±1, das ist Arithmetik und keine Evidenz. Für die
-statischen Daten und den PKO-Zweig entfällt der Test daher; das wird geloggt.
-
----
 
 ## PKO: verstopft Pullulan den Chip? (Zweig 3)
 
 Die Kontrollkammern verhalten sich im Wildtyp nicht wie erwartet. Arbeits-
-hypothese: **Pullulan** — das Exopolysaccharid, das der WT ausscheidet — setzt
-die Chip-Strukturen zu und erzeugt unerwartete Strömungsprofile. Der
-**PKO-Stamm produziert kein Pullulan**; verhalten sich *seine* Kontrollen
-korrekt, stützt das die Clogging-Erklärung.
+hypothese: **Pullulan** setzt die Chip-Strukturen zu. **PKO produziert kein
+Pullulan** und liegt als ein Chip (Periode 3) vor.
 
-### Was nicht geht: der Test über die Frequenz-Batches
+### Die Größe, die zählt: Uneinigkeit nominell identischer Kammern
 
-`test_control_consistency_across_freq()` vergleicht die Kontrollen **über die
-`osc_freq`-Batches hinweg** und braucht dafür mindestens zwei. PKO deckt nur
-**eine Periode** ab — der Test liefert dort `p = NaN`, und
-`plot_control_consistency()` zeichnet einen *einzelnen Punkt* pro Kontrollart,
-also eine trivial flache Linie, die wie „PKO-Kontrollen sind konsistent“
-aussieht und nichts enthält.
+Auf jedem Chip liegen 3 PosCtrl- und 3 NegCtrl-Kammern — gleiche Kultur,
+gleicher Tag, gleiches Medium, verschiedene Arrays. Ihre Uneinigkeit ist der
+reinste Ausdruck dessen, was der *Chip* mit einer Kammer macht. Genau das
+sollte eine Verstopfung aufblähen. `pko_comparison.py` rechnet pro Chip:
 
-Der PKO-Zweig schaltet die Kontroll-Konsistenz deshalb ab
-(`PipelineContext.run_control_consistency=False`, automatisch gesetzt, sobald
-weniger als zwei Batches vorliegen), statt eine irreführende Abbildung zu
-erzeugen. Der Vergleich läuft stattdessen **innerhalb des gemeinsamen
-Perioden-Batches, WT gegen PKO**. Das ist kein Notbehelf:
-
-* PosCtrl ist durchgehend Feast, NegCtrl durchgehend Starvation — der
-  Medienverlauf einer *Kontrollkammer* hängt gar nicht an der Periode des
-  Batches, in dem sie mitlief.
-* In den Kontrollkammern fällt am meisten Pullulan an: PosCtrl wächst 10 h
-  durch. Wenn Verstopfung das Problem ist, ist das der Ort dafür.
-
-### Drei Größen, keine davon lineage-abhängig
-
-| Datei | Inhalt |
+| Größe | Datei |
 | --- | --- |
-| `60_pko_control_chambers.csv` | ein Wert pro Kontrollkammer (zweistufiger Median) |
-| `60_pko_chamber_agreement_per_replicate.csv` / `_per_strain.csv` | Kammer-zu-Kammer-CV **innerhalb** eines Replikats |
-| `60_pko_control_bracket_per_replicate.csv` / `_per_strain.csv` | PosCtrl-vs-NegCtrl als Cliff's δ auf µ_area |
-| `60_pko_cell_yield_timeseries.csv` / `_slopes.csv` | verfolgbare Zellen pro Kammer über die Zeit |
-| `61_pko_control_agreement.pdf` | **Hauptabbildung**: Kammer-Übereinstimmung + Bracket, WT gegen PKO |
-| `62_pko_cell_yield.pdf` | Zell-Ausbeute pro Kontrollkammer, WT gegen PKO |
+| **a)** CV der Kammer-Medianfläche über die 3 Kontrollkammern | `60_pko_within_chip_agreement.csv` |
+| **b)** zeitlicher CV der Residuen um einen linearen Trend (Drift ohne Wachstum) | ebd. |
+| **c)** Cliff's δ PosCtrl vs. NegCtrl auf µ_area (alle Zellen, alle Fits) | `60_pko_control_bracket.csv` |
+| Abbildung | `61_pko_control_agreement.pdf` |
 
-Bewusst **ohne** Mutter/Bud-Heuristik: µ_area ist eine Regression über
-ln(Fläche) eines Tracks und damit von `lineage.py` unabhängig — nur das
-`cell_type`-Label hängt daran. Damit steht dieser Vergleich nicht auf einer
-unvalidierten Heuristik (siehe `validate_lineage.py`).
+Vergleichsgruppe: **primär** die Produzenten-Chips derselben Periode (WT und
+die Biosensor-Stämme bei 3 min; Entscheidung des Autors), gefüllt gezeichnet;
+als **Hintergrund** alle Produzenten-Chips aller Perioden mit ihrer
+10–90 %-Spanne — Kontrollkammern sind Konstant-Medium, also ist jeder Chip ein
+gültiger Vergleichspunkt.
 
-Die Kammer-Streuung wird **innerhalb** eines Replikats gebildet: Kammern eines
-Replikats sind technische Messungen desselben Chips, ihre Streuung ist der
-hydraulische Anteil. Die Streuung *zwischen* Replikaten ist biologisch und
-würde den gesuchten Effekt nur verwässern.
+### Was nicht (mehr) geht
 
-### Was dieses Design statistisch trägt
-
-PKO ist **ein Stamm**. Ein Signifikanztest WT-gegen-PKO auf Stammebene hat
-n = 1 in einer Gruppe und wird deshalb **bewusst nicht gerechnet** — auch nicht
-über Replikate oder Kammern hinweg, das wäre Pseudoreplikation auf Stammebene.
-
-Getragen wird eine **deskriptive** Aussage: die vier WT-Biosensor-Stämme
-liefern vier voneinander unabhängige WT-Werte, und der PKO-Wert liegt
-innerhalb oder außerhalb dieser Spanne. Die vier WT-Stämme sind damit die
-interne Replikation der WT-Seite — stimmen sie untereinander nicht überein,
-ist schon das Zusammenfassen zu „WT“ falsch, und `61_` zeigt genau das.
+* **Kein Test über die Frequenz-Batches** — PKO hat eine Periode; der
+  PKO-Kontext schaltet die Kontroll-Konsistenz deshalb ab.
+* **Keine Zell-Ausbeute** — Blastokonidien werden zwischen Kammern gespült;
+  die Zellzahl einer Kammer sagt nichts über Verstopfung. Ältere
+  Ausgaben dazu werden beim nächsten Lauf gelöscht.
+* **Kein Signifikanztest PKO gegen Produzenten** — PKO ist ein Chip. Die
+  Aussage ist, wo er in der Verteilung der Produzenten-Chips liegt.
 
 ### Confound, der in die Diskussion gehört
 
-PKO ist nicht „Wildtyp ohne Verstopfung“, sondern eine Mutante mit verändertem
-Kohlenstofffluss und veränderten Oberflächeneigenschaften. **Jeder** WT-PKO-
-Unterschied lässt sich auch direkt physiologisch erklären — einen Unterschied
-zu finden ist noch kein Beleg für Verstopfung. Unterscheidbar sind die beiden
-Erklärungen nur über das **Muster**:
+PKO ist eine Mutante mit verändertem Stoffwechsel, nicht „WT ohne
+Verstopfung“. Unterscheidbar sind hydraulische und metabolische Erklärung nur
+über das **Muster**: hydraulisch = hohe Kammer-Streuung und Drift bei
+Produzenten, metabolisch = Niveau-Verschiebung bei erhaltener Übereinstimmung.
 
-| Ursache | Vorhersage |
+
+## Mit QC vs. ohne QC
+
+Das manuelle QC (`qc_exclusions.csv`: Track-Merges, Ausschlüsse) deckt nur die
+Batches ab, die man wirklich durchgesehen hat — im echten Datensatz **einen**
+(WT/pH/6, ~500 Zeilen). Die Pipeline läuft die Oszillationsschritte für genau
+diese Batches zusätzlich auf den **Rohdaten** (keine Merges, keine Ausschlüsse)
+nach `analysis_output/no_qc/` und stellt in `analysis_output/qc_comparison/`
+Kammer für Kammer gegenüber, was das QC geändert hat:
+
+| Datei | Inhalt |
 | --- | --- |
-| hydraulisch | hohe Kammer-zu-Kammer-Streuung, wegbrechende Zell-Ausbeute, kaputtes Bracket |
-| metabolisch | gleichmäßige Niveau-Verschiebung, Kammer-Übereinstimmung bleibt erhalten |
+| `70_qc_effect.pdf` | mit QC (x) gegen ohne QC (y), ein Punkt pro Kammer; auf der Diagonale = kein Effekt |
+| `70_qc_effect_summary.csv` | Median der relativen Änderung je Kennzahl und Kontrollart |
+| `70_qc_exclusion_inventory.csv` | Zeilen je Kammer, Aktion (merge/exclude) und Grund |
+| `70_qc_exclusions_conflicts.csv` | Tracks, die mehrfach gelistet sind: `double_merge` (erste Zeile gewinnt, zweite wird verworfen), `merge_and_exclude`, `duplicate` — mit Zeilennummern |
 
-Deshalb berichtet `pko_comparison.py` Streuungen und Steigungen, nicht nur
-Mittelwerte.
-
----
+`--skip-qc-comparison` lässt beides weg.
 
 ## Die Lineage-Heuristik validieren
 
@@ -368,51 +378,34 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
 
 **Statistik**
 
-* `summarise_growth_rate()` und `summarise_area_growth()` aggregieren über
-  einzelne Zellen/Intervalle, **nicht** erst pro Replikat. `sd_mu`, `sd_mu_area`
-  und `n_values` in `11_*_summary.csv` / `12_*_summary_*.csv` beschreiben damit
-  die Streuung über Zellen (Pseudoreplikation), nicht über biologische
-  Replikate. `analysis._aggregate_over_replicates()` (Schritte `10_`/`30_`/`31_`)
-  und `queen_controls.summarise_sensor_controls()` (Schritt `95_`) gruppieren
-  dagegen auf `replicate` und mitteln damit korrekt.
-* `aggregate_robustness_over_replicates()` (alle `40_*_aggregated`) aggregiert
-  seit der Umstellung auf `replicate_id_col="replicate"` **dreistufig**:
-  Frame → Kammer → Replikat. Vorher war `exp_id` der Default, das laut
-  `data_loading.py` auch `chamber` enthält — die Aggregation endete also auf
-  Kammer-Ebene und zählte jede Kammer als biologisches Replikat (bei 3×2 stand
-  in `n_replicates` eine 6, und `sd` mischte technische mit biologischer
-  Varianz). `n_replicates` nennt jetzt die echte Replikatzahl, und `sd`
-  beschreibt die Streuung zwischen Replikaten. Wer die alte Kammer-Ebene
-  braucht, ruft mit `replicate_id_col="exp_id"` auf.
-* Mit 3 Replikaten ist `sd` **schlecht geschätzt** — das ist der Preis dafür,
-  dass sie jetzt das Richtige beschreibt. Die Fehlerbalken werden dadurch in
-  der Regel breiter und ehrlicher, nicht enger.
-* Die Mann-Whitney-Tests in den Violin-Plots laufen über die übergebenen Zeilen
-  (eine Mutterzelle pro Zeile bei der Budding Ratio) und berücksichtigen die
-  Replikat-Struktur ebenfalls nicht.
+* **Innerhalb einer Oszillationsbedingung gibt es keine biologische
+  Replikation** (ein Chip, eine Vorkultur; siehe *Versuchseinheiten*). Alle
+  Aggregate, die über `experiment_units.summarise_hierarchical()` laufen
+  (`13_*`, `40_*_aggregated`, `12_*_per_chip`), beschriften den Fehlerbalken
+  in `error_unit` (`chamber` = technisch, `chip` = biologisch) und zählen
+  `n_units` entsprechend. Die Spalte `n_replicates` gibt es nicht mehr.
+* `summarise_growth_rate()` und `summarise_area_growth()` (`11_*_summary.csv`,
+  `12_*_summary_*.csv`) aggregieren weiterhin über **einzelne Zellen/Intervalle**
+  — `sd_mu`/`sd_mu_area` beschreiben die Streuung über Zellen.
+* Die Mann-Whitney-Sternchen in Panel A laufen über Zellen bzw. Mutterzellen
+  und sind rein deskriptiv; die Abbildung sagt das in der Fußnote.
+* Spearman gegen die Periode läuft auf Chip-Mittelwerten (n = Perioden) und
+  ist bei n ≤ 6 eine Effektstärke, kein Test. Die Stämme werden nicht als
+  Replikate gepoolt.
 * Robustheit **R ist relativ**: der Normalisierungsfaktor `m` wird über den
-  gesamten übergebenen Datensatz gebildet. R-Werte aus Läufen mit
-  unterschiedlichem Datenumfang sind nicht miteinander vergleichbar. Das gilt
-  auch **zwischen den drei Zweigen**: Oszillation, statisch und PKO bekommen
-  je einen eigenen `PipelineContext` und damit je ein eigenes `m` — R-Werte aus
-  `analysis_output/`, `static/` und `pko/` dürfen **nicht** gegeneinander
-  gelesen werden. Genau deshalb benutzt `pko_comparison.py` für den
-  WT-gegen-PKO-Vergleich gewöhnliche Kammer-Statistiken (Median, CV) statt R.
-* `fit_is_reliable` heißt `R² >= min_r_squared` (Default 0.5, siehe
-  `area_growth.compute_area_growth_rate()`). Bei einer Bedingung, die
-  **tatsächlich flach ist**, erklärt die Regressionsgerade per Konstruktion
-  kaum Varianz — das R² ist niedrig, *weil es nichts zu erklären gibt*. Der
-  Filter wirft dann die ehrlichen flachen Fits weg und behält die, in denen
-  Rauschen wie ein Trend aussieht; der überlebende Median ist nach **oben**
-  verzerrt (Survivorship Bias). Das trifft genau `NegCtrl`: durchgehende
-  Starvation *soll* µ_area ≈ 0 liefern. Betroffen sind
-  `summarise_area_growth(exclude_unreliable=True)` (also
-  `12_area_growth_rate_summary_*.csv`) und die R(p)-Rechnung für µ_area in
-  Schritt 40. `pko_comparison.compute_control_bracket()` filtert deshalb
-  **nicht** und berichtet stattdessen den Anteil zuverlässiger Fits pro Arm
-  (`frac_reliable_*`) — ein niedriger Anteil in NegCtrl ist selbst ein Befund.
-  In den übrigen Schritten ist das **nicht** korrigiert: die Entscheidung
-  darüber ist eine fachliche.
+  gesamten übergebenen Datensatz gebildet — R-Werte aus `analysis_output/`,
+  `static/`, `pko/` und `no_qc/` dürfen **nicht** gegeneinander gelesen werden.
+  Der PKO-Vergleich benutzt deshalb gewöhnliche Kammer-Statistiken statt R.
+* R(t) ist für die **oszillierenden** Bedingungen alias-konfundiert (der
+  Alias-Beitrag wächst mit der Periode, in Richtung des erwarteten Effekts)
+  und bekommt dort keinen Trendtest; für Konstant-Medium-Kontrollen ist R(t)
+  sauber.
+* `fit_is_reliable` (R² ≥ 0.5) verzerrt flache Bedingungen (NegCtrl) nach
+  oben — der Filter behält dort nur Tracks, in denen Rauschen wie ein Trend
+  aussieht. `compute_control_bracket()` und `12_area_growth_rate_all.pdf`
+  filtern deshalb nicht und führen den Anteil zuverlässiger Fits als Diagnose;
+  `summarise_area_growth(exclude_unreliable=True)` und R(p) für µ_area
+  filtern weiterhin.
 
 **Einheiten & Proxys**
 

@@ -317,11 +317,19 @@ def plot_metric_over_time_by_frequency(
     freq_order: Optional[Sequence[str]] = None,
     ylabel: Optional[str] = None,
     reference_cells: Optional[pd.DataFrame] = None,
+    x_col: str = "osc_freq",
+    facet_col: str = "osc_type",
 ) -> None:
     """
     Zeitverlauf einer Metrik (z.B. Sensor-Intensität, Zellfläche), facettiert
-    nach Biosensor x Oszillationstyp, Farbe = Oszillationsfrequenz.
-    Linie = Mittelwert über Replikate, Band = SEM.
+    nach Biosensor x facet_col, Farbe = x_col (Periode; statisch: Medium).
+    Linie = Mittelwert über 'replicate', Band = SEM.
+
+    WAS DAS BAND BEDEUTET, haengt vom Zweig ab und steht deshalb im Titel:
+    bei den Oszillationsdaten ist 'replicate' ein Array-Index auf EINEM Chip -
+    das Band ist die Streuung der Kammern eines Chips (technisch). Bei den
+    statischen Daten ist jedes 'replicate' ein eigener Chip (biologisch).
+    Entschieden wird das aus der Spalte 'chip', nicht aus einer Annahme.
 
     reference_cells : optional die PosCtrl-/NegCtrl-Zeilen (Spalte 'condition'
         genügt). Sie werden in JEDER Facette als gestrichelte Referenzkurven
@@ -335,8 +343,14 @@ def plot_metric_over_time_by_frequency(
         bleiben absichtlich eine SEPARATE Eingabe und keine weitere Kategorie
         auf der Frequenzachse: sie haben keine Periode.
     """
-    group_cols = ["biosensor", "osc_type", "osc_freq", "time_h"]
+    group_cols = ["biosensor", facet_col, x_col, "time_h"]
     agg = _aggregate_over_replicates(df, value_col, group_cols)
+
+    if "chip" in df.columns:
+        chips_per_condition = df.groupby(["biosensor", facet_col, x_col], dropna=False)["chip"].nunique()
+        band_unit = "chips" if chips_per_condition.max() > 1 else "chambers of ONE chip (technical)"
+    else:
+        band_unit = "'replicate' rows"
 
     ref_agg = None
     if reference_cells is not None and not reference_cells.empty:
@@ -354,7 +368,7 @@ def plot_metric_over_time_by_frequency(
         ref = ref[ref.get("condition_type", pd.Series(dtype=str)).isin(CONTROL_REFERENCE_STYLE)]
         if not ref.empty and value_col in ref.columns:
             ref_agg = _aggregate_over_replicates(
-                ref, value_col, ["biosensor", "osc_type", "condition_type", "time_h"]
+                ref, value_col, ["biosensor", facet_col, "condition_type", "time_h"]
             ).dropna(subset=["mean"])
             if ref_agg.empty:
                 ref_agg = None
@@ -369,8 +383,8 @@ def plot_metric_over_time_by_frequency(
         return
 
     biosensors = sorted(has_data["biosensor"].unique())
-    osc_types = sorted(has_data["osc_type"].unique())
-    freqs = freq_order if freq_order is not None else natural_freq_sort(agg["osc_freq"].dropna().unique())
+    osc_types = sorted(has_data[facet_col].dropna().unique())
+    freqs = freq_order if freq_order is not None else natural_freq_sort(agg[x_col].dropna().unique())
     palette = dict(zip(freqs, sns.color_palette("viridis", n_colors=len(freqs))))
 
     fig, axes = plt.subplots(
@@ -386,7 +400,7 @@ def plot_metric_over_time_by_frequency(
             # Kontrollen zuerst und im Hintergrund (zorder), damit die
             # Oszillationskurven darüber liegen und lesbar bleiben.
             if ref_agg is not None:
-                rsub = ref_agg[(ref_agg["osc_type"] == osc_type)
+                rsub = ref_agg[(ref_agg[facet_col] == osc_type)
                                & (ref_agg["biosensor"] == biosensor)]
                 for ctype, style in CONTROL_REFERENCE_STYLE.items():
                     rline = rsub[rsub["condition_type"] == ctype].sort_values("time_h")
@@ -399,9 +413,9 @@ def plot_metric_over_time_by_frequency(
                         color=style["color"], alpha=0.10, zorder=0,
                     )
 
-            sub = agg[(agg["osc_type"] == osc_type) & (agg["biosensor"] == biosensor)]
+            sub = agg[(agg[facet_col] == osc_type) & (agg["biosensor"] == biosensor)]
             for freq in freqs:
-                line = sub[sub["osc_freq"] == freq].sort_values("time_h")
+                line = sub[sub[x_col] == freq].sort_values("time_h")
                 if line.empty:
                     continue
                 ax.plot(line["time_h"], line["mean"], label=str(freq), color=palette[freq], linewidth=1.6)
@@ -422,14 +436,17 @@ def plot_metric_over_time_by_frequency(
              + [k for k in range(len(labels)) if labels[k] in CONTROL_REFERENCE_STYLE])
     handles = [handles[k] for k in order]
     labels = [labels[k] for k in order]
-    legend_title = "Cycle period [min]" + ("  /  controls" if ref_agg is not None else "")
+    legend_title = ("Cycle period [min]" if x_col == "osc_freq" else x_col) + \
+        ("  /  controls" if ref_agg is not None else "")
     # -0.12 statt -0.05: mit den Kontrollen sind es bis zu 8 Legendeneinträge,
     # und bei -0.05 lag die Legende auf den "Time [h]"-Achsenbeschriftungen.
-    fig.legend(handles, labels, title=legend_title, loc="lower center",
-               ncol=min(len(labels), 8), bbox_to_anchor=(0.5, -0.12))
-    subtitle = "(line = mean over replicates; band = ± SEM"
+    if handles:
+        fig.legend(handles, labels, title=legend_title, loc="lower center",
+                   ncol=max(1, min(len(labels), 8)), bbox_to_anchor=(0.5, -0.12))
+    subtitle = f"(line = mean; band = ± SEM over {band_unit}"
     subtitle += "; dashed = constant-medium controls)" if ref_agg is not None else ")"
-    fig.suptitle(f"{value_col} over time, by feast/famine cycle period\n{subtitle}", y=1.02)
+    by = "feast/famine cycle period" if x_col == "osc_freq" else x_col
+    fig.suptitle(f"{value_col} over time, by {by}\n{subtitle}", y=1.02)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
