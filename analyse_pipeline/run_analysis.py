@@ -67,7 +67,9 @@ from config import (
     FORCE_RELOAD,
     MIN_PER_FRAME,
     FREQ_ORDER,
-    STATIC_ORDER,
+    STATIC_CHIP_LABELS,
+    STATIC_MEDIUM_PREFIX,
+    STATIC_MEDIUM_ORDER,
     PANEL_A_GROUP_COL_STATIC,
     OSCILLATION_START_MIN,
     log_active_configuration,
@@ -85,6 +87,7 @@ from sensors import compute_ratios, SENSOR_CONFIG
 from analysis import add_time_column, find_intensity_columns
 from pipeline_steps import STEPS, PipelineContext
 from pko_comparison import run_pko_comparison
+from experiment_units import add_experiment_units, chip_overview
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -260,6 +263,15 @@ def main(argv: list[str] | None = None) -> int:
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
     cells = add_time_column(cells, MIN_PER_FRAME)
 
+    # Versuchseinheiten: chip / chip_family / medium / date. Erst hier, nach
+    # dem QC, damit die Kammerzahlen pro Chip den ausgewerteten Stand zeigen.
+    # WICHTIG fuer alles Weitere: 'replicate' ist ein Array-Index, kein
+    # Replikat - siehe experiment_units.py.
+    cells = add_experiment_units(cells, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX)
+    overview_chips = chip_overview(cells)
+    overview_chips.to_csv(OUTPUT_DIR / "00_chip_overview.csv", index=False)
+    logger.info("Tabelle gespeichert: 00_chip_overview.csv (%d Chips)", len(overview_chips))
+
     logger.info("=== Daten nach QC (gesamt, vor Trennung Oszillation/statisch) ===")
     logger.info("  Zeilen total:                    %d", len(cells))
     logger.info("  Eindeutige Tracks (cell_uid):    %d", cells["cell_uid"].nunique())
@@ -319,7 +331,8 @@ def main(argv: list[str] | None = None) -> int:
     qc_position_cols = [c for c in
                         ["exp_id", "cell_uid", "track_id", "frame", "centroid_x", "centroid_y",
                          "area", "filename",
-                         "biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
+                         "biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber",
+                         "chip", "chip_family", "medium", "date"]
                         if c in cells.columns]
     qc_positions_path = OUTPUT_DIR / "00_cell_positions.parquet"
     cells[qc_position_cols].to_parquet(qc_positions_path, index=False)
@@ -357,10 +370,12 @@ def main(argv: list[str] | None = None) -> int:
         # der Wildtyp kultiviert, es gibt also keine Fluoreszenzkanäle -
         # daher intensity_cols/ratio_cols leer und run_sensor_controls=False,
         # statt auf durchgehend NaN-Spalten zu rechnen.
-        static_freq_order = resolve_x_order(cells_static, "osc_freq", STATIC_ORDER)
+        static_freq_order = resolve_x_order(cells_static, "medium", STATIC_MEDIUM_ORDER)
         static_ctx = PipelineContext(
             cells=cells_static, output_dir=OUTPUT_DIR_STATIC,
             freq_order=static_freq_order,
+            # Medium auf der x-Achse, Chip-Familie (W109/W65) als Facette.
+            x_col="medium", facet_col="chip_family",
             intensity_cols=[], ratio_cols=[],
             run_sensor_controls=False,
             run_control_consistency=len(static_freq_order) >= 2,

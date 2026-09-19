@@ -91,7 +91,8 @@ def compute_rt_population(
     DataFrame mit einer Zeile pro exp_id: sigma, x_bar, m, R_t_population
     """
     if group_cols is None:
-        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
+        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber",
+                    "chip", "chip_family", "medium", "date"]
                       if c in cells.columns]
 
     pop_mean_per_t = (
@@ -141,7 +142,8 @@ def compute_rt_single_cell(
     DataFrame mit einer Zeile pro cell_uid: sigma, x_bar, m, R_t_single_cell, n_timepoints
     """
     if group_cols is None:
-        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber", "exp_id"]
+        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber", "exp_id",
+                    "chip", "chip_family", "medium", "date"]
                       if c in cells.columns]
 
     valid = cells.dropna(subset=[value_col])
@@ -184,7 +186,8 @@ def compute_rp(
     DataFrame mit einer Zeile pro exp_id x frame: sigma, x_bar, m, R_p, n_cells
     """
     if group_cols is None:
-        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
+        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber",
+                    "chip", "chip_family", "medium", "date"]
                       if c in cells.columns]
 
     valid = cells.dropna(subset=[value_col])
@@ -221,94 +224,54 @@ def aggregate_robustness_over_replicates(
     robustness_df: pd.DataFrame,
     value_col: str,
     group_cols: Optional[list[str]] = None,
-    replicate_id_col: str = "replicate",
+    replicate_id_col: str = "chip",
     chamber_id_col: str = "exp_id",
 ) -> pd.DataFrame:
     """
     Mittelt einen Robustness-Wert (R_t_population, R_t_single_cell oder R_p)
-    über biologische Replikate, analog zu den Punkt+Errorbar-Plots im Paper
-    (Fig. 6, 7b: Mittelwert ± SD über Triplikate).
+    ueber die biologische Einheit - den CHIP (experiment_units.py).
 
-    DREISTUFIGE Aggregation:
-      1) pro Kammer (chamber_id_col, Standard 'exp_id') mitteln.
-      2) pro Replikat (replicate_id_col, Standard 'replicate') mitteln.
-      3) über Replikate: Mittelwert + SD, n_replicates = echte Replikat-Anzahl.
+    Delegiert an experiment_units.summarise_hierarchical():
+      Frame/Zelle -> Kammer (chamber_id_col) -> Chip (replicate_id_col) -> Bedingung.
 
-    Schritt 1 ist für R_t_population/R_t_single_cell ein No-Op (compute_rt_*()
-    liefert dort bereits genau eine Zeile pro Kammer). Für R_p dagegen ist er
-    NOTWENDIG: compute_rp() liefert eine Zeile pro Kammer x Frame, d.h. ohne
-    diesen Zwischenschritt würde jeder FRAME als eigenes "Replikat" gezählt -
-    n_replicates wäre "Kammern x Frames", und die ausgewiesene SD würde Frame-
-    und Kammer-Varianz vermischen.
+    WAS DAS FUER DIE OSZILLATIONSDATEN HEISST
+    -----------------------------------------
+    Pro (Stamm, osc_type, Periode) gibt es genau EINEN Chip. 'mean' ist dann
+    der Mittelwert ueber dessen Kammern, 'sd' die Streuung ueber dessen
+    Kammern, und 'error_unit' sagt 'chamber'. Das ist ein TECHNISCHER
+    Fehlerbalken - so steht es auch in der Tabelle. Ein biologischer
+    ('chip') entsteht nur, wo es mehrere Chips pro Bedingung gibt (statisch).
 
-    WARUM SCHRITT 2 DAZUGEKOMMEN IST
-    --------------------------------
-    Vorher war replicate_id_col='exp_id' der Default, und damit endete die
-    Aggregation auf KAMMER-Ebene: 'exp_id' wird in data_loading.py aus
-    biosensor + osc_type + osc_freq + condition + replicate + chamber gebaut,
-    ist also eine Kammer-ID und keine Replikat-ID. Jede Kammer zählte danach
-    als eigenes biologisches Replikat - bei 3 Replikaten mit je 2 Kammern
-    stand in n_replicates eine 6, und die ausgewiesene SD mischte technische
-    (Kammer-zu-Kammer) mit biologischer (Replikat-zu-Replikat) Varianz.
-    Kammern eines Replikats sind technische Messungen desselben Chips, nicht
-    unabhängige biologische Wiederholungen.
+    Frueher hiess die Einheit 'replicate' - ein Array-Index, der faelschlich
+    als biologisches Replikat gezaehlt wurde. Die Spalte 'n_replicates' gibt
+    es deshalb nicht mehr; sie heisst 'n_units', mit 'error_unit' daneben.
 
-    Das ändert die Zahlen in allen 40_*_aggregated.csv: 'sd' und
-    'n_replicates' fallen, und 'mean' verschiebt sich leicht, weil Kammern
-    jetzt gleich gewichtet werden statt nach ihrer Zeilenzahl. Die Änderung
-    ist gewollt - die Fehlerbalken beschreiben ab jetzt biologische Replikate.
-    Wer die alte Kammer-Ebene braucht, ruft mit replicate_id_col='exp_id' auf.
-
-    Parameters
-    ----------
-    robustness_df : Ergebnis von compute_rt_population/compute_rt_single_cell/compute_rp
-    value_col : welche Spalte gemittelt wird (z.B. 'R_t_population')
-    group_cols : Spalten, die EINE Bedingung definieren (ohne 'replicate'/'chamber').
-                 Standard: biosensor, osc_type, osc_freq, condition - falls vorhanden.
-    replicate_id_col : Spalte, die EIN biologisches Replikat identifiziert
-                 (Standard 'replicate'). Fehlt sie, wird mit Warnung auf die
-                 Kammer-Ebene zurückgefallen.
-    chamber_id_col : Spalte, die EINE Kammer identifiziert (Standard 'exp_id').
+    Rueckgabe: group_cols..., mean, sd, sem, n_units, error_unit, n_chips,
+    n_chambers, condition_type.
     """
+    from experiment_units import summarise_hierarchical
+
+    if robustness_df is None or robustness_df.empty:
+        return pd.DataFrame()
     if group_cols is None:
-        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition"]
+        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "medium", "chip_family"]
                       if c in robustness_df.columns]
-
-    df = robustness_df.dropna(subset=[value_col])
-
-    # Stufe 1: pro Kammer - entfernt die Frame-Pseudoreplikation bei R_p.
-    if chamber_id_col in df.columns:
-        keys = group_cols + [c for c in (replicate_id_col, chamber_id_col) if c in df.columns]
-        per_chamber = df.groupby(keys, dropna=False)[value_col].mean().reset_index()
-    else:
-        per_chamber = df
-
-    # Stufe 2: pro Replikat - entfernt die Kammer-Pseudoreplikation.
-    if replicate_id_col in per_chamber.columns:
-        per_replicate = (
-            per_chamber.groupby(group_cols + [replicate_id_col], dropna=False)[value_col]
-            .mean()
-            .reset_index()
-        )
-    else:
+    if replicate_id_col not in robustness_df.columns:
         logger.warning(
-            "aggregate_robustness_over_replicates(): Spalte '%s' fehlt - es wird nur bis auf "
-            "die Kammer-Ebene ('%s') aggregiert. 'n_replicates' zaehlt dann Kammern statt "
-            "biologische Replikate, und 'sd' mischt technische mit biologischer Varianz.",
-            replicate_id_col, chamber_id_col,
+            "aggregate_robustness_over_replicates(): Spalte '%s' fehlt - es wird auf Kammer-Ebene "
+            "('%s') aggregiert und 'error_unit' bleibt 'chamber'.", replicate_id_col, chamber_id_col,
         )
-        per_replicate = per_chamber
+        work = robustness_df.copy()
+        work[replicate_id_col] = work[chamber_id_col] if chamber_id_col in work.columns else "unknown"
+    else:
+        work = robustness_df
 
-    agg = (
-        per_replicate.groupby(group_cols)[value_col]
-        .agg(mean="mean", sd="std", n_replicates="count")
-        .reset_index()
+    _, _, per_condition = summarise_hierarchical(
+        work, value_col, condition_cols=group_cols, chamber_col=chamber_id_col, chip_col=replicate_id_col,
     )
-
-    # Siehe growth_rate.classify_condition_type(): dieselbe Kollision (mehrere
-    # Zeilen pro osc_freq, weil PosCtrl/NegCtrl unter demselben osc_freq-Ordner
-    # abgelegt sind) tritt hier ebenso auf wie bei summarise_growth_rate().
-    if "condition" in agg.columns:
-        agg["condition_type"] = agg["condition"].apply(classify_condition_type)
-
-    return agg
+    if per_condition.empty:
+        return per_condition
+    keep = list(group_cols) + [c for c in ["mean", "sd", "sem", "n_units", "error_unit",
+                                          "n_chips", "n_chambers", "condition_type"]
+                               if c in per_condition.columns]
+    return per_condition[keep]

@@ -105,7 +105,19 @@ FREQ_ORDER = ["0.75", "1.5", "3", "6", "12", "24"]
 # Data/<Biosensor>/static/static_<medium>/... und werden komplett getrennt
 # ausgewertet (eigener Output-Ordner OUTPUT_DIR_STATIC). Dort steht in
 # 'osc_freq' statt einer Frequenz die Vergleichsgruppe St.omlp vs. St.ypd.
-STATIC_ORDER = ["static_omlp", "static_ypd"]
+# 'osc_freq' benennt bei den statischen Daten die CHIP-FAMILIE, nicht das
+# Medium: W109 hat pro Medium einen Ordner (static_omlp/static_ypd), W65 einen
+# gemeinsamen (static_W65) mit beiden Medien in 'condition'. Das Medium wird
+# deshalb aus 'condition' abgeleitet (St.omlp -> omlp) und ist die x-Achse
+# aller statischen Abbildungen; die Chip-Familie ist die Facette.
+# Siehe experiment_units.add_experiment_units().
+STATIC_CHIP_LABELS: dict[str, str] = {
+    "static_omlp": "W109",
+    "static_ypd": "W109",
+    "static_W65": "W65",
+}
+STATIC_MEDIUM_PREFIX = "St."
+STATIC_MEDIUM_ORDER = ["omlp", "ypd"]
 
 # --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
 # Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
@@ -144,7 +156,7 @@ PANEL_A_FACET_COL = "osc_type"
 # aber genau dort. Mit group_col='biosensor' landen deshalb BEIDE Medien in
 # EINEM Violin, und die Abbildung kann die Frage "komplexes vs. minimales
 # Medium" gar nicht beantworten. Der statische Kontext setzt daher 'osc_freq'.
-PANEL_A_GROUP_COL_STATIC = "osc_freq"
+PANEL_A_GROUP_COL_STATIC = "medium"
 
 # --- Kumulativer Endzustand (endpoint_trends.py, Schritt 13) -----------------
 # Anteil der Frames am ENDE jeder Kammer, der den "Endzustand" bildet. Relativ

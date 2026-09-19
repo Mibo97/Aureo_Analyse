@@ -66,6 +66,7 @@ import pandas as pd
 from scipy import stats
 
 from growth_rate import classify_condition_type
+from experiment_units import summarise_hierarchical
 
 logger = logging.getLogger(__name__)
 
@@ -104,75 +105,22 @@ def summarise_per_replicate(
     df: pd.DataFrame,
     value_col: str,
     group_cols: Optional[Sequence[str]] = None,
-    replicate_col: str = "replicate",
+    replicate_col: str = "chip",
     chamber_col: str = "exp_id",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Dreistufige Aggregation: Kammer -> Replikat -> Bedingung.
+    """Zelle -> Kammer -> Chip -> Bedingung; siehe experiment_units.summarise_hierarchical().
 
-    Das ist die Aggregation, die die vorhandenen Summary-Funktionen NICHT
-    machen: summarise_growth_rate() und summarise_area_growth() poolen
-    einzelne Zellen, und aggregate_robustness_over_replicates() kommt per
-    Default nur bis auf Kammer-Ebene (exp_id enthaelt 'chamber', siehe
-    data_loading.py). Hier ist die Einheit das biologische Replikat.
-
-    Rueckgabe: (pro Replikat, pro Bedingung). Die Replikat-Ebene ist die
-    Grundlage fuer den Spearman-Test, die Bedingungs-Ebene die fuer den Plot.
+    Der Name bleibt aus Kompatibilitaet, die Einheit ist jetzt der CHIP: bei
+    den Oszillationsdaten gibt es davon einen pro Bedingung, der Fehlerbalken
+    ist dann der Kammer-Fehler dieses Chips und in 'error_unit' auch so
+    beschriftet. Rueckgabe: (pro Chip, pro Bedingung) - die Chip-Ebene ist die
+    Grundlage des Spearman-Tests (ein Wert je Chip und Periode), die
+    Bedingungs-Ebene die des Plots.
     """
-    if df is None or df.empty or value_col not in df.columns:
-        return pd.DataFrame(), pd.DataFrame()
-
-    if group_cols is None:
-        group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition"]
-                      if c in df.columns]
-    group_cols = list(group_cols)
-
-    work = df.dropna(subset=[value_col])
-    if work.empty:
-        return pd.DataFrame(), pd.DataFrame()
-
-    # Stufe 1: pro Kammer
-    if chamber_col in work.columns:
-        per_chamber = (
-            work.groupby(group_cols + [c for c in (replicate_col, chamber_col)
-                                       if c in work.columns], dropna=False)[value_col]
-            .mean().reset_index()
-        )
-    else:
-        per_chamber = work
-
-    # Stufe 2: pro Replikat
-    if replicate_col not in per_chamber.columns:
-        logger.warning(
-            "summarise_per_replicate(): Spalte '%s' fehlt - es kann nicht auf biologische "
-            "Replikate aggregiert werden; die Fehlerbalken beschreiben dann Kammern.",
-            replicate_col,
-        )
-        per_replicate = per_chamber
-        rep_key = [c for c in (chamber_col,) if c in per_chamber.columns]
-    else:
-        per_replicate = (
-            per_chamber.groupby(group_cols + [replicate_col], dropna=False)[value_col]
-            .mean().reset_index()
-        )
-        rep_key = [replicate_col]
-
-    # Stufe 3: ueber Replikate
-    summary = (
-        per_replicate.groupby(group_cols, dropna=False)[value_col]
-        .agg(mean="mean", sd="std",
-             sem=lambda s: s.std(ddof=1) / np.sqrt(len(s)) if len(s) > 1 else 0.0,
-             n_replicates="count")
-        .reset_index()
+    _, per_chip, per_condition = summarise_hierarchical(
+        df, value_col, condition_cols=group_cols, chamber_col=chamber_col, chip_col=replicate_col,
     )
-    if "condition" in summary.columns:
-        summary = add_condition_type(summary)
-    if "condition" in per_replicate.columns:
-        per_replicate = add_condition_type(per_replicate)
-    per_replicate = per_replicate.rename(columns={value_col: "value"})
-    per_replicate["value_col"] = value_col
-    summary["value_col"] = value_col
-    logger.debug("summarise_per_replicate(%s): Replikat-Einheit = %s", value_col, rep_key)
-    return per_replicate, summary
+    return per_chip, per_condition
 
 
 def compute_endpoint_per_replicate(
@@ -359,7 +307,8 @@ def plot_endpoint_vs_period(
                 ax.axhspan(row["mean"] - spread, row["mean"] + spread,
                            color=col, alpha=0.16, zorder=1)
                 ax.axhline(row["mean"], color=col, linewidth=1.2, linestyle="--",
-                           alpha=0.9, zorder=2, label=f"{ctype} (n={int(row.get('n_replicates', 0))})")
+                           alpha=0.9, zorder=2,
+                           label=f"{ctype} (n={int(row.get('n_units', 0))} {row.get('error_unit', '')})")
 
             if not sub.empty:
                 ax.errorbar(

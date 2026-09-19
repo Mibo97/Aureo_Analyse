@@ -166,6 +166,13 @@ class PipelineContext:
     # plot_panel_a() diese Spalte sonst nie sieht - beide Medien landeten dann
     # in EINEM Violin. Siehe config.PANEL_A_GROUP_COL_STATIC.
     panel_a_group_col: str = PANEL_A_GROUP_COL
+    # x-Achse und Facette der Punkt/Errorbar-Plots. Oszillation: Periode x
+    # osc_type. Statisch: Medium x Chip-Familie - dort ist 'osc_freq' die
+    # Chip-Familie und traegt bei W65 BEIDE Medien, weshalb plot_point_errorbar()
+    # mit x_col='osc_freq' auf "mehrdeutige osc_freq-Werte" lief und die
+    # Schritte 10 und 40 fuer die statischen Daten komplett ausfielen.
+    x_col: str = "osc_freq"
+    facet_col: str = "osc_type"
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -262,7 +269,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
         plot_metric_over_time_by_frequency(
             cells_plot, "area", output_dir / "10_cell_area_over_time.pdf",
             freq_order=freq_order, ylabel="Cell area [px²]",
-            reference_cells=controls_only,
+            reference_cells=controls_only, x_col=ctx.x_col, facet_col=ctx.facet_col,
         )
 
     # -- µ_event: spezifische Wachstumsrate nach Eq. 2 (Blöbaum et al. 2024):
@@ -285,7 +292,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
 
         plot_point_errorbar(
             exclude_controls(mu_summary), value_col="mean_mu", out_path=output_dir / "11_specific_growth_rate.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel="Specific growth rate µ [h⁻¹]",
         )
@@ -330,7 +337,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
         plot_point_errorbar(
             exclude_controls(area_summary_mother), value_col="mean_mu_area",
             out_path=output_dir / "12_area_growth_rate_mother.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel="µ_area, mother cells [h⁻¹]",
         )
@@ -375,7 +382,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
             plot_point_errorbar(
                 exclude_controls(area_rep_summary), value_col="mean", sd_col="sem",
                 out_path=output_dir / "12_area_growth_rate_all.pdf",
-                x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+                x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
                 x_order=freq_order,
                 ylabel="µ_area, all cells [h⁻¹]",
                 title="µ_area over all cells — mean ± SEM over biological replicates\n"
@@ -393,7 +400,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
             plot_mu_event_vs_mu_area(
                 exclude_controls(mu_summary), exclude_controls(area_summary_mother),
                 output_dir / "12_mu_event_vs_mu_area.pdf",
-                label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
+                label_col=ctx.x_col, facet_col=PANEL_A_GROUP_COL,
                 mu_event_table=exclude_controls(mu_table), mu_area_table=exclude_controls(area_table),
             )
 
@@ -559,6 +566,7 @@ def step_30_sensors(ctx: PipelineContext) -> None:
     for col in intensity_cols:
         plot_metric_over_time_by_frequency(
             cells_plot, col, output_dir / f"30_{col}_over_time.pdf", freq_order=freq_order,
+            x_col=ctx.x_col, facet_col=ctx.facet_col,
         )
 
     if not ratio_cols:
@@ -567,7 +575,7 @@ def step_30_sensors(ctx: PipelineContext) -> None:
     for col in ratio_cols:
         plot_metric_over_time_by_frequency(
             cells_plot, col, output_dir / f"31_{col}_over_time.pdf",
-            freq_order=freq_order, ylabel=pretty_label(col),
+            freq_order=freq_order, ylabel=pretty_label(col), x_col=ctx.x_col, facet_col=ctx.facet_col,
         )
 
 
@@ -611,7 +619,7 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         rt_cell.to_csv(output_dir / f"40_Rt_single_cell_{value_col}.csv", index=False)
         plot_rt_single_cell_distribution(
             exclude_controls(rt_cell), output_dir / f"40_Rt_single_cell_{value_col}.pdf",
-            value_col="R_t_single_cell", facet_col="osc_freq", freq_order=freq_order,
+            value_col="R_t_single_cell", facet_col=ctx.x_col, freq_order=freq_order,
         )
 
         rp = compute_rp(cells, value_col)
@@ -630,19 +638,19 @@ def step_40_robustness(ctx: PipelineContext) -> None:
 
         plot_point_errorbar(
             rt_pop_agg_plot, value_col="mean", out_path=output_dir / f"40_Rt_population_{value_col}.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel=f"R(t) — {value_col}", title=f"R(t) population level — {value_col}",
         )
         plot_point_errorbar(
             rp_agg_plot, value_col="mean", out_path=output_dir / f"40_Rp_{value_col}.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel=f"R(p) — {value_col}", title=f"R(p) — {value_col}",
         )
         plot_rt_vs_rp_quadrant(
             rt_pop_agg_plot, rp_agg_plot, output_dir / f"40_Rt_vs_Rp_{value_col}.pdf",
-            label_col="osc_freq", facet_col=PANEL_A_GROUP_COL,
+            label_col=ctx.x_col, facet_col=PANEL_A_GROUP_COL,
         )
 
         # Trendtest gegen die Periode - NUR fuer R(p), absichtlich nicht fuer R(t).
@@ -706,7 +714,7 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         rt_cell_mu.to_csv(output_dir / "40_Rt_single_cell_mu_event.csv", index=False)
         plot_rt_single_cell_distribution(
             exclude_controls(rt_cell_mu), output_dir / "40_Rt_single_cell_mu_event.pdf",
-            value_col="R_t_single_cell", facet_col="osc_freq", freq_order=freq_order,
+            value_col="R_t_single_cell", facet_col=ctx.x_col, freq_order=freq_order,
         )
         rt_cell_mu_agg = aggregate_robustness_over_replicates(rt_cell_mu, "R_t_single_cell")
         rt_cell_mu_agg.to_csv(output_dir / "40_Rt_single_cell_mu_event_aggregated.csv", index=False)
@@ -741,7 +749,7 @@ def step_40_robustness(ctx: PipelineContext) -> None:
 
         plot_point_errorbar(
             exclude_controls(rp_mu_area_agg), value_col="mean", out_path=output_dir / "40_Rp_mu_area.pdf",
-            x_col="osc_freq", facet_col="osc_type", color_col=PANEL_A_GROUP_COL,
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=freq_order,
             ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
         )
