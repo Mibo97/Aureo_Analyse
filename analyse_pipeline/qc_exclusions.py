@@ -450,3 +450,77 @@ def summarise_track_merges(exclusions: pd.DataFrame) -> pd.DataFrame:
     merges["src_track_id"] = merges["cell_uid"].str.extract(r"__track(\d+)$").astype(int)
     merges["merge_into_track_id"] = merges["merge_into_track_id"].astype(int)
     return merges[["exp_id", "src_track_id", "merge_into_track_id", "reason"]].reset_index(drop=True)
+
+
+# ==============================================================================
+# Konsistenz der QC-Datei und Reichweite des QC
+# ==============================================================================
+
+def qc_batches(exclusions: pd.DataFrame) -> pd.DataFrame:
+    """Welche Batches (biosensor, osc_type, osc_freq) hat das manuelle QC ueberhaupt beruehrt?
+
+    Das QC ist arbeitsintensiv und deckt in der Praxis nur einen Teil der
+    Daten ab (im echten Datensatz: einen einzigen Batch, WT/pH/6). Ein
+    Vergleich "mit QC vs. ohne QC" ist nur dort sinnvoll, wo QC stattgefunden
+    hat - sonst misst man "kein QC vs. kein QC" und nennt es "QC hat keinen
+    Effekt".
+    """
+    if exclusions is None or exclusions.empty or "cell_uid" not in exclusions.columns:
+        return pd.DataFrame(columns=["biosensor", "osc_type", "osc_freq", "n_rows", "n_chambers"])
+    parts = exclusions["cell_uid"].astype(str).str.split("__", expand=True)
+    if parts.shape[1] < 6:
+        return pd.DataFrame(columns=["biosensor", "osc_type", "osc_freq", "n_rows", "n_chambers"])
+    df = pd.DataFrame({
+        "biosensor": parts[0], "osc_type": parts[1], "osc_freq": parts[2],
+        "exp_id": exclusions["cell_uid"].astype(str).str.replace(r"__track\d+$", "", regex=True),
+    })
+    return (df.groupby(["biosensor", "osc_type", "osc_freq"])
+              .agg(n_rows=("exp_id", "size"), n_chambers=("exp_id", "nunique")).reset_index())
+
+
+def find_qc_conflicts(exclusions: pd.DataFrame) -> pd.DataFrame:
+    """Zeilen der QC-Datei, die sich widersprechen oder doppelt sind.
+
+    Drei Arten, jede mit 'kind' markiert:
+      double_merge      derselbe Track wird in ZWEI verschiedene Ziel-Tracks gemergt.
+                        apply_track_merges() fuehrt die ERSTE Zeile aus; die zweite
+                        findet ihre Quelle nicht mehr und wird mit Warnung verworfen.
+      merge_and_exclude derselbe Track wird gemergt UND ausgeschlossen. Die Merges
+                        laufen zuerst; der Ausschluss trifft danach einen Track, den
+                        es unter diesem Namen nicht mehr gibt.
+      duplicate         identische Zeile zweimal (harmlos, aber unsauber).
+
+    Nichts davon wird hier repariert - die Entscheidung gehoert der Person, die
+    die Bilder gesehen hat. Die Tabelle nennt die Zeilen, damit sie sie findet.
+    """
+    if exclusions is None or exclusions.empty or "cell_uid" not in exclusions.columns:
+        return pd.DataFrame()
+    df = exclusions.copy()
+    df["_row"] = range(len(df))
+    has_merge = df["merge_into_track_id"].notna() if "merge_into_track_id" in df.columns else pd.Series(False, index=df.index)
+    records = []
+    for uid, grp in df.groupby("cell_uid"):
+        if len(grp) < 2:
+            continue
+        merges = grp[has_merge.loc[grp.index]]
+        targets = merges["merge_into_track_id"].dropna().unique()
+        if len(targets) > 1:
+            kind = "double_merge"
+        elif len(merges) and len(merges) < len(grp):
+            kind = "merge_and_exclude"
+        else:
+            kind = "duplicate"
+        for _, row in grp.iterrows():
+            records.append({"kind": kind, "cell_uid": uid, "row_in_file": int(row["_row"]) + 2,
+                            "reason": row.get("reason", ""),
+                            "merge_into_track_id": row.get("merge_into_track_id", None),
+                            "frame_from": row.get("frame_from", None), "frame_to": row.get("frame_to", None)})
+    out = pd.DataFrame(records)
+    if not out.empty:
+        counts = out.groupby("kind")["cell_uid"].nunique().to_dict()
+        logger.warning(
+            "QC-DATEI: %d Tracks sind mehrfach gelistet - %s. Details in 70_qc_exclusions_conflicts.csv. "
+            "Bei double_merge gewinnt die erste Zeile, die zweite wird verworfen; bitte bereinigen.",
+            out["cell_uid"].nunique(), ", ".join(f"{k}: {v}" for k, v in counts.items()),
+        )
+    return out

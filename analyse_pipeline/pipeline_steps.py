@@ -59,6 +59,7 @@ from config import (
     STATIC_SATURATION_SMOOTH_FRAMES,
     STATIC_SATURATION_MIN_GROWTH,
 )
+from experiment_units import summarise_hierarchical
 from endpoint_trends import (
     compute_endpoint_per_replicate,
     summarise_per_replicate,
@@ -392,6 +393,10 @@ def step_10_growth(ctx: PipelineContext) -> None:
         # der Anteil zuverlässiger Fits als eigene Spalte mitgeschrieben.
         area_rep, area_rep_summary = summarise_per_replicate(area_table, "mu_area")
         if not area_rep_summary.empty:
+            # Kammer-Ebene zusaetzlich: Grundlage fuer den QC-Vergleich (qc_comparison.py),
+            # der Kammern paarweise mit und ohne QC gegenueberstellt.
+            area_chamber, _, _ = summarise_hierarchical(area_table, "mu_area")
+            area_chamber.to_csv(output_dir / "12_area_growth_rate_per_chamber.csv", index=False)
             if "fit_is_reliable" in area_table.columns:
                 frac = (area_table.groupby(
                             [c for c in ["biosensor", "osc_type", "osc_freq", "condition"]
@@ -481,13 +486,23 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         logger.info("Endzustand (letzte %.0f%% der Frames je Kammer) wird gebildet fuer: %s",
                     100 * ENDPOINT_LAST_FRACTION, value_cols)
 
-    all_per_replicate, all_summary, all_trend, all_scores = [], [], [], []
+    all_per_replicate, all_summary, all_trend, all_scores, all_chambers = [], [], [], [], []
     for value_col in value_cols:
         per_replicate, summary = compute_endpoint_per_replicate(
             cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION, frame_window=frame_window,
         )
         if summary.empty:
             continue
+        # Kammer-Ebene fuer den QC-Vergleich (paarweise Kammern mit/ohne QC).
+        if frame_window is not None:
+            lo, hi = frame_window
+            ep_rows = cells[(cells["frame"] >= lo) & (cells["frame"] <= hi)]
+        else:
+            fmin = cells.groupby("exp_id")["frame"].transform("min")
+            fmax = cells.groupby("exp_id")["frame"].transform("max")
+            ep_rows = cells[cells["frame"] > fmax - (fmax - fmin + 1) * ENDPOINT_LAST_FRACTION]
+        per_chamber, _, _ = summarise_hierarchical(ep_rows, value_col)
+        all_chambers.append(per_chamber)
         trend = spearman_against_period(per_replicate)
         all_per_replicate.append(per_replicate)
         all_summary.append(summary)
@@ -531,6 +546,9 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
 
     pd.concat(all_per_replicate, ignore_index=True).to_csv(
         output_dir / "13_endpoint_per_chip.csv", index=False)
+    if all_chambers:
+        pd.concat(all_chambers, ignore_index=True).to_csv(
+            output_dir / "13_endpoint_per_chamber.csv", index=False)
     if all_scores:
         pd.concat(all_scores, ignore_index=True).to_csv(
             output_dir / "13_endpoint_bracket_score.csv", index=False)

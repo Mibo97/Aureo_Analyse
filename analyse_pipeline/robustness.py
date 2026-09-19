@@ -251,8 +251,9 @@ def aggregate_robustness_over_replicates(
     """
     from experiment_units import summarise_hierarchical
 
+    empty_cols = ["mean", "sd", "sem", "n_units", "error_unit", "n_chips", "n_chambers", "condition_type"]
     if robustness_df is None or robustness_df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=empty_cols)
     if group_cols is None:
         group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "medium", "chip_family"]
                       if c in robustness_df.columns]
@@ -270,7 +271,7 @@ def aggregate_robustness_over_replicates(
         work, value_col, condition_cols=group_cols, chamber_col=chamber_id_col, chip_col=replicate_id_col,
     )
     if per_condition.empty:
-        return per_condition
+        return pd.DataFrame(columns=list(group_cols) + empty_cols)
     keep = list(group_cols) + [c for c in ["mean", "sd", "sem", "n_units", "error_unit",
                                           "n_chips", "n_chambers", "condition_type"]
                                if c in per_condition.columns]
