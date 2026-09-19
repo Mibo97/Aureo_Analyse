@@ -64,6 +64,7 @@ from endpoint_trends import (
     summarise_per_replicate,
     spearman_against_period,
     plot_endpoint_vs_period,
+    bracket_normalise,
     detect_saturation_frame,
     static_endpoint_window,
 )
@@ -139,6 +140,20 @@ def exclude_controls(df: pd.DataFrame) -> pd.DataFrame:
         )
         return df
     return df[~ctype.isin(["PosCtrl", "NegCtrl"])].copy()
+
+
+def _per_facet(ctx, cells_plot, controls):
+    """Zerlegt die Zeitreihen-Plots des Oszillationszweigs in eine Datei pro
+    osc_type (Glc / pH): fuenf Staemme in einer Reihe statt eines 5 x 2-Gitters.
+    Bei den statischen Daten (facet_col = chip_family, zwei Werte) bleibt es bei
+    einer Datei - dort ist das Gitter klein."""
+    if ctx.facet_col != "osc_type" or cells_plot is None or cells_plot.empty:
+        yield "", cells_plot, controls
+        return
+    for value in sorted(cells_plot[ctx.facet_col].dropna().unique()):
+        sel = cells_plot[cells_plot[ctx.facet_col] == value]
+        csel = controls[controls[ctx.facet_col] == value] if controls is not None else None
+        yield f"_{value}", sel, csel
 
 
 @dataclass
@@ -275,11 +290,12 @@ def step_10_growth(ctx: PipelineContext) -> None:
         # stünden die Oszillationskurven ohne Bezugsrahmen da, obwohl genau der
         # Vergleich gegen PosCtrl/NegCtrl die Aussage der Abbildung ist.
         controls_only = cells[~cells.index.isin(cells_plot.index)] if not cells_plot.empty else cells
-        plot_metric_over_time_by_frequency(
-            cells_plot, "area", output_dir / "10_cell_area_over_time.pdf",
-            freq_order=freq_order, ylabel="Cell area [px²]",
-            reference_cells=controls_only, x_col=ctx.x_col, facet_col=ctx.facet_col,
-        )
+        for facet_value, plot_sel, ctrl_sel in _per_facet(ctx, cells_plot, controls_only):
+            plot_metric_over_time_by_frequency(
+                plot_sel, "area", output_dir / f"10_cell_area_over_time{facet_value}.pdf",
+                freq_order=freq_order, ylabel="Cell area [px²]",
+                reference_cells=ctrl_sel, x_col=ctx.x_col, facet_col=ctx.facet_col,
+            )
 
     # -- µ_event: spezifische Wachstumsrate nach Eq. 2 (Blöbaum et al. 2024):
     #    µ = ln(2)/t, aus der Zeit zwischen aufeinanderfolgenden Budding-
@@ -465,7 +481,7 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         logger.info("Endzustand (letzte %.0f%% der Frames je Kammer) wird gebildet fuer: %s",
                     100 * ENDPOINT_LAST_FRACTION, value_cols)
 
-    all_per_replicate, all_summary, all_trend = [], [], []
+    all_per_replicate, all_summary, all_trend, all_scores = [], [], [], []
     for value_col in value_cols:
         per_replicate, summary = compute_endpoint_per_replicate(
             cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION, frame_window=frame_window,
@@ -479,10 +495,24 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
             all_trend.append(trend)
 
         if ctx.x_col == "osc_freq":
-            plot_endpoint_vs_period(
-                summary, output_dir / f"13_endpoint_vs_period_{value_col}.pdf",
-                value_col=value_col, trend=trend, ylabel=f"{pretty_label(value_col)}\n(endpoint)",
-            )
+            # Bracket-Score: jede Periode relativ zu den Kontrollen IHRES Chips.
+            score = bracket_normalise(per_replicate)
+            score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
+            if not score.empty:
+                all_scores.append(score)
+            if not score_trend.empty:
+                all_trend.append(score_trend.assign(value_col=f"{value_col}__bracket_score"))
+            # Eine Datei pro osc_type: die Staemme nebeneinander statt in einem
+            # Staemme x osc_type-Gitter, das bei 5 Staemmen unlesbar wird.
+            for osc_type in sorted(per_replicate["osc_type"].dropna().unique()):
+                sel = per_replicate["osc_type"] == osc_type
+                plot_endpoint_vs_period(
+                    per_replicate[sel], output_dir / f"13_endpoint_vs_period_{value_col}_{osc_type}.pdf",
+                    value_col=value_col, trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
+                    score=score[score["osc_type"] == osc_type] if not score.empty else None,
+                    score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
+                    ylabel=f"{pretty_label(value_col)}\n(endpoint)",
+                )
         else:
             # Kategoriale x-Achse (Medium), Facette Chip-Familie, Fehler ueber Chips.
             plot_point_errorbar(
@@ -500,10 +530,14 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         return
 
     pd.concat(all_per_replicate, ignore_index=True).to_csv(
-        output_dir / "13_endpoint_per_replicate.csv", index=False)
+        output_dir / "13_endpoint_per_chip.csv", index=False)
+    if all_scores:
+        pd.concat(all_scores, ignore_index=True).to_csv(
+            output_dir / "13_endpoint_bracket_score.csv", index=False)
+        logger.info("Tabelle gespeichert: 13_endpoint_bracket_score.csv")
     pd.concat(all_summary, ignore_index=True).to_csv(
         output_dir / "13_endpoint_summary.csv", index=False)
-    logger.info("Tabellen gespeichert: 13_endpoint_per_replicate.csv / 13_endpoint_summary.csv")
+    logger.info("Tabellen gespeichert: 13_endpoint_per_chip.csv / 13_endpoint_summary.csv")
 
     if all_trend:
         trend_all = pd.concat(all_trend, ignore_index=True)
@@ -604,19 +638,21 @@ def step_30_sensors(ctx: PipelineContext) -> None:
         logger.warning("Keine 'mean_<kanal>' Spalten gefunden - Sensor-Intensitäts-Plots werden übersprungen.")
 
     for col in intensity_cols:
-        plot_metric_over_time_by_frequency(
-            cells_plot, col, output_dir / f"30_{col}_over_time.pdf", freq_order=freq_order,
-            x_col=ctx.x_col, facet_col=ctx.facet_col,
-        )
+        for facet_value, plot_sel, _ in _per_facet(ctx, cells_plot, None):
+            plot_metric_over_time_by_frequency(
+                plot_sel, col, output_dir / f"30_{col}_over_time{facet_value}.pdf", freq_order=freq_order,
+                x_col=ctx.x_col, facet_col=ctx.facet_col,
+            )
 
     if not ratio_cols:
         logger.warning("Keine 'ratio_*' Spalten gefunden - Ratio-Plots werden übersprungen.")
 
     for col in ratio_cols:
-        plot_metric_over_time_by_frequency(
-            cells_plot, col, output_dir / f"31_{col}_over_time.pdf",
-            freq_order=freq_order, ylabel=pretty_label(col), x_col=ctx.x_col, facet_col=ctx.facet_col,
-        )
+        for facet_value, plot_sel, _ in _per_facet(ctx, cells_plot, None):
+            plot_metric_over_time_by_frequency(
+                plot_sel, col, output_dir / f"31_{col}_over_time{facet_value}.pdf",
+                freq_order=freq_order, ylabel=pretty_label(col), x_col=ctx.x_col, facet_col=ctx.facet_col,
+            )
 
 
 

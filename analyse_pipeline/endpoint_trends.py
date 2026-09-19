@@ -264,11 +264,12 @@ def spearman_against_period(
 ) -> pd.DataFrame:
     """Spearman-Rangkorrelation gegen die Periode, pro Stamm/Oszillationstyp.
 
-    Eingabe ist die REPLIKAT-Ebene (ein Wert je Replikat und Periode) - nicht
-    die Zellebene und nicht die bereits gemittelte Summary. Ueber Zellen
-    gerechnet haengt das p fast nur an der Zellzahl; auf der gemittelten
-    Summary bliebe pro Periode ein einziger Punkt und die Streuung zwischen
-    den Replikaten waere unsichtbar.
+    Eingabe ist die CHIP-Ebene (ein Wert je Chip). Bei den Oszillationsdaten
+    ist das EIN Wert pro Periode - n ist die Zahl der Perioden (6 bei Glc, 4
+    bei pH). Bei n = 6 braucht p < 0.05 ein |rho| >= 0.83: rho ist hier eine
+    Effektstaerke, die man berichtet, kein Test, auf den man sich stuetzt.
+    Ueber Kammern gerechnet saehe n groesser aus, waere aber Pseudoreplikation -
+    die 5 Kammern einer Periode sind eine Kultur auf einem Chip.
 
     Kontrollen fallen heraus: PosCtrl/NegCtrl haben keine Periode.
     Nicht-numerische Bedingungen (statisch) ebenfalls, ueber period_minutes().
@@ -303,7 +304,7 @@ def spearman_against_period(
         record = dict(zip(group_cols, keys))
         n_periods = int(grp["_period"].nunique())
         record["n_periods"] = n_periods
-        record["n_replicate_values"] = int(len(grp))
+        record["n_chips"] = int(len(grp))
         if n_periods < min_periods:
             record["spearman_rho"] = float("nan")
             record["p_value"] = float("nan")
@@ -327,140 +328,211 @@ def spearman_against_period(
     return out
 
 
+def bracket_normalise(
+    per_chip: pd.DataFrame,
+    degenerate_k: float = 2.0,
+) -> pd.DataFrame:
+    """Endzustand jeder Oszillationsbedingung relativ zu den Kontrollen IHRES Chips.
+
+    score = (osc - NegCtrl) / (PosCtrl - NegCtrl)
+        0 = wie durchgehend Starvation, 1 = wie durchgehend Feast.
+
+    Warum das die richtige Groesse ist: jede Periode ist ein eigener Chip aus
+    einer eigenen Vorkultur. Der Rohwert einer Periode enthaelt damit den
+    Chip-/Tages-/Kultur-Effekt. Die Kontrollen liegen auf DEMSELBEN Chip und
+    tragen denselben Effekt - die Normierung entfernt ihn, ohne dass man den
+    Chip kennen muesste. Das ist die gepaarte Auswertung, die dieses Design
+    umsonst mitliefert.
+
+    Entartung: wenn |PosCtrl - NegCtrl| kleiner ist als degenerate_k mal die
+    Kammer-Streuung der Kontrollen auf diesem Chip, trennt das Bracket nichts
+    und der Score ist Rauschen geteilt durch Rauschen. Solche Chips werden mit
+    bracket_degenerate=True markiert, im Plot hohl gezeichnet und fallen aus
+    dem Trendtest - und genau diese Chips sind der Befund von Abschnitt 4.
+    """
+    if per_chip is None or per_chip.empty:
+        return pd.DataFrame()
+    df = add_condition_type(per_chip) if "condition_type" not in per_chip.columns else per_chip.copy()
+    key = [c for c in ["value_col", "biosensor", "osc_type", "osc_freq", "chip"] if c in df.columns]
+    rows = []
+    for keys, grp in df.groupby(key, dropna=False):
+        by = grp.set_index("condition_type")
+        rec = dict(zip(key, keys if isinstance(keys, tuple) else (keys,)))
+        for ct, name in (("Oscillation", "osc"), ("PosCtrl", "pos"), ("NegCtrl", "neg")):
+            rec[name] = float(by.loc[ct, "value"]) if ct in by.index else float("nan")
+            rec[f"{name}_sd_chamber"] = float(by.loc[ct, "sd_chamber"]) if ct in by.index and "sd_chamber" in by.columns else float("nan")
+        span = rec["pos"] - rec["neg"]
+        noise = np.nanmean([rec["pos_sd_chamber"], rec["neg_sd_chamber"]])
+        rec["bracket_span"] = span
+        rec["bracket_degenerate"] = bool(np.isnan(span) or (noise == noise and abs(span) < degenerate_k * noise))
+        rec["value"] = (rec["osc"] - rec["neg"]) / span if span and span == span and not rec["bracket_degenerate"] else float("nan")
+        rec["condition"] = "bracket_score"
+        rec["condition_type"] = "Oscillation"
+        rows.append(rec)
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        n_deg = int(out["bracket_degenerate"].sum())
+        if n_deg:
+            logger.warning(
+                "bracket_normalise(): %d von %d Chips haben ein entartetes Bracket "
+                "(|PosCtrl - NegCtrl| < %.1f x Kammer-Streuung) - Score dort NaN, aus dem "
+                "Trendtest ausgeschlossen. Das ist der Befund aus Abschnitt 4, kein Fehler.",
+                n_deg, len(out), degenerate_k,
+            )
+    return out
+
+
 def plot_endpoint_vs_period(
-    summary: pd.DataFrame,
+    per_chip: pd.DataFrame,
     out_path: Path,
     value_col: str,
     trend: Optional[pd.DataFrame] = None,
+    score: Optional[pd.DataFrame] = None,
+    score_trend: Optional[pd.DataFrame] = None,
     ylabel: Optional[str] = None,
+    strain_order: Optional[Sequence[str]] = None,
 ) -> None:
-    """Endzustand gegen die Periode, mit PosCtrl/NegCtrl als Referenzbaender.
+    """Endzustand gegen die Periode: EIN Chip pro Periode, mit SEINEN Kontrollen.
 
-    Die x-Achse ist LOGARITHMISCH: die Perioden sind geometrisch gestuft
-    (jeweils Faktor 2 von 0.75 bis 24 min, also ein 32-facher Dosisbereich).
-    Linear dargestellt draengen sich fuenf der sechs Bedingungen links
-    zusammen, und die Dosis-Wirkung waere nicht ablesbar.
+    Obere Reihe (Rohwert): pro Periode der Chip-Mittelwert ueber die
+    Oszillationskammern (Fehlerbalken = Kammern dieses Chips, technisch), und
+    an derselben x-Position die PosCtrl-/NegCtrl-Mittelwerte DESSELBEN Chips
+    als kleine Marker. Dahinter, blass, das ueber alle Chips gepoolte
+    Kontrollband (Mittelwert +- SD ueber Chips) als Bezugsrahmen. So sieht man
+    beides: wo die Periode relativ zu ihren eigenen Kontrollen liegt, und wie
+    stark die Kontrollen selbst von Chip zu Chip wandern.
 
-    Die Kontrollen erscheinen als waagerechte Baender (Mittelwert +- SEM ueber
-    ihre Replikate) statt als Punkte auf der Periodenachse: sie HABEN keine
-    Periode, und der Ordnername ihres Batches ist keine Behandlung. Genau so
-    sind sie auch gemeint - als Bezugsrahmen, gegen den die
-    Oszillationsbedingungen gelesen werden.
+    Untere Reihe: der bracket-normierte Score (bracket_normalise()), 0 = wie
+    Starvation, 1 = wie Feast. Entartete Chips hohl.
+
+    Eine Facette pro Stamm - die Staemme bleiben getrennt (n = 1 Serie je
+    Stamm). Der Spearman-Wert steht in der Facette, zu der er gehoert, mit
+    n = Zahl der Chips = Zahl der Perioden.
     """
-    if summary is None or summary.empty:
+    if per_chip is None or per_chip.empty:
         logger.warning("plot_endpoint_vs_period(): keine Daten fuer '%s' - uebersprungen.", value_col)
         return
-
-    df = add_condition_type(summary) if "condition" in summary.columns else summary.copy()
+    df = add_condition_type(per_chip) if "condition_type" not in per_chip.columns else per_chip.copy()
     df = df.assign(_period=period_minutes(df["osc_freq"]))
-
-    is_control = df["condition_type"].isin(CONTROL_TYPES) if "condition_type" in df.columns \
-        else pd.Series(False, index=df.index)
-    osc = df[~is_control].dropna(subset=["_period", "mean"])
-    controls = df[is_control]
-
+    osc = df[(df["condition_type"] == "Oscillation")].dropna(subset=["_period", "value"])
     if osc.empty:
-        logger.warning(
-            "plot_endpoint_vs_period(): keine Oszillationsbedingungen mit numerischer Periode "
-            "fuer '%s' - uebersprungen (bei statischen Daten erwartet).", value_col,
-        )
+        logger.warning("plot_endpoint_vs_period(): keine Oszillations-Chips mit numerischer Periode "
+                       "fuer '%s' - uebersprungen.", value_col)
         return
+    strains = [b for b in (strain_order or sorted(osc["biosensor"].unique()))
+               if b in set(osc["biosensor"])]
+    has_score = score is not None and not score.empty
+    n_rows = 2 if has_score else 1
+    degenerate_labelled = False  # Legendeneintrag an der ERSTEN Facette, die einen hohlen Punkt hat
+    fig, axes = plt.subplots(n_rows, len(strains), figsize=(3.9 * len(strains), 3.4 * n_rows),
+                             squeeze=False, sharex=True)
 
-    osc_types = sorted(osc["osc_type"].dropna().unique())
-    biosensors = sorted(osc["biosensor"].dropna().unique())
-    fig, axes = plt.subplots(
-        len(osc_types), len(biosensors),
-        figsize=(4.2 * len(biosensors), 3.6 * len(osc_types)),
-        squeeze=False, sharex=True,
-    )
+    for j, strain in enumerate(strains):
+        ax = axes[0][j]
+        sub = df[df["biosensor"] == strain]
+        # Gepooltes Kontrollband ueber alle Chips dieses Stamms (Bezugsrahmen).
+        for ct in CONTROL_TYPES:
+            vals = sub.loc[sub["condition_type"] == ct, "value"].dropna()
+            if len(vals) >= 2:
+                ax.axhspan(vals.mean() - vals.std(), vals.mean() + vals.std(),
+                           color=CONTROL_COLORS[ct], alpha=0.10, zorder=0)
+                ax.axhline(vals.mean(), color=CONTROL_COLORS[ct], linewidth=0.9, linestyle=":",
+                           alpha=0.7, zorder=1)
+        # Kontrollen DIESES Chips an der x-Position seiner Periode.
+        for ct, marker in (("NegCtrl", "v"), ("PosCtrl", "^")):
+            c = sub[sub["condition_type"] == ct].dropna(subset=["_period", "value"]).sort_values("_period")
+            if not c.empty:
+                ax.scatter(c["_period"], c["value"], marker=marker, s=34, color=CONTROL_COLORS[ct],
+                           edgecolor="white", linewidth=0.5, zorder=3,
+                           label=f"{ct} of the same chip" if j == 0 else None)
+        o = sub[sub["condition_type"] == "Oscillation"].dropna(subset=["_period", "value"]).sort_values("_period")
+        ax.errorbar(o["_period"], o["value"],
+                    yerr=o["sd_chamber"].fillna(0.0) if "sd_chamber" in o.columns else None,
+                    marker="o", markersize=5.5, linewidth=1.4, capsize=3, color="#333333", zorder=4,
+                    label="Oscillation (mean of chambers on the chip;\nbar = chamber SD, technical)" if j == 0 else None)
+        _log_period_axis(ax, sorted(osc["_period"].unique()))
+        ax.set_title(f"{strain}  (n = {o['_period'].nunique()} chips)", fontsize=10)
+        ax.grid(alpha=0.22, linewidth=0.6)
+        if j == 0:
+            ax.set_ylabel(ylabel or f"{value_col}\n(endpoint)")
+        _annotate_trend(ax, trend, strain, value_col)
 
-    for i, osc_type in enumerate(osc_types):
-        for j, biosensor in enumerate(biosensors):
-            ax = axes[i][j]
-            sub = osc[(osc["osc_type"] == osc_type) & (osc["biosensor"] == biosensor)].sort_values("_period")
-
-            # Kontrollbaender zuerst, damit die Datenpunkte darueber liegen.
-            csub = controls[(controls["osc_type"] == osc_type) & (controls["biosensor"] == biosensor)]
-            for _, row in csub.iterrows():
-                ctype = row["condition_type"]
-                col = CONTROL_COLORS.get(ctype, "#999999")
-                spread = row.get("sem", 0.0)
-                spread = 0.0 if pd.isna(spread) else spread
-                ax.axhspan(row["mean"] - spread, row["mean"] + spread,
-                           color=col, alpha=0.16, zorder=1)
-                ax.axhline(row["mean"], color=col, linewidth=1.2, linestyle="--",
-                           alpha=0.9, zorder=2,
-                           label=f"{ctype} (n={int(row.get('n_units', 0))} {row.get('error_unit', '')})")
-
-            if not sub.empty:
-                ax.errorbar(
-                    sub["_period"], sub["mean"],
-                    yerr=sub["sem"].fillna(0.0) if "sem" in sub.columns else None,
-                    marker="o", markersize=5.5, linewidth=1.5, capsize=3,
-                    color="#333333", zorder=3, label="Oscillation",
-                )
-            # Log-Achse mit EXPLIZITEN Ticks auf den echten Perioden. Die
-            # Minor-Ticks muessen dabei abgeschaltet werden: matplotlib
-            # beschriftet sie auf einer Log-Achse per Default in
-            # Exponentialschreibweise ("2 x 10^0"), was sich mit den
-            # Major-Labels zu unlesbarem Text ueberlagert.
-            periods_present = sorted(osc["_period"].unique())
-            ax.set_xscale("log")
-            ax.set_xticks(periods_present)
-            ax.set_xticklabels([f"{p:g}" for p in periods_present])
-            ax.xaxis.set_minor_locator(mticker.NullLocator())
-            ax.xaxis.set_minor_formatter(mticker.NullFormatter())
-            ax.tick_params(axis="x", labelsize=8)
-            ax.grid(alpha=0.22, linewidth=0.6)
-            ax.set_title(f"{osc_type} | {biosensor}", fontsize=10)
-
-            # Trendtest in die Facette schreiben, zu der er gehoert - so kann
-            # die Abbildung nicht von ihrer Statistik getrennt werden.
-            if trend is not None and not trend.empty:
-                mask = pd.Series(True, index=trend.index)
-                for col_name, want in (("biosensor", biosensor), ("osc_type", osc_type),
-                                       ("value_col", value_col)):
-                    if col_name in trend.columns:
-                        mask &= trend[col_name] == want
-                hit = trend[mask]
-                if len(hit) == 1 and pd.notna(hit.iloc[0]["spearman_rho"]):
-                    rho = hit.iloc[0]["spearman_rho"]
-                    p = hit.iloc[0]["p_value"]
-                    ax.annotate(
-                        f"Spearman ρ = {rho:+.2f}\np = {p:.3g}",
-                        xy=(0.03, 0.97), xycoords="axes fraction", va="top", ha="left",
-                        fontsize=8, bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                                              edgecolor="#BBBBBB", alpha=0.9),
-                    )
-
-            if i == len(osc_types) - 1:
-                ax.set_xlabel("Feast/famine cycle period [min]")
+        if has_score:
+            ax2 = axes[1][j]
+            sc = score[(score["biosensor"] == strain)].assign(_period=lambda d: period_minutes(d["osc_freq"]))
+            sc = sc.dropna(subset=["_period"]).sort_values("_period")
+            good = sc[~sc["bracket_degenerate"]].dropna(subset=["value"])
+            bad = sc[sc["bracket_degenerate"]]
+            ax2.axhspan(0, 1, color="#999999", alpha=0.06, zorder=0)
+            ax2.axhline(0, color=CONTROL_COLORS["NegCtrl"], linewidth=0.9, linestyle=":", alpha=0.8)
+            ax2.axhline(1, color=CONTROL_COLORS["PosCtrl"], linewidth=0.9, linestyle=":", alpha=0.8)
+            if not good.empty:
+                ax2.plot(good["_period"], good["value"], marker="o", markersize=5.5, linewidth=1.4,
+                         color="#333333", zorder=3)
+            if not bad.empty:
+                ax2.scatter(bad["_period"], np.full(len(bad), 0.5), marker="o", s=40, facecolor="white",
+                            edgecolor="#333333", linewidth=1.2, zorder=3,
+                            label=None if degenerate_labelled else "bracket degenerate on this chip (score undefined)")
+                degenerate_labelled = True
+            _log_period_axis(ax2, sorted(osc["_period"].unique()))
+            ax2.set_ylim(-0.3, 1.3)
+            ax2.grid(alpha=0.22, linewidth=0.6)
+            ax2.set_xlabel("Feast/famine cycle period [min]")
             if j == 0:
-                ax.set_ylabel(ylabel or f"{value_col}\n(endpoint, mean over replicates)")
+                ax2.set_ylabel("Bracket score\n0 = NegCtrl, 1 = PosCtrl (same chip)")
+            _annotate_trend(ax2, score_trend, strain, value_col)
+        else:
+            ax.set_xlabel("Feast/famine cycle period [min]")
 
-    handles, labels = axes[0][0].get_legend_handles_labels()
+    handles, labels = [], []
+    for row in axes:
+        for ax_ in row:
+            h, l = ax_.get_legend_handles_labels()
+            for hh, ll in zip(h, l):
+                if ll not in labels:
+                    handles.append(hh); labels.append(ll)
     if handles:
-        seen, uh, ul = set(), [], []
-        for h, l in zip(handles, labels):
-            if l not in seen:
-                seen.add(l); uh.append(h); ul.append(l)
-        fig.legend(uh, ul, loc="lower center", ncol=min(len(ul), 4), bbox_to_anchor=(0.5, -0.06),
-                   frameon=False, fontsize=9)
-
+        fig.legend(handles, labels, loc="lower center", ncol=min(len(labels), 3),
+                   bbox_to_anchor=(0.5, -0.10 if has_score else -0.16), frameon=False, fontsize=8)
     fig.suptitle(
-        f"{value_col}: cumulative endpoint vs cycle period\n"
-        "(point = mean over biological replicates ± SEM; bands = constant-medium controls)",
+        f"{value_col}: cumulative endpoint vs cycle period — one chip per period\n"
+        "(shaded = PosCtrl/NegCtrl pooled over chips, mean ± SD; markers = controls of that chip)",
         y=1.02,
     )
     fig.text(
-        0.5, -0.13,
-        "Individual cycles are below the sampling limit and are NOT resolved — only the "
-        "cumulative endpoint after the full run is interpretable.\nControls have no period and "
-        "are drawn as reference bands. Spearman tests monotonicity across periods on "
-        "replicate-level values.",
+        0.5, -0.20 if has_score else -0.26,
+        "Each period is one chip from one preculture: n = 1 biological replicate per point. Error bars "
+        "are chambers on that chip (technical).\nIndividual cycles are below the sampling limit; only "
+        "the cumulative endpoint is interpretable. Spearman on chip means: an effect size, not a test "
+        "to lean on at n ≤ 6.",
         ha="center", fontsize=8,
     )
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight", dpi=180)
     plt.close(fig)
     logger.info("Plot gespeichert: %s", out_path.name)
+
+
+def _log_period_axis(ax, periods) -> None:
+    """Log-x mit expliziten Ticks auf den Perioden; Minor-Ticks aus (sonst '2 x 10^0')."""
+    ax.set_xscale("log")
+    ax.set_xticks(periods)
+    ax.set_xticklabels([f"{p:g}" for p in periods])
+    ax.xaxis.set_minor_locator(mticker.NullLocator())
+    ax.xaxis.set_minor_formatter(mticker.NullFormatter())
+    ax.tick_params(axis="x", labelsize=8)
+
+
+def _annotate_trend(ax, trend, strain, value_col) -> None:
+    if trend is None or trend.empty:
+        return
+    mask = pd.Series(True, index=trend.index)
+    for col_name, want in (("biosensor", strain), ("value_col", value_col)):
+        if col_name in trend.columns:
+            mask &= trend[col_name] == want
+    hit = trend[mask]
+    if len(hit) == 1 and pd.notna(hit.iloc[0]["spearman_rho"]):
+        rho, p, n = hit.iloc[0]["spearman_rho"], hit.iloc[0]["p_value"], int(hit.iloc[0].get("n_chips", 0))
+        ax.annotate(f"ρ = {rho:+.2f}, p = {p:.2g}\n(n = {n} chips)",
+                    xy=(0.03, 0.97), xycoords="axes fraction", va="top", ha="left", fontsize=8,
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#BBBBBB", alpha=0.92))
