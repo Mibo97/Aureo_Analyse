@@ -479,48 +479,71 @@ def qc_batches(exclusions: pd.DataFrame) -> pd.DataFrame:
 
 
 def find_qc_conflicts(exclusions: pd.DataFrame) -> pd.DataFrame:
-    """Zeilen der QC-Datei, die sich widersprechen oder doppelt sind.
+    """Zeilen der QC-Datei, die mehrfach denselben Track betreffen - mit der FOLGE, die
+    apply_track_merges()/apply_qc_exclusions() daraus machen.
 
-    Drei Arten, jede mit 'kind' markiert:
-      double_merge      derselbe Track wird in ZWEI verschiedene Ziel-Tracks gemergt.
-                        apply_track_merges() fuehrt die ERSTE Zeile aus; die zweite
-                        findet ihre Quelle nicht mehr und wird mit Warnung verworfen.
-      merge_and_exclude derselbe Track wird gemergt UND ausgeschlossen. Die Merges
-                        laufen zuerst; der Ausschluss trifft danach einen Track, den
-                        es unter diesem Namen nicht mehr gibt.
-      duplicate         identische Zeile zweimal (harmlos, aber unsauber).
+      split_merge        derselbe Track wird in zwei Ziele gemergt, mindestens eine Zeile
+                         mit frame_from/frame_to. Das ist als Aufteilung GEMEINT - aber
+                         apply_track_merges() ignoriert Frame-Bereiche bei Merges: die
+                         erste Zeile mergt den GANZEN Track (oder wird bei Frame-Ueber-
+                         lappung abgelehnt), die zweite findet ihre Quelle nicht mehr.
+      double_merge       zwei Ziele OHNE Frame-Bereiche: echter Widerspruch. Erste Zeile
+                         gewinnt, zweite wird verworfen.
+      merge_and_exclude  gemergt UND ausgeschlossen. Merges laufen zuerst und benennen
+                         cell_uid um; der Ausschluss sucht danach den alten Namen, findet
+                         nichts und geht VERLOREN (im Log als 'unmatched').
+      redundant_exclusion zwei Ausschluss-Zeilen mit verschiedenen Gruenden: harmlos,
+                         beide loeschen dieselben Zeilen.
+      duplicate          identische Zeile zweimal: harmlos.
 
     Nichts davon wird hier repariert - die Entscheidung gehoert der Person, die
-    die Bilder gesehen hat. Die Tabelle nennt die Zeilen, damit sie sie findet.
+    die Bilder gesehen hat. Die Tabelle nennt die Zeilen mit Nummer.
     """
     if exclusions is None or exclusions.empty or "cell_uid" not in exclusions.columns:
         return pd.DataFrame()
     df = exclusions.copy()
     df["_row"] = range(len(df))
     has_merge = df["merge_into_track_id"].notna() if "merge_into_track_id" in df.columns else pd.Series(False, index=df.index)
+    has_range = pd.Series(False, index=df.index)
+    for c in ("frame_from", "frame_to"):
+        if c in df.columns:
+            has_range |= df[c].notna()
+    consequences = {
+        "split_merge": "INTENDED SPLIT, NOT EXECUTED: apply_track_merges() ignores frame ranges - "
+                       "first row merges the whole track (or is rejected on overlap), second row is rejected",
+        "double_merge": "contradiction: first row wins, second row rejected",
+        "merge_and_exclude": "EXCLUSION LOST: merge renames cell_uid first, exclusion then finds no rows",
+        "redundant_exclusion": "harmless: both rows exclude the same track",
+        "duplicate": "harmless: identical rows",
+    }
     records = []
     for uid, grp in df.groupby("cell_uid"):
         if len(grp) < 2:
             continue
-        merges = grp[has_merge.loc[grp.index]]
+        m = has_merge.loc[grp.index]
+        merges = grp[m]
         targets = merges["merge_into_track_id"].dropna().unique()
         if len(targets) > 1:
-            kind = "double_merge"
+            kind = "split_merge" if has_range.loc[merges.index].any() else "double_merge"
         elif len(merges) and len(merges) < len(grp):
             kind = "merge_and_exclude"
-        else:
+        elif grp.drop(columns="_row").astype(str).drop_duplicates().shape[0] == 1:
             kind = "duplicate"
+        else:
+            kind = "redundant_exclusion"
         for _, row in grp.iterrows():
-            records.append({"kind": kind, "cell_uid": uid, "row_in_file": int(row["_row"]) + 2,
-                            "reason": row.get("reason", ""),
+            records.append({"kind": kind, "consequence": consequences[kind], "cell_uid": uid,
+                            "row_in_file": int(row["_row"]) + 2, "reason": row.get("reason", ""),
                             "merge_into_track_id": row.get("merge_into_track_id", None),
                             "frame_from": row.get("frame_from", None), "frame_to": row.get("frame_to", None)})
     out = pd.DataFrame(records)
     if not out.empty:
         counts = out.groupby("kind")["cell_uid"].nunique().to_dict()
+        serious = {k: v for k, v in counts.items() if k in ("split_merge", "double_merge", "merge_and_exclude")}
         logger.warning(
-            "QC-DATEI: %d Tracks sind mehrfach gelistet - %s. Details in 70_qc_exclusions_conflicts.csv. "
-            "Bei double_merge gewinnt die erste Zeile, die zweite wird verworfen; bitte bereinigen.",
+            "QC-DATEI: %d Tracks sind mehrfach gelistet (%s). Davon NICHT wie beabsichtigt ausgefuehrt: %s. "
+            "Details und Zeilennummern in 70_qc_exclusions_conflicts.csv.",
             out["cell_uid"].nunique(), ", ".join(f"{k}: {v}" for k, v in counts.items()),
+            ", ".join(f"{k}: {v}" for k, v in serious.items()) or "keine",
         )
     return out
