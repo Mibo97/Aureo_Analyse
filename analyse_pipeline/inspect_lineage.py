@@ -34,6 +34,7 @@ from qc_exclusions import read_qc_exclusions, apply_track_merges, apply_qc_exclu
 from sensors import compute_ratios
 from lineage import classify_mother_bud, inspect_classification, LineageParams
 from analysis import add_time_column
+from bud_size import load_bud_size_threshold
 
 # ==============================================================================
 # Konfiguration: exakt dieselbe wie in run_analysis.py, weil beide aus config.py
@@ -44,10 +45,12 @@ from analysis import add_time_column
 # ==============================================================================
 from config import (
     DATA_ROOT,
+    OUTPUT_DIR,
     CACHE_PATH,
     QC_EXCLUSIONS_PATH,
     MIN_PER_FRAME,
     LINEAGE_PARAMS,
+    BUD_MAX_AREA_FRACTION_FALLBACK,
     log_active_configuration,
 )
 
@@ -63,6 +66,10 @@ def load_prepared_cells() -> pd.DataFrame:
     cells = compute_ratios(cells)
 
     exclusions = read_qc_exclusions(QC_EXCLUSIONS_PATH)
+    # Dieselbe Reihenfolge wie run_analysis.py: Ausschluesse vor UND nach den
+    # Merges (ein Track, der gemergt und ausgeschlossen ist, verloere sonst
+    # seinen Ausschluss, weil der Merge ihn umbenennt).
+    cells = apply_qc_exclusions(cells, exclusions, mode="remove")
     cells = apply_track_merges(cells, exclusions)
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
     cells = add_time_column(cells, MIN_PER_FRAME)
@@ -92,8 +99,15 @@ if __name__ == "__main__":
     print("Lade Zelldaten (nutzt Parquet-Cache falls vorhanden)...")
     cells = load_prepared_cells()
 
-    print(f"Klassifiziere Mutter/Bud-Events mit: {PARAMS}")
-    lineage_events = classify_mother_bud(cells, PARAMS)
+    # Groessenkriterium: dieselbe Schwelle wie im letzten Pipeline-Lauf
+    # (20_bud_size_threshold.csv); ohne die Datei der Rueckfallwert, damit
+    # hier nicht eine andere Heuristik kalibriert wird als die produktive.
+    BUD_SIZE_THRESHOLD = load_bud_size_threshold(OUTPUT_DIR)
+    if BUD_SIZE_THRESHOLD is None:
+        BUD_SIZE_THRESHOLD = BUD_MAX_AREA_FRACTION_FALLBACK
+        print(f"Keine abgeleitete Groessenschwelle gefunden - Rueckfallwert {BUD_SIZE_THRESHOLD:.2f}.")
+    print(f"Klassifiziere Mutter/Bud-Events mit: {PARAMS}, Groessenschwelle {BUD_SIZE_THRESHOLD:.2f}")
+    lineage_events = classify_mother_bud(cells, PARAMS, bud_size_threshold=BUD_SIZE_THRESHOLD)
 
     exp_ids_with_events = sorted(lineage_events["exp_id"].unique()) if not lineage_events.empty else []
     print(f"\n{len(exp_ids_with_events)} Kammern mit mindestens einem erkannten Budding-Event.")
@@ -114,5 +128,5 @@ if __name__ == "__main__":
         "  qc_overlay_path_for(cells, 'DEINE_EXP_ID')\n"
         "Parameter ändern & neu klassifizieren, ohne neu zu laden:\n"
         "  PARAMS = LineageParams(mother_min_frames=20, bud_max_frames=10, tolerance_px=30.0)\n"
-        "  lineage_events = classify_mother_bud(cells, PARAMS)"
+        "  lineage_events = classify_mother_bud(cells, PARAMS, bud_size_threshold=BUD_SIZE_THRESHOLD)"
     )

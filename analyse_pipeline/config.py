@@ -208,6 +208,18 @@ LINEAGE_PARAMS = LineageParams(
     tolerance_px=30.0,
 )
 
+# Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): eine neu
+# auftauchende Zelle zaehlt nur als Knospe, wenn ihre Flaeche beim ersten
+# Auftreten hoechstens diesen Anteil der Mutterflaeche hat; alles darueber
+# ist eine angespuelte Blastokonidie. Die Schwelle wird aus den Daten
+# abgeleitet (Antimodus der zweigipfligen Verteilung von bud_area /
+# mother_area, EINE Schwelle fuer alle Zweige); der Rueckfallwert greift nur,
+# wenn die Verteilung nicht zweigipflig ist, zu wenige Kandidaten hat oder der
+# Antimodus ausserhalb des plausiblen Bereichs liegt. Welcher Fall eintrat,
+# steht in analysis_output/20_bud_size_threshold.csv (Spalte 'source').
+BUD_MAX_AREA_FRACTION_FALLBACK = 0.5
+BUD_SIZE_PLAUSIBLE_RANGE = (0.15, 0.9)
+
 # Detail-Trajektorien "stabiler" Mütter (Schritt 92, Anhang):
 # coverage = n_frames / (frame_max - frame_min + 1), siehe lineage.identify_mothers().
 STABLE_MOTHER_MIN_COVERAGE = 0.15
@@ -271,6 +283,10 @@ METHOD_CAVEATS: list[str] = [
     "intern mit PX_TO_UM2 (1 µm = 13.63 px) in µm² um.",
     "Kammerposition und Bedingung sind durch die Chip-Verdrahtung konfundiert (A1/A2 Feast, "
     "A13/A14 Famine, A3-A12 Wechsel).",
+    "KNOSPEN-GROESSENKRITERIUM: eine neu auftauchende Zelle zaehlt nur als Knospe, wenn ihre "
+    "Flaeche beim ersten Auftreten hoechstens Schwelle x Mutterflaeche ist; groessere gelten als "
+    "angespuelte Blastokonidien. EINE Schwelle fuer alle Zweige, aus den Daten (Antimodus), "
+    "Rueckfall BUD_MAX_AREA_FRACTION_FALLBACK - siehe 20_bud_size_threshold.csv.",
 ]
 
 
@@ -309,6 +325,8 @@ def log_active_configuration() -> None:
                 ", ".join(f"{p:g}" for p in unresolved),
             )
     logger.info("  LINEAGE_PARAMS:   %s", LINEAGE_PARAMS)
+    logger.info("  Knospen-Groessenkriterium: Schwelle aus den Daten, Rueckfall %.2f, plausibel %s",
+                BUD_MAX_AREA_FRACTION_FALLBACK, BUD_SIZE_PLAUSIBLE_RANGE)
     logger.info("  MU_MAX_THRESHOLD: %s h^-1", MU_MAX_THRESHOLD)
 
     for name, (active, documented, why) in DOCUMENTED_DEFAULTS.items():

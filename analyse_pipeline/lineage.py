@@ -70,6 +70,18 @@ Frames sichtbar?) statt über ihre finale, rückblickende Gesamttracklänge.
 noch eine Report-Markierung (`bud_was_washed_out` im Ergebnis). Dadurch
 werden auch Buds erkannt, die selbst zu Müttern heranwachsen - die
 Mutter-Tochter-Kette bricht nicht mehr künstlich nach einer Generation ab.
+
+GROESSENKRITERIUM (angespuelte Zellen sind keine Knospen):
+In den Kammern werden laufend Blastokonidien aus anderen Kammern angespuelt.
+Sie tauchen "neu" auf, oft direkt neben einer sitzenden Zelle, und bestehen
+damit die raeumliche Zuordnung wie eine Knospe - sind aber beim ersten
+Auftreten etwa so gross wie die vermeintliche Mutter, waehrend eine echte
+Knospe deutlich kleiner beginnt. Deshalb wird pro Kandidat das Verhaeltnis
+bud_area / mother_area beim ersten Auftreten berechnet (Spalte
+bud_area_fraction), und ein Kandidat oberhalb der Schwelle wird verworfen.
+Die Schwelle kommt aus den Daten (bud_size.py: Antimodus der zweigipfligen
+Verteilung, Rueckfallwert aus config.py) und wird von run_analysis.py als
+bud_size_threshold uebergeben; ohne Schwelle (None) greift kein Filter.
 """
 
 from __future__ import annotations
@@ -93,6 +105,7 @@ class LineageParams:
     bud_max_frames: int = 5          # NUR NOCH Report-Schwelle: kennzeichnet im Ergebnis, ob der Bud vermutlich weggespuelt wurde (bud_was_washed_out). Filtert NICHT mehr, ob ein Event erkannt wird - siehe Modul-Docstring "FIX".
     established_min_frames: int = 3  # NEU, kausal: wie viele Frames muss eine Zelle VOR einem moeglichen Bud-Auftauchen schon sichtbar gewesen sein, um als Mutter-KANDIDAT fuer das raeumliche Matching zu gelten. Bewusst klein gehalten (nicht mother_min_frames!), sonst waere das exakt derselbe Bug nur mit anderem Namen. Sollte gross genug sein, um Tracking-Rauschen im allerersten Frame einer Zelle abzufangen, aber klein genug, um schnelle Folge-Ereignisse nicht zu verpassen.
     tolerance_px: float = 30.0       # Zusätzlicher Puffer zum adaptiven Mutter-Radius (in Pixeln)
+    bud_max_area_fraction: Optional[float] = None  # Groessenkriterium: ein Kandidat zaehlt nur als Knospe, wenn bud_area / mother_area beim ersten Auftreten <= dieser Wert ist. None = kein Filter, solange classify_mother_bud() keine Schwelle uebergeben bekommt (run_analysis.py leitet sie aus den Daten ab, siehe bud_size.py). Ein fester Wert hier ist der Weg fuer inspect_lineage.py, wenn keine abgeleitete Schwelle vorliegt.
 
 
 @dataclass
@@ -120,6 +133,7 @@ def classify_mother_bud(
     df: pd.DataFrame,
     params: Optional[LineageParams] = None,
     flux_config: Optional[FluxChannelConfig] = None,
+    bud_size_threshold: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Identifiziert Budding-Events basierend auf räumlicher Nähe (adaptiver,
@@ -137,6 +151,11 @@ def classify_mother_bud(
          (Spalte 'pre_budding_flux' fehlt dann in der Ausgabe) - praktisch
          für intensiometrische Sensoren oder wenn der Flux (noch) nicht
          interessiert.
+    bud_size_threshold : Groessenkriterium (siehe Modul-Docstring). Falls
+         None, gilt params.bud_max_area_fraction; ist auch das None (oder
+         die Schwelle unendlich), wird KEIN Kandidat wegen seiner Groesse
+         verworfen. Verworfene Kandidaten erscheinen nicht in der Ausgabe,
+         ihre Zahl steht im Log.
 
     Returns
     -------
@@ -144,6 +163,9 @@ def classify_mother_bud(
         exp_id, mother_track_id, mother_cell_uid, bud_track_id, bud_cell_uid,
         budding_frame, mother_area, mother_eccentricity (falls vorhanden),
         distance_px, adaptive_radius_px, pre_budding_flux (falls flux_config gesetzt),
+        bud_area, bud_area_fraction (Flaeche des Buds beim ersten Auftreten,
+            absolut und relativ zur Mutter), bud_size_threshold (die
+            angewandte Schwelle, NaN = kein Groessenfilter),
         bud_final_track_length, bud_was_washed_out (finale Gesamttracklaenge
             des Buds bzw. ob sie <= bud_max_frames liegt - reine Report-Info,
             siehe Modul-Docstring "FIX"),
@@ -156,6 +178,11 @@ def classify_mother_bud(
     """
     if params is None:
         params = LineageParams()
+
+    threshold = bud_size_threshold if bud_size_threshold is not None else params.bud_max_area_fraction
+    apply_size = threshold is not None and np.isfinite(threshold)
+    if apply_size:
+        threshold = float(threshold)
 
     required_cols = {"exp_id", "cell_uid", "frame", "centroid_x", "centroid_y", "area"}
     missing = required_cols - set(df.columns)
@@ -176,6 +203,7 @@ def classify_mother_bud(
     results = []
     n_unassigned_buds = 0
     n_total_bud_candidates = 0
+    n_rejected_by_size = 0
 
     for exp_id, group in df.groupby("exp_id"):
         group = group.sort_values("frame")
@@ -253,6 +281,16 @@ def classify_mother_bud(
             best_mom_idx = valid_indices[dists[valid_indices].argmin()]
             mom_row = moms_in_frame.loc[best_mom_idx]
 
+            # Groessenkriterium: Flaeche des Kandidaten beim ERSTEN Auftreten
+            # relativ zur Mutter. Eine Knospe beginnt klein; eine angespuelte
+            # Zelle ist etwa so gross wie die Zelle, neben der sie landet.
+            bud_area = float(bud_group["area"].iloc[0])
+            mother_area = float(mom_row["area"])
+            bud_area_fraction = bud_area / mother_area if mother_area > 0 else np.nan
+            if apply_size and bud_area_fraction > threshold:
+                n_rejected_by_size += 1
+                continue
+
             bud_final_length = int(track_lengths[bud_tid])
             mother_final_length = int(track_lengths[mom_row["cell_uid"]])
 
@@ -264,6 +302,8 @@ def classify_mother_bud(
                 "mother_area": mom_row["area"],
                 "distance_px": dists[best_mom_idx],
                 "adaptive_radius_px": radii[best_mom_idx],
+                "bud_area": bud_area,
+                "bud_area_fraction": bud_area_fraction,
                 "bud_final_track_length": bud_final_length,
                 "bud_was_washed_out": bud_final_length <= params.bud_max_frames,
                 "mother_is_canonical_mother": mother_final_length >= params.mother_min_frames,
@@ -284,6 +324,15 @@ def classify_mother_bud(
             results.append(record)
 
     out = pd.DataFrame(results)
+    if not out.empty:
+        out["bud_size_threshold"] = threshold if apply_size else np.nan
+
+    if apply_size and n_total_bud_candidates > 0:
+        logger.info(
+            "Groessenkriterium: %d von %d Bud-Kandidaten verworfen (Flaeche beim ersten "
+            "Auftreten > %.2f x Mutterflaeche) - mutmasslich angespuelte Zellen, keine Knospen.",
+            n_rejected_by_size, n_total_bud_candidates, threshold,
+        )
 
     if n_total_bud_candidates > 0 and n_unassigned_buds > 0:
         logger.warning(
@@ -534,7 +583,8 @@ def inspect_classification(lineage_events: pd.DataFrame, cells: pd.DataFrame, ex
     print(f"exp_id = {exp_id}  (insgesamt {n_frames} Frames in dieser Kammer, {len(sub)} Budding-Events erkannt)")
     cols = [c for c in [
         "mother_track_id", "bud_track_id", "budding_frame",
-        "distance_px", "adaptive_radius_px", "mother_area", "pre_budding_flux",
+        "distance_px", "adaptive_radius_px", "mother_area", "bud_area", "bud_area_fraction",
+        "pre_budding_flux",
         "bud_final_track_length", "bud_was_washed_out", "mother_is_canonical_mother",
     ] if c in sub.columns]
     return sub[cols].sort_values("budding_frame")

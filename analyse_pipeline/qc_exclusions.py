@@ -20,9 +20,12 @@ pflegst. Jede Zeile sagt entweder:
       nicht ausschließen." (merge_into_track_id gesetzt)
 
 Beim Laden der Analyse-Daten wird diese Tabelle gegen cell_uid gejoint.
-TRACK-MERGES MÜSSEN VOR EXCLUSIONS angewendet werden (siehe
-apply_track_merges() vs. apply_qc_exclusions()) - die empfohlene Reihenfolge
-ist im Hauptskript (run_analysis.py) bereits so vorgesehen.
+REIHENFOLGE (run_analysis.py): Exclusions, dann Track-Merges, dann noch
+einmal Exclusions. Vorher, weil ein Ausschluss auf dem QUELL-Track nur
+greift, solange der Track noch seinen alten Namen hat; nachher, weil ein
+Ausschluss auf dem ZIEL-Track auch die hineingemergten Frames treffen soll.
+Ausschluesse sind idempotent, der zweite Durchlauf aendert sonst nichts.
+Merges muessen in jedem Fall VOR der Lineage-Klassifikation liegen.
 
 Spalten der qc_exclusions.csv
 ------------------------------
@@ -30,8 +33,8 @@ cell_uid            - eindeutige ID des BETROFFENEN Tracks: biosensor__osc_type_
 reason              - Freitext, z.B. "Debris, keine echte Zelle", "Tracking-Fehler ab Frame 40"
 excluded_by          - wer hat den Eintrag vorgenommen (Kürzel/Name), für Nachvollziehbarkeit
 excluded_on          - Datum (ISO, YYYY-MM-DD)
-frame_from           - optional: nur ab diesem Frame ausschließen (leer = alle Frames). NICHT für Merges relevant.
-frame_to             - optional: nur bis zu diesem Frame ausschließen (leer = bis Ende). NICHT für Merges relevant.
+frame_from           - optional: nur ab diesem Frame ausschließen (leer = alle Frames). Bei Merges: nur ab diesem Frame der Quelle ins Ziel uebernehmen.
+frame_to             - optional: nur bis zu diesem Frame ausschließen (leer = bis Ende). Bei Merges: nur bis zu diesem Frame der Quelle ins Ziel uebernehmen.
 merge_into_track_id  - optional: NUR für Track-Merges gesetzt. Die track_id
                        (innerhalb derselben exp_id!), in die cell_uid umbenannt/
                        verschmolzen werden soll. Wenn gesetzt, wird reason
@@ -42,6 +45,16 @@ Track ab Frame 40 mit einem Nachbarn verschmilzt, aber bis dahin valide war,
 muss nicht der ganze Track raus. (Für den Fall, dass ein Track-BRUCH - nicht
 Verschmelzung mit einer ANDEREN Zelle - korrigiert werden soll, ist
 merge_into_track_id der richtige Mechanismus, nicht frame_from/frame_to.)
+
+Mit frame_from/frame_to UND merge_into_track_id wird ein Track AUFGETEILT:
+hat der Tracker nacheinander zwei verschiedene Zellen unter einer track_id
+gefuehrt (Sprung), gehoeren die Frames vor dem Sprung zur einen und die
+danach zur anderen Zelle. Zwei Merge-Zeilen fuer dieselbe cell_uid mit
+disjunkten Frame-Bereichen und verschiedenen Zielen fuehren beide Teile
+ihrem richtigen Track zu (find_qc_conflicts() nennt das 'split_merge' und
+markiert es als ausgefuehrt). Zwei Merge-Zeilen OHNE Bereiche sind dagegen
+ein Widerspruch ('double_merge'): die erste gewinnt, die zweite wird
+verworfen.
 """
 
 from __future__ import annotations
@@ -174,6 +187,8 @@ def add_track_merge(
     merge_into_track_id: int,
     reason: str,
     merged_by: str,
+    frame_from: Optional[int] = None,
+    frame_to: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     Markiert track_id als Teil von merge_into_track_id (z.B. weil die Zelle
@@ -181,8 +196,8 @@ def add_track_merge(
     begonnen hat - das sähe sonst wie ein neuer Bud aus, ist aber dieselbe
     Zelle). NICHT-DESTRUKTIV: die Rohdaten werden nicht verändert, die
     Korrektur lebt ausschließlich in qc_exclusions.csv. Anwendung beim
-    Laden über apply_track_merges() - VOR apply_qc_exclusions() und vor
-    jeglicher Lineage-Klassifikation aufrufen.
+    Laden über apply_track_merges() - vor jeglicher Lineage-Klassifikation
+    (run_analysis.py: Exclusions, Merges, Exclusions).
 
     WICHTIG: track_id und merge_into_track_id müssen INNERHALB DERSELBEN
     Kammer (exp_id) liegen - ein Merge über Kammern hinweg ist biologisch
@@ -200,6 +215,10 @@ def add_track_merge(
             reason="Tracking-Bruch durch starke Zellbewegung, Frame 15->16, gleiche Zelle",
             merged_by="MK",
         )
+
+    frame_from/frame_to (optional) beschraenken den Merge auf diese Frames
+    der Quelle. Zwei Aufrufe mit disjunkten Bereichen und verschiedenen
+    Zielen teilen einen Track mit Tracker-Sprung auf (siehe Modul-Docstring).
     """
     path = Path(path)
     if not path.exists():
@@ -218,8 +237,8 @@ def add_track_merge(
         "reason": reason,
         "excluded_by": merged_by,
         "excluded_on": date.today().isoformat(),
-        "frame_from": np.nan,
-        "frame_to": np.nan,
+        "frame_from": frame_from if frame_from is not None else np.nan,
+        "frame_to": frame_to if frame_to is not None else np.nan,
         "merge_into_track_id": merge_into_track_id,
     }])
 
@@ -239,10 +258,16 @@ def apply_track_merges(df: pd.DataFrame, exclusions: pd.DataFrame) -> pd.DataFra
     als Teil des Ziel-Tracks erscheint - so, als hätte die Bildverarbeitung
     von Anfang an EINEN durchgängigen Track erkannt.
 
-    MUSS vor apply_qc_exclusions() UND vor jeglicher Lineage-Klassifikation
-    (lineage.classify_mother_bud) aufgerufen werden, sonst sieht die
-    Heuristik weiterhin zwei getrennte Tracks und der Tracking-Bruch wird
-    fälschlich als neuer Bud interpretiert.
+    MUSS vor jeglicher Lineage-Klassifikation (lineage.classify_mother_bud)
+    aufgerufen werden, sonst sieht die Heuristik weiterhin zwei getrennte
+    Tracks und der Tracking-Bruch wird fälschlich als neuer Bud
+    interpretiert. run_analysis.py wendet die Exclusions davor UND danach an
+    (siehe Modul-Docstring).
+
+    FRAME-BEREICH: frame_from/frame_to auf einer Merge-Zeile beschraenken den
+    Merge auf diese Frames der Quelle. So wird ein Track, der nacheinander
+    zwei verschiedene Zellen verfolgt hat (Tracker-Sprung), mit zwei Zeilen
+    und disjunkten Bereichen auf seine zwei richtigen Ziele aufgeteilt.
 
     SICHERHEITSPRÜFUNG: wenn Quell- und Ziel-Track sich in mindestens einem
     Frame ÜBERLAPPEN (beide gleichzeitig vorhanden), ist der Merge
@@ -300,6 +325,20 @@ def apply_track_merges(df: pd.DataFrame, exclusions: pd.DataFrame) -> pd.DataFra
             n_rejected += 1
             continue
 
+        # Frame-Bereich auf der Quelle: nur diese Frames wandern ins Ziel.
+        # So laesst sich ein Track, der zwei echte Zellen nacheinander
+        # verfolgt hat, AUFTEILEN (zwei Merge-Zeilen mit disjunkten Bereichen).
+        lo = row["frame_from"] if "frame_from" in row and pd.notna(row["frame_from"]) else -np.inf
+        hi = row["frame_to"] if "frame_to" in row and pd.notna(row["frame_to"]) else np.inf
+        if lo != -np.inf or hi != np.inf:
+            src_mask = src_mask & (df["frame"] >= lo) & (df["frame"] <= hi)
+            if not src_mask.any():
+                logger.warning(
+                    "Track-Merge übersprungen: '%s' hat keine Frames im Bereich %s-%s.",
+                    row["cell_uid"], lo, hi,
+                )
+                n_rejected += 1
+                continue
         src_frames = set(df.loc[src_mask, "frame"])
         dst_frames = set(df.loc[dst_mask, "frame"])
         overlap = src_frames & dst_frames
@@ -317,7 +356,8 @@ def apply_track_merges(df: pd.DataFrame, exclusions: pd.DataFrame) -> pd.DataFra
         df.loc[src_mask, "track_id"] = dst_tid
         df.loc[src_mask, "cell_uid"] = dst_cell_uid
         n_applied += 1
-        logger.info("Track-Merge angewendet: '%s' -> '%s'", row["cell_uid"], dst_cell_uid)
+        logger.info("Track-Merge angewendet: '%s' -> '%s'%s", row["cell_uid"], dst_cell_uid,
+                    f" (Frames {lo:g}-{hi:g})" if (lo != -np.inf or hi != np.inf) else "")
 
     logger.info("Track-Merges: %d angewendet, %d abgelehnt/übersprungen.", n_applied, n_rejected)
     return df
@@ -482,16 +522,14 @@ def find_qc_conflicts(exclusions: pd.DataFrame) -> pd.DataFrame:
     """Zeilen der QC-Datei, die mehrfach denselben Track betreffen - mit der FOLGE, die
     apply_track_merges()/apply_qc_exclusions() daraus machen.
 
-      split_merge        derselbe Track wird in zwei Ziele gemergt, mindestens eine Zeile
-                         mit frame_from/frame_to. Das ist als Aufteilung GEMEINT - aber
-                         apply_track_merges() ignoriert Frame-Bereiche bei Merges: die
-                         erste Zeile mergt den GANZEN Track (oder wird bei Frame-Ueber-
-                         lappung abgelehnt), die zweite findet ihre Quelle nicht mehr.
+      split_merge        derselbe Track wird in zwei Ziele gemergt, mit frame_from/frame_to:
+                         eine Aufteilung. apply_track_merges() verschiebt je Zeile nur den
+                         angegebenen Frame-Bereich - das wird ausgefuehrt.
       double_merge       zwei Ziele OHNE Frame-Bereiche: echter Widerspruch. Erste Zeile
                          gewinnt, zweite wird verworfen.
-      merge_and_exclude  gemergt UND ausgeschlossen. Merges laufen zuerst und benennen
-                         cell_uid um; der Ausschluss sucht danach den alten Namen, findet
-                         nichts und geht VERLOREN (im Log als 'unmatched').
+      merge_and_exclude  gemergt UND ausgeschlossen. run_analysis.py wendet Ausschluesse
+                         VOR den Merges (auf die urspruengliche cell_uid) und danach noch
+                         einmal an - beides wird ausgefuehrt.
       redundant_exclusion zwei Ausschluss-Zeilen mit verschiedenen Gruenden: harmlos,
                          beide loeschen dieselben Zeilen.
       duplicate          identische Zeile zweimal: harmlos.
@@ -509,10 +547,9 @@ def find_qc_conflicts(exclusions: pd.DataFrame) -> pd.DataFrame:
         if c in df.columns:
             has_range |= df[c].notna()
     consequences = {
-        "split_merge": "INTENDED SPLIT, NOT EXECUTED: apply_track_merges() ignores frame ranges - "
-                       "first row merges the whole track (or is rejected on overlap), second row is rejected",
+        "split_merge": "intended split: each row moves only its frame range into its target (executed)",
         "double_merge": "contradiction: first row wins, second row rejected",
-        "merge_and_exclude": "EXCLUSION LOST: merge renames cell_uid first, exclusion then finds no rows",
+        "merge_and_exclude": "exclusion applied BEFORE the merge on the original cell_uid, then the rest merged (executed)",
         "redundant_exclusion": "harmless: both rows exclude the same track",
         "duplicate": "harmless: identical rows",
     }
@@ -539,7 +576,7 @@ def find_qc_conflicts(exclusions: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(records)
     if not out.empty:
         counts = out.groupby("kind")["cell_uid"].nunique().to_dict()
-        serious = {k: v for k, v in counts.items() if k in ("split_merge", "double_merge", "merge_and_exclude")}
+        serious = {k: v for k, v in counts.items() if k in ("double_merge",)}
         logger.warning(
             "QC-DATEI: %d Tracks sind mehrfach gelistet (%s). Davon NICHT wie beabsichtigt ausgefuehrt: %s. "
             "Details und Zeilennummern in 70_qc_exclusions_conflicts.csv.",

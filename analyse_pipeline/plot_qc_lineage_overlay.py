@@ -371,8 +371,9 @@ def find_unassigned_bud_candidates(
     Spiegelt die Kandidaten-Definition aus lineage.classify_mother_bud():
     jede Zelle, die NACH dem ersten Frame der Kammer neu auftaucht, ist ein
     Kandidat. Wer davon in lineage_events nicht als 'bud_cell_uid' vorkommt,
-    wurde keiner Mutter zugeordnet und fehlt damit in Budding Ratio, µ_event
-    und im Stammbaum.
+    wurde keiner Mutter zugeordnet ODER vom Groessenkriterium verworfen (beim
+    ersten Auftreten zu gross fuer eine Knospe, siehe bud_size.py) und fehlt
+    damit in Budding Ratio, µ_event und im Stammbaum.
 
     classify_mother_bud() zählt diese Fälle nur als eine Gesamtzahl über ALLE
     Kammern ins Log. Für die Kalibrierung ist aber genau interessant, WO im
