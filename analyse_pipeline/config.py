@@ -90,8 +90,9 @@ MIN_PER_FRAME = 10.0  # Minuten pro Frame
 # Alias-Artefakt, nicht der Medienwechsel.
 #
 # Die Oszillation ist damit eine BEHANDLUNG, keine Messgroesse: bei gleicher
-# Gesamtdauer erfahren die Bedingungen ~800 (0.75 min) bis ~25 (24 min)
-# Zyklen in 10 h - ein 32-facher Dosisbereich bei identischer Gesamt-Feast-
+# Gesamtdauer erfahren die Bedingungen ~1600 (0.75 min) bis ~50 (24 min)
+# Zyklen in ~20 h Oszillation (Aufnahmen: ~133 Frames a 10 min = ~22 h) - ein
+# 32-facher Dosisbereich bei identischer Gesamt-Feast-
 # und Gesamt-Famine-Zeit. Interpretiert werden kann entsprechend nur die
 # KUMULATIVE Wirkung ueber Stunden, nicht der Verlauf innerhalb eines Zyklus.
 OSC_FREQ_IS_PERIOD_IN_MINUTES = True

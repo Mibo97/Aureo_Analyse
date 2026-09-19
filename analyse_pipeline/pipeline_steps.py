@@ -403,11 +403,11 @@ def step_10_growth(ctx: PipelineContext) -> None:
                              if c in area_table.columns], dropna=False)["fit_is_reliable"]
                         .mean().reset_index(name="frac_fit_reliable"))
                 area_rep_summary = area_rep_summary.merge(frac, how="left")
-            area_rep.to_csv(output_dir / "12_area_growth_rate_per_replicate.csv", index=False)
-            area_rep_summary.to_csv(output_dir / "12_area_growth_rate_summary_per_replicate.csv",
+            area_rep.to_csv(output_dir / "12_area_growth_rate_per_chip.csv", index=False)
+            area_rep_summary.to_csv(output_dir / "12_area_growth_rate_summary_per_chip.csv",
                                     index=False)
-            logger.info("Tabellen gespeichert: 12_area_growth_rate_per_replicate.csv / "
-                        "_summary_per_replicate.csv")
+            logger.info("Tabellen gespeichert: 12_area_growth_rate_per_chip.csv / "
+                        "_summary_per_chip.csv")
 
             plot_point_errorbar(
                 exclude_controls(area_rep_summary), value_col="mean", sd_col="sem",
