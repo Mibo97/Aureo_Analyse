@@ -1,30 +1,19 @@
 """
 inspect_runs.py
 ===============
-Welche Kammer stammt aus welchem Chip-Lauf? Vorlage fuer run_map.csv erzeugen.
+Diagnose: welche Kammer traegt welches Datum, und wie oft kommt eine
+Kammerposition innerhalb eines Batches vor?
 
-WARUM
------
-Die Spalte 'replicate' (Rep1, Rep2, ...) ist ein Index ueber die ausgewerteten
-Kammern, KEIN biologisches Replikat: mehrere Reps koennen vom selben Chip am
-selben Tag stammen. Die biologische Einheit ist der Chip-Lauf, und die einzige
-Stelle, an der er in den Daten steckt, ist das Datum am Anfang von 'filename'
-(z.B. '260616_Osc1.5_NegCtrl_Rep1_ChamA13' -> 260616).
-
-Zwei Laeufe koennen aber am selben Tag stattfinden. Das Datum allein reicht
-also nicht - es braucht eine 'run'-Spalte, die im Zweifel aus dem Laborbuch
-kommt. Dieses Skript schreibt dafuer eine VORLAGE mit vorbelegtem Datum und
-markiert die Faelle, in denen ein Datum sicher mehr als einen Lauf enthaelt:
-dieselbe Kammerposition (z.B. ChamA13) zweimal am selben Tag in derselben
-Bedingung kann nicht ein Lauf sein.
+Dieses Skript hat die Versuchsstruktur aufgedeckt (siehe experiment_units.py):
+jede Kammerposition (z.B. ChamA13) kommt innerhalb eines Batch-Tages mehrfach
+vor, weil ein Chip mehrere Arrays hat - und ALLE Kammern eines Batches liegen
+auf EINEM Chip. Damit ist der Chip aus den Metadaten ableitbar
+(experiment_units.add_experiment_units()), und die hier geschriebene Vorlage
+run_map_template.csv wird von der Pipeline NICHT eingelesen. Sie bleibt als
+Laborbuch-Abgleich nuetzlich: Datum pro Kammer, markierte Mehrfachpositionen.
 
     python inspect_runs.py                # Pfade aus config.py
     -> analysis_output/run_map_template.csv
-
-Danach: die Spalte 'run' pruefen bzw. ergaenzen (z.B. '260616a', '260616b'
-bei zwei Laeufen an einem Tag), die Datei als analysis_output/run_map.csv
-speichern. run_analysis.py liest sie ein und aggregiert dann auf Chip-Laeufe
-statt auf den Kammer-Index.
 """
 
 from __future__ import annotations

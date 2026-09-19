@@ -256,23 +256,20 @@ DOCUMENTED_DEFAULTS: dict[str, tuple[object, object, str]] = {
 # Methodische Eigenheiten, die kein einzelner Zahlenwert sind, aber beim Lesen
 # der Ergebnistabellen bekannt sein müssen.
 METHOD_CAVEATS: list[str] = [
-    "summarise_growth_rate() und summarise_area_growth() aggregieren über EINZELNE "
-    "Zellen/Intervalle, nicht erst pro Replikat. sd_mu/sd_mu_area und n_values in "
-    "11_*_summary.csv und 12_*_summary_*.csv beschreiben daher die Streuung über Zellen "
-    "(Pseudoreplikation), nicht über biologische Replikate. "
-    "analysis._aggregate_over_replicates() (Schritte 10/30/31) und "
-    "queen_controls.summarise_sensor_controls() (Schritt 95) gruppieren dagegen auf "
-    "'replicate' und mitteln korrekt.",
-    "aggregate_robustness_over_replicates() (alle 40_*_aggregated) aggregiert dreistufig "
-    "Frame -> Kammer -> Replikat (replicate_id_col='replicate'). n_replicates nennt damit "
-    "die echte Replikatzahl und sd die Streuung ZWISCHEN Replikaten. Bei 3 Replikaten ist "
-    "sd allerdings schlecht geschaetzt - die Fehlerbalken werden dadurch breiter und "
-    "ehrlicher, nicht enger. Die alte Kammer-Ebene gibt es mit replicate_id_col='exp_id'.",
-    "Robustness R ist eine RELATIVE Größe: der Normalisierungsfaktor m wird über den "
-    "GESAMTEN übergebenen Datensatz gebildet. R-Werte aus Läufen mit unterschiedlichem "
-    "Datenumfang sind nicht miteinander vergleichbar (siehe robustness.py).",
-    "'area' in den Zelltabellen ist die rohe Cellpose-Fläche in px². Nur area_growth.py "
-    "rechnet intern mit PX_TO_UM2 (1 µm = 13.63 px) in µm² um.",
+    "VERSUCHSEINHEITEN: pro (Stamm, osc_type, Periode) gibt es EINEN Chip aus EINER Vorkultur; "
+    "'replicate' ist ein Array-Index, kein Replikat. Innerhalb einer Oszillationsbedingung gibt "
+    "es keine biologische Replikation (n = 1 Chip). Fehlerbalken dort sind Kammer-Fehlerbalken - "
+    "siehe Spalte 'error_unit' in den Aggregaten. Statisch: jedes 'replicate' ist ein Chip.",
+    "summarise_growth_rate() und summarise_area_growth() aggregieren ueber EINZELNE Zellen/"
+    "Intervalle (11_*_summary.csv, 12_*_summary_*.csv): sd_mu/sd_mu_area sind Streuung ueber Zellen.",
+    "Spearman gegen die Periode laeuft auf Chip-Mittelwerten (n = Zahl der Perioden) und ist bei "
+    "n <= 6 eine Effektstaerke, kein Test. Die Staemme werden nicht als Replikate gepoolt.",
+    "Robustness R ist RELATIV (Normalisierung ueber den uebergebenen Datensatz): R-Werte aus "
+    "analysis_output/, static/, pko/ und no_qc/ sind nicht gegeneinander lesbar.",
+    "'area' in den Zelltabellen ist die rohe Cellpose-Flaeche in px². Nur area_growth.py rechnet "
+    "intern mit PX_TO_UM2 (1 µm = 13.63 px) in µm² um.",
+    "Kammerposition und Bedingung sind durch die Chip-Verdrahtung konfundiert (A1/A2 Feast, "
+    "A13/A14 Famine, A3-A12 Wechsel).",
 ]
 
 
