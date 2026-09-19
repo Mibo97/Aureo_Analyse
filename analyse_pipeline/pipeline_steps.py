@@ -55,12 +55,17 @@ from config import (
     ROBUSTNESS_VALUE_COLS,
     ENDPOINT_LAST_FRACTION,
     ENDPOINT_VALUE_COLS,
+    STATIC_SATURATION_LEVEL,
+    STATIC_SATURATION_SMOOTH_FRAMES,
+    STATIC_SATURATION_MIN_GROWTH,
 )
 from endpoint_trends import (
     compute_endpoint_per_replicate,
     summarise_per_replicate,
     spearman_against_period,
     plot_endpoint_vs_period,
+    detect_saturation_frame,
+    static_endpoint_window,
 )
 from sensors import SENSOR_CONFIG
 from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
@@ -173,6 +178,10 @@ class PipelineContext:
     # Schritte 10 und 40 fuer die statischen Daten komplett ausfielen.
     x_col: str = "osc_freq"
     facet_col: str = "osc_type"
+    # Facette fuer Panel A und die Budding-Ratio-Zeitreihe. Oszillation:
+    # osc_type. Statisch: Chip-Familie (W109/W65), damit die beiden Chips
+    # nebeneinander stehen statt in einer Facette 'Static' zu verschwinden.
+    panel_a_facet_col: str = PANEL_A_FACET_COL
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -434,13 +443,32 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                        list(ENDPOINT_VALUE_COLS) + ctx.ratio_cols)
         return
 
-    logger.info("Endzustand (letzte %.0f%% der Frames) wird gebildet fuer: %s",
-                100 * ENDPOINT_LAST_FRACTION, value_cols)
+    # Statischer Zweig: absolutes Fenster VOR der Saettigung (config.py,
+    # STATIC_SATURATION_*), sonst relatives Fenster (letzte 25 % je Kammer).
+    frame_window = None
+    if ctx.x_col != "osc_freq":
+        saturation = detect_saturation_frame(
+            cells, level=STATIC_SATURATION_LEVEL, smooth_frames=STATIC_SATURATION_SMOOTH_FRAMES,
+            min_growth=STATIC_SATURATION_MIN_GROWTH,
+        )
+        if not saturation.empty:
+            saturation.to_csv(output_dir / "13_endpoint_saturation_per_chamber.csv", index=False)
+            frame_window = static_endpoint_window(
+                saturation, last_fraction=ENDPOINT_LAST_FRACTION,
+                min_frame=int(round(OSCILLATION_START_MIN / MIN_PER_FRAME)),
+            )
+            logger.info(
+                "Schritt 13 (statisch): Endfenster = Frames %d-%d (vor der fruehesten "
+                "Saettigung; Details in 13_endpoint_saturation_per_chamber.csv).", *frame_window,
+            )
+    if frame_window is None:
+        logger.info("Endzustand (letzte %.0f%% der Frames je Kammer) wird gebildet fuer: %s",
+                    100 * ENDPOINT_LAST_FRACTION, value_cols)
 
     all_per_replicate, all_summary, all_trend = [], [], []
     for value_col in value_cols:
         per_replicate, summary = compute_endpoint_per_replicate(
-            cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION,
+            cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION, frame_window=frame_window,
         )
         if summary.empty:
             continue
@@ -450,10 +478,22 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         if not trend.empty:
             all_trend.append(trend)
 
-        plot_endpoint_vs_period(
-            summary, output_dir / f"13_endpoint_vs_period_{value_col}.pdf",
-            value_col=value_col, trend=trend, ylabel=f"{pretty_label(value_col)}\n(endpoint)",
-        )
+        if ctx.x_col == "osc_freq":
+            plot_endpoint_vs_period(
+                summary, output_dir / f"13_endpoint_vs_period_{value_col}.pdf",
+                value_col=value_col, trend=trend, ylabel=f"{pretty_label(value_col)}\n(endpoint)",
+            )
+        else:
+            # Kategoriale x-Achse (Medium), Facette Chip-Familie, Fehler ueber Chips.
+            plot_point_errorbar(
+                summary, value_col="mean", sd_col="sem",
+                out_path=output_dir / f"13_endpoint_vs_{ctx.x_col}_{value_col}.pdf",
+                x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
+                x_order=ctx.freq_order,
+                ylabel=f"{pretty_label(value_col)} (endpoint)",
+                title=f"{value_col}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]})\n"
+                      "mean ± SEM over chips" if frame_window else f"{value_col}: endpoint, mean ± SEM",
+            )
 
     if not all_summary:
         logger.warning("Schritt 13: kein Endzustand berechenbar - keine Dateien geschrieben.")
@@ -507,7 +547,7 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
-            group_col=ctx.panel_a_group_col, facet_col=PANEL_A_FACET_COL,
+            group_col=ctx.panel_a_group_col, facet_col=ctx.panel_a_facet_col,
         )
     else:
         logger.warning("compute_budding_ratio() lieferte keine per_mother-Tabelle - Panel A wird übersprungen.")
@@ -528,7 +568,7 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
     plot_budding_ratio_timeseries(
         exclude_controls(budding_ts), output_dir / "22_budding_ratio_timeseries.pdf",
-        group_col=PANEL_A_GROUP_COL, facet_col=PANEL_A_FACET_COL, freq_order=freq_order,
+        group_col=ctx.panel_a_group_col, facet_col=ctx.panel_a_facet_col, freq_order=freq_order,
     )
 
     # -- Lineage-Baum & Generationstiefe

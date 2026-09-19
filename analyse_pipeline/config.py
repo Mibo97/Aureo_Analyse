@@ -168,6 +168,20 @@ ENDPOINT_LAST_FRACTION = 0.25
 # dadurch bekommen die Sensor-Daten ueberhaupt eine kumulative Auswertung
 # (50_summary_statistics.csv sieht nur intensity_cols, nie die Ratios).
 ENDPOINT_VALUE_COLS = ["area", "eccentricity"]
+# Statische Daten: ypd waechst ueber (bis zu 4000 Tracks pro Kammer) und die
+# W109-ypd-Aufnahmen wurden bei 85 Frames abgebrochen. Ein relatives Endfenster
+# ("letzte 25 % der Frames") vergleicht dann eine ueberwachsene ypd-Kammer bei
+# 14 h mit einer normalen omlp-Kammer bei 22 h. Deshalb wird fuer den statischen
+# Zweig die Saettigung PRO KAMMER aus dem Zellzahl-Verlauf bestimmt, und das
+# Endfenster endet an der fruehesten Saettigung ueber alle Kammern.
+# endpoint_trends.detect_saturation_frame(): Saettigung = erster Frame, ab dem
+# die geglaettete Zellzahl >= STATIC_SATURATION_LEVEL x ihres Maximums bleibt.
+STATIC_SATURATION_LEVEL = 0.90
+STATIC_SATURATION_SMOOTH_FRAMES = 5
+# Nur Kammern, die ueberhaupt gewachsen sind (max/Start >= dieser Faktor),
+# koennen saettigen. Eine flache Kammer (omlp) liegt sonst von Anfang an bei
+# 90 % ihres Maximums und wuerde das Fenster auf die ersten Stunden ziehen.
+STATIC_SATURATION_MIN_GROWTH = 1.5
 
 # Zusatz-Zeile unter den Kontroll-Ticks in plot_sensor_control_comparison(),
 # PRO OSZILLATIONSTYP. Die Konzentrationen gelten nur für den Oszillationstyp,

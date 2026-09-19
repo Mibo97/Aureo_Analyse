@@ -375,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
             cells=cells_static, output_dir=OUTPUT_DIR_STATIC,
             freq_order=static_freq_order,
             # Medium auf der x-Achse, Chip-Familie (W109/W65) als Facette.
-            x_col="medium", facet_col="chip_family",
+            x_col="medium", facet_col="chip_family", panel_a_facet_col="chip_family",
             intensity_cols=[], ratio_cols=[],
             run_sensor_controls=False,
             run_control_consistency=len(static_freq_order) >= 2,

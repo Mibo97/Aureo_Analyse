@@ -123,19 +123,97 @@ def summarise_per_replicate(
     return per_chip, per_condition
 
 
+def detect_saturation_frame(
+    cells: pd.DataFrame,
+    level: float = 0.90,
+    smooth_frames: int = 5,
+    min_growth: float = 1.5,
+    chamber_col: str = "exp_id",
+    cell_id_col: str = "cell_uid",
+) -> pd.DataFrame:
+    """Pro Kammer: ab welchem Frame ist die Zellzahl gesaettigt?
+
+    Saettigung = erster Frame, ab dem die (rollend geglaettete) Zahl
+    verfolgbarer Zellen >= level x ihres Maximums liegt - aber NUR fuer
+    Kammern, die ueberhaupt gewachsen sind (Maximum / Startwert >= min_growth).
+    Eine flache Kammer liegt von Anfang an bei 90 % ihres Maximums und wuerde
+    sonst als 'sofort gesaettigt' das Fenster auf die ersten Stunden ziehen;
+    sie bekommt stattdessen ihren letzten Frame und begrenzt nichts. Eine
+    Kammer, die bis zum Ende waechst, saettigt erst nahe ihrem letzten Frame -
+    gewollt: begrenzend ist die Kammer, die FRUEH voll ist (ypd).
+
+    Rueckgabe: exp_id, n_frames, n_cells_max, saturation_frame, saturated_early
+    (True, wenn die Saettigung vor 75 % der Aufnahme liegt).
+    """
+    if cells is None or cells.empty or chamber_col not in cells.columns:
+        return pd.DataFrame()
+    counts = cells.groupby([chamber_col, "frame"])[cell_id_col].nunique().reset_index(name="n")
+    records = []
+    for exp_id, grp in counts.groupby(chamber_col):
+        grp = grp.sort_values("frame")
+        smooth = grp["n"].rolling(smooth_frames, center=True, min_periods=1).median()
+        peak = float(smooth.max())
+        start = float(smooth.iloc[0]) if smooth.iloc[0] > 0 else float("nan")
+        growth = peak / start if start and start == start else float("inf")
+        if growth >= min_growth:
+            hit = grp.loc[smooth >= level * peak, "frame"]
+            sat = int(hit.iloc[0]) if not hit.empty else int(grp["frame"].max())
+        else:
+            sat = int(grp["frame"].max())  # nicht gewachsen -> begrenzt das Fenster nicht
+        n_frames = int(grp["frame"].nunique())
+        records.append({chamber_col: exp_id, "n_frames": n_frames, "n_cells_max": int(grp["n"].max()),
+                        "growth_factor": round(growth, 2), "saturation_frame": sat,
+                        "saturated_early": growth >= min_growth and sat < 0.75 * (grp["frame"].max() + 1)})
+    out = pd.DataFrame(records)
+    meta_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "medium", "chip_family",
+                             "chip", "replicate"] if c in cells.columns]
+    if meta_cols:
+        out = out.merge(cells[[chamber_col] + meta_cols].drop_duplicates(chamber_col), on=chamber_col, how="left")
+    n_early = int(out["saturated_early"].sum())
+    logger.info(
+        "Saettigung bestimmt fuer %d Kammern; %d davon saettigen frueh (< 75 %% der Aufnahme). "
+        "Frueheste Saettigung: Frame %d.", len(out), n_early, int(out["saturation_frame"].min()),
+    )
+    return out
+
+
+def static_endpoint_window(
+    saturation: pd.DataFrame,
+    last_fraction: float = 0.25,
+    min_frame: int = 0,
+) -> tuple[int, int]:
+    """Absolutes Endfenster fuer den statischen Zweig.
+
+    Endet an der FRUEHESTEN Saettigung ueber alle Kammern (damit keine
+    ueberwachsene Kammer im Fenster liegt) und ist last_fraction dieser
+    Spanne breit; beginnt nie vor min_frame (Ende der Vorkonditionierung).
+    """
+    hi = int(saturation["saturation_frame"].min())
+    lo = max(min_frame, int(round(hi - last_fraction * hi)))
+    if hi - lo < 3:
+        logger.warning(
+            "static_endpoint_window(): das Fenster %d-%d ist sehr schmal - die frueheste "
+            "Saettigung liegt nahe der Vorkonditionierung. STATIC_SATURATION_LEVEL pruefen.", lo, hi,
+        )
+    return lo, hi
+
+
 def compute_endpoint_per_replicate(
     cells: pd.DataFrame,
     value_col: str,
     last_fraction: float = 0.25,
     group_cols: Optional[Sequence[str]] = None,
+    frame_window: Optional[tuple[int, int]] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Endzustand einer Bedingung: die letzten `last_fraction` der Frames.
+    """Endzustand einer Bedingung.
 
-    Das Fenster wird PRO KAMMER bestimmt (relativ zu deren eigenem
-    Frame-Bereich), nicht global - Kammern koennen unterschiedlich lang
-    aufgenommen sein.
+    Ohne frame_window: die letzten `last_fraction` der Frames PRO KAMMER
+    (relativ zu deren eigenem Frame-Bereich - Kammern koennen unterschiedlich
+    lang aufgenommen sein). Mit frame_window=(lo, hi): ein ABSOLUTES Fenster,
+    dasselbe fuer alle Kammern - fuer den statischen Zweig, wo ypd ueberwaechst
+    und das relative Fenster Unvergleichbares vergleichen wuerde.
 
-    Anschliessend laeuft dieselbe dreistufige Aggregation wie in
+    Anschliessend laeuft dieselbe hierarchische Aggregation wie in
     summarise_per_replicate().
     """
     if cells is None or cells.empty or value_col not in cells.columns:
@@ -159,10 +237,14 @@ def compute_endpoint_per_replicate(
         logger.warning("compute_endpoint_per_replicate(): 'exp_id' fehlt - uebersprungen.")
         return pd.DataFrame(), pd.DataFrame()
 
-    fmin = work.groupby(chamber_col)["frame"].transform("min")
-    fmax = work.groupby(chamber_col)["frame"].transform("max")
-    cutoff = fmax - (fmax - fmin + 1) * last_fraction
-    endpoint_rows = work[work["frame"] > cutoff]
+    if frame_window is not None:
+        lo, hi = frame_window
+        endpoint_rows = work[(work["frame"] >= lo) & (work["frame"] <= hi)]
+    else:
+        fmin = work.groupby(chamber_col)["frame"].transform("min")
+        fmax = work.groupby(chamber_col)["frame"].transform("max")
+        cutoff = fmax - (fmax - fmin + 1) * last_fraction
+        endpoint_rows = work[work["frame"] > cutoff]
     if endpoint_rows.empty:
         logger.warning(
             "compute_endpoint_per_replicate(): das Endfenster (letzte %.0f%% der Frames) ist "
