@@ -445,8 +445,8 @@ def main(argv: list[str] | None = None) -> int:
         # nicht zweimal laufen.
         try:
             run_pko_comparison(
-                cells_wt=cells_osc, cells_pko=cells_pko,
-                area_wt=osc_ctx.area_table, area_pko=pko_ctx.area_table,
+                cells_producers=cells_osc, cells_pko=cells_pko,
+                area_producers=osc_ctx.area_table, area_pko=pko_ctx.area_table,
                 output_dir=OUTPUT_DIR_PKO,
                 pko_biosensor=PKO_BIOSENSOR_NAME,
                 analysis_start_min=OSCILLATION_START_MIN,
