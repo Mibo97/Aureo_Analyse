@@ -226,6 +226,34 @@ LINEAGE_PARAMS = LineageParams(
 BUD_MAX_AREA_FRACTION_FALLBACK: float | None = None
 BUD_SIZE_PLAUSIBLE_RANGE = (0.15, 0.9)
 
+# Sparse-Phase-Lineage (relink.py). Der Tracker vergibt in diesen Daten mit
+# ~12 % pro Objekt und Frame eine neue ID; im vollen Bildfeld sind die
+# Budding-Events deshalb Fragment-Statistik (QC-Batch WT/pH/6: 462 "Events"
+# pro Kammer, 243 davon in den letzten 22 Frames, manuelles QC entfernte
+# 2.6 %). Die Mutter/Bud-Heuristik laeuft nur im Fenster, in dem das Feld
+# hoechstens LINEAGE_SPARSE_MAX_OBJECTS Objekte pro Frame hat (rollender
+# Median ueber LINEAGE_SPARSE_SMOOTH_FRAMES); Kammern mit weniger als
+# LINEAGE_SPARSE_MIN_FRAMES solcher Frames fallen aus der Lineage-Auswertung.
+# Alle anderen Auswertungen (Endzustand, µ_area, R) sehen weiterhin den
+# ganzen Lauf.
+LINEAGE_SPARSE_MAX_OBJECTS = 20
+LINEAGE_SPARSE_SMOOTH_FRAMES = 5
+LINEAGE_SPARSE_MIN_FRAMES = 20
+
+# Gap Closing (relink.py): ein neu beginnender Track wird an einen hoechstens
+# RELINK_MAX_GAP_FRAMES Frames vorher beendeten Track angehaengt, wenn Abstand
+# <= RELINK_MAX_DISTANCE_PX, Flaechenverhaeltnis in [1/r, r] und die Zuordnung
+# in beide Richtungen eindeutig ist. Kalibrierung am manuellen QC (238
+# Verknuepfungen): 71 % Luecke von 1 Frame, Sprung median 83 px, Verhaeltnis
+# median 1.04. Manuelle Merges laufen vorher und haben Vorrang.
+RELINK_MAX_GAP_FRAMES = 2
+RELINK_MAX_DISTANCE_PX = 150.0
+RELINK_MAX_AREA_RATIO = 2.0
+
+# µ_area: Mindest-Tracklaenge fuer einen ln(Flaeche)-Fit. Der Default der
+# Funktion (2 Frames) fittete ueberwiegend Fragmente.
+AREA_GROWTH_MIN_FRAMES = 10
+
 # Detail-Trajektorien "stabiler" Mütter (Schritt 92, Anhang):
 # coverage = n_frames / (frame_max - frame_min + 1), siehe lineage.identify_mothers().
 STABLE_MOTHER_MIN_COVERAGE = 0.15
@@ -289,6 +317,11 @@ METHOD_CAVEATS: list[str] = [
     "intern mit PX_TO_UM2 (1 µm = 13.63 px) in µm² um.",
     "Kammerposition und Bedingung sind durch die Chip-Verdrahtung konfundiert (A1/A2 Feast, "
     "A13/A14 Famine, A3-A12 Wechsel).",
+    "SPARSE-PHASE-LINEAGE: Budding Ratio, µ_event, Stammbaum und die Mutter/Knospe-Trennung "
+    "stammen NUR aus dem Fenster je Kammer mit <= LINEAGE_SPARSE_MAX_OBJECTS Objekten pro Frame "
+    "(20_lineage_window.csv). Im vollen Feld vergibt der Tracker ~12 %% neue IDs pro Objekt und "
+    "Frame, und die Events sind Fragment-Statistik (00_track_fragmentation.csv). Vorher werden "
+    "eindeutige Tracking-Luecken automatisch geschlossen (00_track_relinks.csv).",
     "KNOSPEN-GROESSENKRITERIUM: eine neu auftauchende Zelle zaehlt nur als Knospe, wenn ihre "
     "Flaeche beim ersten Auftreten hoechstens Schwelle x Mutterflaeche ist. EINE Schwelle fuer "
     "alle Zweige, aus den Daten (Antimodus); ist die Verteilung nicht zweigipflig, greift KEIN "
@@ -331,6 +364,10 @@ def log_active_configuration() -> None:
                 ", ".join(f"{p:g}" for p in unresolved),
             )
     logger.info("  LINEAGE_PARAMS:   %s", LINEAGE_PARAMS)
+    logger.info("  Sparse-Phase-Lineage: <= %d Objekte/Frame (Median ueber %d Frames), min. %d Frames; "
+                "Gap Closing: Luecke <= %d Frames, <= %.0f px, Flaechenverhaeltnis <= %.1f; µ_area-Fit ab %d Frames",
+                LINEAGE_SPARSE_MAX_OBJECTS, LINEAGE_SPARSE_SMOOTH_FRAMES, LINEAGE_SPARSE_MIN_FRAMES,
+                RELINK_MAX_GAP_FRAMES, RELINK_MAX_DISTANCE_PX, RELINK_MAX_AREA_RATIO, AREA_GROWTH_MIN_FRAMES)
     logger.info("  Knospen-Groessenkriterium: Schwelle aus den Daten, Rueckfall %s, plausibel %s",
                 "kein Filter" if BUD_MAX_AREA_FRACTION_FALLBACK is None else BUD_MAX_AREA_FRACTION_FALLBACK,
                 BUD_SIZE_PLAUSIBLE_RANGE)

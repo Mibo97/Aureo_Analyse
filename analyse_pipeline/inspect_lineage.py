@@ -35,6 +35,7 @@ from sensors import compute_ratios
 from lineage import classify_mother_bud, inspect_classification, LineageParams
 from analysis import add_time_column
 from bud_size import load_bud_size_threshold
+from relink import gap_close_tracks, detect_sparse_window, flag_lineage_window
 
 # ==============================================================================
 # Konfiguration: exakt dieselbe wie in run_analysis.py, weil beide aus config.py
@@ -51,6 +52,12 @@ from config import (
     MIN_PER_FRAME,
     LINEAGE_PARAMS,
     BUD_MAX_AREA_FRACTION_FALLBACK,
+    LINEAGE_SPARSE_MAX_OBJECTS,
+    LINEAGE_SPARSE_SMOOTH_FRAMES,
+    LINEAGE_SPARSE_MIN_FRAMES,
+    RELINK_MAX_GAP_FRAMES,
+    RELINK_MAX_DISTANCE_PX,
+    RELINK_MAX_AREA_RATIO,
     log_active_configuration,
 )
 
@@ -72,8 +79,15 @@ def load_prepared_cells() -> pd.DataFrame:
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
     cells = apply_track_merges(cells, exclusions)
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
+    # Wie run_analysis.py: Gap Closing, dann nur das Sparse-Phase-Fenster
+    # (relink.py) - die Heuristik sieht nichts anderes.
+    cells, _, _ = gap_close_tracks(cells, max_gap=RELINK_MAX_GAP_FRAMES,
+                                   max_distance_px=RELINK_MAX_DISTANCE_PX, max_area_ratio=RELINK_MAX_AREA_RATIO)
     cells = add_time_column(cells, MIN_PER_FRAME)
-    return cells
+    window = detect_sparse_window(cells, max_objects=LINEAGE_SPARSE_MAX_OBJECTS,
+                                  smooth_frames=LINEAGE_SPARSE_SMOOTH_FRAMES, min_frames=LINEAGE_SPARSE_MIN_FRAMES)
+    cells = flag_lineage_window(cells, window)
+    return cells[cells["in_lineage_window"]].copy()
 
 
 def qc_overlay_path_for(cells: pd.DataFrame, exp_id: str) -> Path:

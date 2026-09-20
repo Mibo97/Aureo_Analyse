@@ -58,6 +58,7 @@ from config import (
     STATIC_SATURATION_LEVEL,
     STATIC_SATURATION_SMOOTH_FRAMES,
     STATIC_SATURATION_MIN_GROWTH,
+    AREA_GROWTH_MIN_FRAMES,
 )
 from experiment_units import summarise_hierarchical
 from endpoint_trends import (
@@ -228,13 +229,31 @@ class PipelineContext:
         return self._lazy("cells_plot", lambda: exclude_controls(self.cells))
 
     @property
+    def cells_lineage(self) -> pd.DataFrame:
+        """Zellen im Sparse-Phase-Fenster (relink.py, Spalte in_lineage_window) -
+        die EINZIGE Eingabe der Mutter/Bud-Heuristik und alles, was daran
+        haengt (Budding Ratio, µ_event, Stammbaum, Panel A). Im vollen
+        Bildfeld sind neu auftauchende Tracks Fragmente, keine Knospen.
+        Ohne die Spalte: alle Zellen."""
+        def select() -> pd.DataFrame:
+            if "in_lineage_window" not in self.cells.columns:
+                return self.cells
+            sub = self.cells[self.cells["in_lineage_window"].astype(bool)]
+            logger.info(
+                "Lineage-Fenster: %d von %d Zellzeilen, %d von %d Kammern.",
+                len(sub), len(self.cells), sub["exp_id"].nunique(), self.cells["exp_id"].nunique(),
+            )
+            return sub
+        return self._lazy("cells_lineage", select)
+
+    @property
     def lineage_events(self) -> pd.DataFrame:
         """Budding-Events. HEURISTIK ohne echtes Lineage-Tracking - siehe
         lineage.py und validate_lineage.py."""
         return self._lazy(
             "lineage_events",
             lambda: classify_mother_bud(
-                self.cells, LINEAGE_PARAMS, flux_config=FLUX_CONFIG,
+                self.cells_lineage, LINEAGE_PARAMS, flux_config=FLUX_CONFIG,
                 bud_size_threshold=self.bud_size_threshold,
             ),
         )
@@ -243,12 +262,12 @@ class PipelineContext:
     def mothers(self) -> pd.DataFrame:
         """ALLE Mutterzellen, auch ohne Budding-Event - notwendig, damit ruhende
         Muetter mit budding_ratio=0 in Panel A erscheinen."""
-        return self._lazy("mothers", lambda: identify_mothers(self.cells, LINEAGE_PARAMS))
+        return self._lazy("mothers", lambda: identify_mothers(self.cells_lineage, LINEAGE_PARAMS))
 
     @property
     def mu_table(self) -> pd.DataFrame:
         return self._lazy("mu_table", lambda: compute_specific_growth_rate(
-            self.lineage_events, self.cells,
+            self.lineage_events, self.cells_lineage,
             min_per_frame=MIN_PER_FRAME, mu_max_threshold=MU_MAX_THRESHOLD,
         ))
 
@@ -263,6 +282,7 @@ class PipelineContext:
         return self._lazy("area_table", lambda: compute_area_growth_rate(
             self.cells, min_per_frame=MIN_PER_FRAME,
             lineage_events=self.lineage_events, mothers=self.mothers,
+            min_frames=AREA_GROWTH_MIN_FRAMES,
         ))
 
 
@@ -580,9 +600,10 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
 
 
 def step_20_lineage(ctx: PipelineContext) -> None:
-    """Budding-Events, Budding Ratio, Panel A, Stammbaum."""
-    cells = ctx.cells
-    cells_plot = ctx.cells_plot
+    """Budding-Events, Budding Ratio, Panel A, Stammbaum - alles aus dem
+    Sparse-Phase-Fenster (ctx.cells_lineage), siehe relink.py."""
+    cells = ctx.cells_lineage
+    cells_plot = exclude_controls(cells)
     output_dir = ctx.output_dir
     freq_order = ctx.freq_order
     lineage_events = ctx.lineage_events

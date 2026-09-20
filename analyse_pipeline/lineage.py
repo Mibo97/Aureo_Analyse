@@ -71,6 +71,14 @@ noch eine Report-Markierung (`bud_was_washed_out` im Ergebnis). Dadurch
 werden auch Buds erkannt, die selbst zu Müttern heranwachsen - die
 Mutter-Tochter-Kette bricht nicht mehr künstlich nach einer Generation ab.
 
+SPARSE-PHASE-FENSTER (relink.py): der Tracker vergibt in diesen Daten mit
+~12 % pro Objekt und Frame eine neue ID. Im vollen Bildfeld ist deshalb fast
+jede "neu auftauchende Zelle" ein Fragment, und die Events hier waeren
+Fragment-Statistik (QC-Batch: 462 Events pro Kammer, 243 davon in den letzten
+22 Frames). run_analysis.py ruft classify_mother_bud() nur mit den Zellen im
+duenn besetzten Fenster je Kammer auf (Spalte in_lineage_window), nach
+automatischem Gap Closing eindeutiger Tracking-Luecken.
+
 GROESSENKRITERIUM (angespuelte Zellen sind keine Knospen):
 In den Kammern werden laufend Blastokonidien aus anderen Kammern angespuelt.
 Sie tauchen "neu" auf, oft direkt neben einer sitzenden Zelle, und bestehen
