@@ -29,11 +29,16 @@ etwa gleich grosse angespuelte Zellen. Die Schwelle ist der Antimodus (das
 Dichteminimum) zwischen den beiden Gipfeln, geschaetzt per Kerndichte auf
 log10(Verhaeltnis) bei der KLEINSTEN Bandbreite, bei der die Dichte genau zwei
 Gipfel hat (Silvermans kritische Bandbreite, Start bei Scotts Faktor). Drei
-Gruende fuehren zum festen Rueckfallwert (config.BUD_MAX_AREA_FRACTION_FALLBACK):
-zu wenige Kandidaten, keine erkennbare Zweigipfligkeit (nur ein Gipfel, oder
-das Tal zwischen den Gipfeln ist zu flach) oder ein Antimodus ausserhalb des
-plausiblen Bereichs (config.BUD_SIZE_PLAUSIBLE_RANGE). Welcher Fall eintrat,
-steht in 20_bud_size_threshold.csv (Spalte 'source'). In die Dichte gehen
+Gruende fuehren zum Rueckfall: zu wenige Kandidaten, keine erkennbare
+Zweigipfligkeit (nur ein Gipfel, oder das Tal zwischen den Gipfeln ist zu
+flach) oder ein Antimodus ausserhalb des plausiblen Bereichs
+(config.BUD_SIZE_PLAUSIBLE_RANGE). Rueckfall heisst per Default: KEIN
+Groessenfilter (config.BUD_MAX_AREA_FRACTION_FALLBACK = None, Schwelle inf).
+Ein fester Rueckfallwert waere ein willkuerlicher Schnitt - auf den echten
+Daten liegt die einzige Mode bei 0.4-0.5, ein Wert von 0.5 halbierte dort
+die Events und machte die Erkennungsrate chip-abhaengiger, nicht weniger.
+Welcher Fall eintrat, steht in 20_bud_size_threshold.csv (Spalte 'source').
+In die Dichte gehen
 nur Verhaeltnisse zwischen 0.05 und 1.5 ein (kde_window): groessere sind
 sicher keine Knospen (eine grosse Zelle, die neben einer kleinen etablierten
 Zelle landet) und wuerden nur einen dritten Gipfel rechts erzeugen, der die
@@ -73,7 +78,18 @@ from lineage import LineageParams, FluxChannelConfig, classify_mother_bud
 logger = logging.getLogger(__name__)
 
 CANDIDATE_COLS = ["exp_id", "mother_cell_uid", "bud_cell_uid", "budding_frame",
-                  "mother_area", "bud_area", "bud_area_fraction"]
+                  "mother_area", "bud_area", "bud_area_fraction",
+                  # Diagnose (lineage.classify_mother_bud, Docstring dort):
+                  # gerade beendeter Track in der Naehe (Tracking-Bruch?),
+                  # Wachstum, Kontakt, Bewegung, Flaechenbilanz der Mutter.
+                  "ended_track_cell_uid", "ended_track_gap_frames",
+                  "ended_track_distance_px", "ended_track_area_ratio",
+                  "bud_area_plus1", "bud_area_plus3", "contact_ratio",
+                  "bud_move_plus1_px", "mother_move_plus1_px", "rel_move_plus1_px",
+                  "mother_area_prev", "mother_area_next", "mother_area_drop",
+                  "mother_area_drop_over_bud", "mother_age_frames",
+                  "distance_px", "adaptive_radius_px", "bud_final_track_length",
+                  "bud_was_washed_out", "mother_eccentricity", "bud_eccentricity"]
 META_COLS = ["biosensor", "osc_type", "osc_freq", "condition", "chip", "chip_family", "medium"]
 GROUP_COLS = ["biosensor", "osc_type"]
 
@@ -127,7 +143,7 @@ def _modes(dens: np.ndarray, min_rel_height: float = 0.05) -> list[int]:
 
 def resolve_bud_size_threshold(
     fractions,
-    fallback: float = 0.5,
+    fallback: Optional[float] = None,
     min_candidates: int = 50,
     plausible: Sequence[float] = (0.15, 0.9),
     min_valley_depth: float = 0.2,
@@ -138,7 +154,8 @@ def resolve_bud_size_threshold(
 
     fractions : Verhaeltnisse (ein Wert pro Kandidat); NaN, 0 und negative
                 Werte werden ignoriert.
-    fallback  : Schwelle, wenn kein Antimodus bestimmbar ist.
+    fallback  : Schwelle, wenn kein Antimodus bestimmbar ist. None (Default)
+                = unendlich = KEIN Groessenfilter.
     min_candidates : darunter keine Schaetzung, sondern fallback.
     plausible : Bereich, in dem der Antimodus liegen muss (sonst fallback).
     min_valley_depth : das Tal muss mindestens diesen Anteil unter dem
@@ -148,12 +165,13 @@ def resolve_bud_size_threshold(
                 (siehe Modul-Docstring); die uebrigen zaehlen in
                 n_outside_window.
     """
+    fallback = float("inf") if fallback is None else float(fallback)
     logx_all = _log_fractions(fractions)
     lo_w, hi_w = np.log10(kde_window[0]), np.log10(kde_window[1])
     logx = logx_all[(logx_all >= lo_w) & (logx_all <= hi_w)]
     n = int(len(logx))
     base = dict(n_candidates=int(len(logx_all)), n_outside_window=int(len(logx_all) - n),
-                fallback=float(fallback),
+                fallback=fallback,
                 plausible_low=float(plausible[0]), plausible_high=float(plausible[1]),
                 window_low=float(kde_window[0]), window_high=float(kde_window[1]))
     if n < min_candidates:
@@ -265,7 +283,8 @@ def plot_bud_size_distribution(
     """Links: gepoolte Verteilung mit Kerndichte, Gipfeln und Schwelle.
     Rechts: Kerndichte je Gruppe, gleiche Schwelle - sitzt sie ueberall im Tal?"""
     logx = _log_fractions(candidates["bud_area_fraction"]) if not candidates.empty else np.array([])
-    thr_log = float(np.log10(result.threshold))
+    has_threshold = np.isfinite(result.threshold) and result.threshold > 0
+    thr_log = float(np.log10(result.threshold)) if has_threshold else np.nan
     thr_label = (f"threshold {result.threshold:.2f} (antimode)" if result.source == "antimode"
                  else f"threshold {result.threshold:.2f} (fallback)")
 
@@ -286,7 +305,10 @@ def plot_bud_size_distribution(
                     i = int(np.argmin(np.abs(_GRID - np.log10(peak))))
                     ax.annotate(name, (_GRID[i], dens[i]), xytext=(0, 6), textcoords="offset points",
                                 ha="center", fontsize=8, color="C0")
-    ax.axvline(thr_log, color="C3", ls="--", lw=1.5, label=thr_label)
+    if has_threshold:
+        ax.axvline(thr_log, color="C3", ls="--", lw=1.5, label=thr_label)
+    else:
+        ax.plot([], [], " ", label="no size filter applied (not bimodal)")
     ax.set_title("all branches pooled", fontsize=10)
     _format_axis(ax, result)
     ax.legend(fontsize=8, loc="upper left")
@@ -303,7 +325,8 @@ def plot_bud_size_distribution(
             keys = keys if isinstance(keys, tuple) else (keys,)
             ax2.plot(_GRID, d, lw=1.5, label="/".join(map(str, keys)) + f" (n = {lx.size})")
             n_lines += 1
-    ax2.axvline(thr_log, color="C3", ls="--", lw=1.5)
+    if has_threshold:
+        ax2.axvline(thr_log, color="C3", ls="--", lw=1.5)
     ax2.set_title("per " + "/".join(cols) if cols else "per group", fontsize=10)
     _format_axis(ax2, result)
     if n_lines:
@@ -325,11 +348,12 @@ def run_bud_size_threshold(
     cells: pd.DataFrame,
     out_dir: Path,
     params: Optional[LineageParams] = None,
-    fallback: float = 0.5,
+    fallback: Optional[float] = None,
     plausible: Sequence[float] = (0.15, 0.9),
     min_candidates: int = 50,
 ) -> float:
-    """Schwelle ableiten, Tabellen und Abbildung schreiben, Schwelle zurueckgeben."""
+    """Schwelle ableiten, Tabellen und Abbildung schreiben, Schwelle zurueckgeben
+    (inf = kein Groessenfilter)."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     kwargs = dict(fallback=fallback, plausible=plausible, min_candidates=min_candidates)
@@ -349,10 +373,17 @@ def run_bud_size_threshold(
         result.threshold, result.source, result.n_candidates,
         result.peak_low, result.peak_high, result.valley_depth,
     )
-    if result.source != "antimode":
+    if not np.isfinite(result.threshold):
         logger.warning(
-            "Groessenkriterium: Rueckfallwert %.2f in Kraft (%s). Vor der Interpretation "
-            "20_bud_size_at_appearance.pdf ansehen.", result.threshold, result.source,
+            "Groessenkriterium: KEIN Groessenfilter aktiv - %s. Die Verteilung von "
+            "bud_area / mother_area traegt keine Schwelle; die Events bleiben ungefiltert. "
+            "Diagnose-Spalten in 20_bud_size_at_appearance.csv.", result.source,
+        )
+    elif result.source != "antimode":
+        logger.warning(
+            "Groessenkriterium: fester Rueckfallwert %.2f in Kraft (%s) - das ist ein "
+            "willkuerlicher Schnitt, vor der Interpretation 20_bud_size_at_appearance.pdf "
+            "ansehen.", result.threshold, result.source,
         )
     return float(result.threshold)
 

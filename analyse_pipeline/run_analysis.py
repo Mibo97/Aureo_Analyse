@@ -321,9 +321,11 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         logger.exception(
             "Groessenkriterium konnte nicht aus den Daten abgeleitet werden - "
-            "Rueckfallwert %.2f wird verwendet.", BUD_MAX_AREA_FRACTION_FALLBACK,
+            "Rueckfall: %s.", "kein Groessenfilter" if BUD_MAX_AREA_FRACTION_FALLBACK is None
+            else f"fester Wert {BUD_MAX_AREA_FRACTION_FALLBACK}",
         )
-        bud_size_threshold = BUD_MAX_AREA_FRACTION_FALLBACK
+        bud_size_threshold = (float("inf") if BUD_MAX_AREA_FRACTION_FALLBACK is None
+                              else float(BUD_MAX_AREA_FRACTION_FALLBACK))
         failed.append("bud_size_threshold")
 
     logger.info("=== Daten nach QC (gesamt, vor Trennung Oszillation/statisch) ===")
