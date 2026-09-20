@@ -173,6 +173,64 @@ def chip_overview(cells: pd.DataFrame) -> pd.DataFrame:
     return wide.merge(totals, on=key, how="left")
 
 
+def run_order_check(overview: pd.DataFrame) -> pd.DataFrame:
+    """Laufreihenfolge gegen Periode: eine Zeile je (biosensor, osc_type)-Serie.
+
+    Jede Periode ist EIN Chip an EINEM Tag. Faellt die Reihenfolge der Tage
+    mit der Reihenfolge der Perioden zusammen, kann alles, was ueber die Tage
+    driftet (Vorkultur, Fokus, Medium-Charge, Beladungsdichte), einen
+    monotonen Trend gegen die Periode erzeugen, der mit der Periode nichts zu
+    tun hat - und mit einem Chip pro Periode ist beides nicht zu trennen.
+    Spearman(Periode, Datum) ueber die Chips einer Serie: |rho| nahe 1 heisst
+    'in Periodenreihenfolge gefahren', nahe 0 'gemischt gefahren'. Bei
+    gemischter Reihenfolge kann eine Tagesdrift keinen monotonen
+    Periodentrend vortaeuschen.
+    """
+    needed = {"biosensor", "osc_type", "osc_freq", "date"}
+    if overview is None or overview.empty or not needed.issubset(overview.columns):
+        return pd.DataFrame()
+    from scipy import stats
+
+    df = overview.copy()
+    df["_period"] = pd.to_numeric(df["osc_freq"], errors="coerce")
+    df["_date"] = pd.to_numeric(df["date"].astype(str).str.split(",").str[0], errors="coerce")
+    df = df.dropna(subset=["_period", "_date"])
+    rows = []
+    for (bs, ot), g in df.groupby(["biosensor", "osc_type"]):
+        g = g.sort_values("_period")
+        by_date = g.sort_values(["_date", "_period"])
+        rec = {
+            "biosensor": bs, "osc_type": ot, "n_chips": int(len(g)),
+            "periods_in_run_order": " < ".join(f"{p:g}" for p in by_date["_period"]),
+            "dates_by_period": " ".join(f"{p:g}:{int(d)}" for p, d in zip(g["_period"], g["_date"])),
+            "spearman_period_vs_date": np.nan, "p_value": np.nan, "verdict": "",
+        }
+        if len(g) >= 3 and g["_date"].nunique() >= 2:
+            rho, p = stats.spearmanr(g["_period"], g["_date"])
+            rec.update(spearman_period_vs_date=float(rho), p_value=float(p))
+            rec["verdict"] = (
+                "run in period order: a day-to-day drift would look like a period effect"
+                if abs(rho) >= 0.8 else
+                "mixed run order: a day-to-day drift cannot mimic a monotone period effect"
+            )
+        else:
+            rec["verdict"] = "fewer than 3 chips or all on one date"
+        rows.append(rec)
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        ordered = out[out["spearman_period_vs_date"].abs() >= 0.8]
+        if not ordered.empty:
+            logger.warning(
+                "LAUFREIHENFOLGE: %d von %d Serien wurden in Periodenreihenfolge gefahren (|Spearman(Periode, "
+                "Datum)| >= 0.8): %s. Dort ist ein monotoner Periodentrend von einer Tagesdrift nicht zu "
+                "unterscheiden (ein Chip pro Periode). Siehe 00_chip_run_order.csv.",
+                len(ordered), len(out), ", ".join(ordered["biosensor"] + "/" + ordered["osc_type"]),
+            )
+        else:
+            logger.info("Laufreihenfolge: keine Serie in Periodenreihenfolge gefahren (00_chip_run_order.csv).")
+    return out
+
+
 def summarise_hierarchical(
     df: pd.DataFrame,
     value_col: str,

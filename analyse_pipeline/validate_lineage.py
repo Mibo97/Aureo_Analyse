@@ -23,7 +23,9 @@ WAS ES PRÜFT
 ------------
 1. ERKENNUNGSRATE pro Kammer, plus Kruskal-Wallis-Test über die
    Frequenz-Batches (analog control_consistency.py): ist die Rate über die
-   Bedingungen hinweg konstant?
+   Bedingungen hinweg konstant? Dazu Spearman der Batch-Erkennungsrate gegen
+   die Periode: erst ein |rho| nahe 1 heißt, dass die Erkennung MIT der
+   Periode läuft und einen Periodentrend vortäuschen könnte.
 2. d/r-VERTEILUNG (Distanz / adaptiver Suchradius). Sitzen die Zuordnungen
    komfortabel innerhalb des Radius (klein), oder holt der Radius sie gerade
    noch herein (nahe 1.0)? Letzteres heißt: der Toleranzwert macht die
@@ -368,9 +370,34 @@ def test_detection_rate_across_conditions(
             h, p = stats.kruskal(*batches)
             record["h_statistic"], record["p_value"] = h, p
             record["note"] = ""
+        # Monotone Variante: Erkennungsrate je Batch (Chip-Mittel ueber die
+        # Kammern) gegen die Periode. Kruskal sagt "irgendwo verschieden";
+        # erst ein |rho| nahe 1 sagt, dass die Erkennung MIT der Periode
+        # laeuft - die Richtung, die einen Periodentrend vortaeuschen kann.
+        per_batch = rates.groupby(freq_col)["assignment_rate"].mean()
+        periods = pd.to_numeric(pd.Series(per_batch.index), errors="coerce").to_numpy()
+        ok = ~np.isnan(periods)
+        record["n_periods"] = int(ok.sum())
+        if ok.sum() >= 3:
+            rho, p_rho = stats.spearmanr(periods[ok], per_batch.to_numpy()[ok])
+            record["spearman_rho_vs_period"], record["spearman_p_vs_period"] = float(rho), float(p_rho)
+        else:
+            record["spearman_rho_vs_period"], record["spearman_p_vs_period"] = np.nan, np.nan
         results.append(record)
 
     out = pd.DataFrame(results)
+    if not out.empty and out["spearman_rho_vs_period"].notna().any():
+        mono = out[out["spearman_rho_vs_period"].abs() >= 0.8]
+        if not mono.empty:
+            logger.warning(
+                "%d Serien mit |Spearman(Erkennungsrate, Periode)| >= 0.8: %s - dort laeuft die "
+                "Erkennung monoton mit der Periode; ein Periodentrend der Budding-Kennzahlen kann "
+                "in diesen Serien Tracking sein.", len(mono),
+                ", ".join(mono["biosensor"].astype(str) + "/" + mono["osc_type"].astype(str)
+                          + " rho=" + mono["spearman_rho_vs_period"].round(2).astype(str)),
+            )
+        else:
+            logger.info("Erkennungsrate laeuft in keiner Serie monoton mit der Periode (|rho| < 0.8).")
     if not out.empty and out["p_value"].notna().any():
         n_sig = int((out["p_value"] < 0.05).sum())
         if n_sig:

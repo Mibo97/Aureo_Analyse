@@ -157,7 +157,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 | Präfix | Inhalt |
 | --- | --- |
-| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing |
+| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_chip_run_order.csv` = wurden die Perioden einer Serie in Datumsreihenfolge gefahren (dann ist ein Periodentrend nicht von einer Tagesdrift zu trennen)?; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
@@ -431,7 +431,7 @@ Erzeugt in `analysis_output/lineage_validation/`:
 | --- | --- |
 | `lv_01_d_over_r_distribution.pdf` | Lagen die Buds komfortabel im Suchradius, oder hat die Toleranz sie gerade noch hereingeholt? |
 | `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Bedingungen konstant? Nenner: Kandidaten, die das Größenkriterium bestehen |
-| `lv_03_detection_rate_kruskal.csv` | Kruskal-Wallis dazu: p < 0.05 = Erkennung mit der Bedingung konfundiert |
+| `lv_03_detection_rate_kruskal.csv` | Kruskal-Wallis dazu: p < 0.05 = Erkennung mit der Bedingung konfundiert; `spearman_rho_vs_period` = läuft die Erkennung *monoton* mit der Periode (die Richtung, die einen Trend vortäuscht)? |
 | `lv_03_assignment_ambiguity.pdf` | Wie oft kamen mehrere Mütter in Frage (greedy Nearest-Neighbour)? |
 | `lv_04_tolerance_sweep.pdf` | Sitzt `tolerance_px` auf einem Plateau oder auf einer Flanke? |
 
