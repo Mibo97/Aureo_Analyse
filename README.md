@@ -331,9 +331,14 @@ eine angespülte Zelle ist etwa so groß wie die Zelle, neben der sie landet.
 *Fläche beim ersten Auftreten / Fläche der zugeordneten Mutter* und verwirft
 alles über einer Schwelle (`bud_size.py`). Die Schwelle kommt aus den Daten:
 Antimodus der zweigipfligen Verteilung (Kerndichte auf log10, kleinste
-Bandbreite mit genau zwei Gipfeln), **eine** Schwelle für alle Zweige. Greift
-stattdessen der Rückfallwert `BUD_MAX_AREA_FRACTION_FALLBACK`, steht der
-Grund in der Spalte `source`.
+Bandbreite mit genau zwei Gipfeln), **eine** Schwelle für alle Zweige. Ist die
+Verteilung nicht zweigipflig, wird **kein** Größenfilter angewendet
+(`BUD_MAX_AREA_FRACTION_FALLBACK = None`, Schwelle `inf` in der Tabelle), und
+der Grund steht in der Spalte `source`. Auf den echten Daten ist genau das der
+Fall: eine breite Mode um 0.4–0.5 ohne zweiten Gipfel. Das Kriterium bleibt
+dort inaktiv, bis ein tragfähiges Unterscheidungsmerkmal gefunden ist — dafür
+trägt `20_bud_size_at_appearance.csv` Diagnosespalten (Flächenabnahme der
+Mutter beim Auftauchen, Wachstum des Kandidaten danach, Kontaktverhältnis).
 
 | Datei (direkt in `analysis_output/`) | Inhalt |
 | --- | --- |

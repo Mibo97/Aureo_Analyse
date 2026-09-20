@@ -104,9 +104,10 @@ if __name__ == "__main__":
     # hier nicht eine andere Heuristik kalibriert wird als die produktive.
     BUD_SIZE_THRESHOLD = load_bud_size_threshold(OUTPUT_DIR)
     if BUD_SIZE_THRESHOLD is None:
-        BUD_SIZE_THRESHOLD = BUD_MAX_AREA_FRACTION_FALLBACK
-        print(f"Keine abgeleitete Groessenschwelle gefunden - Rueckfallwert {BUD_SIZE_THRESHOLD:.2f}.")
-    print(f"Klassifiziere Mutter/Bud-Events mit: {PARAMS}, Groessenschwelle {BUD_SIZE_THRESHOLD:.2f}")
+        BUD_SIZE_THRESHOLD = (float("inf") if BUD_MAX_AREA_FRACTION_FALLBACK is None
+                              else float(BUD_MAX_AREA_FRACTION_FALLBACK))
+        print(f"Keine abgeleitete Groessenschwelle gefunden - Rueckfall {BUD_SIZE_THRESHOLD} (inf = kein Filter).")
+    print(f"Klassifiziere Mutter/Bud-Events mit: {PARAMS}, Groessenschwelle {BUD_SIZE_THRESHOLD} (inf = kein Filter)")
     lineage_events = classify_mother_bud(cells, PARAMS, bud_size_threshold=BUD_SIZE_THRESHOLD)
 
     exp_ids_with_events = sorted(lineage_events["exp_id"].unique()) if not lineage_events.empty else []

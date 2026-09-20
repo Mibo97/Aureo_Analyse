@@ -80,8 +80,12 @@ Knospe deutlich kleiner beginnt. Deshalb wird pro Kandidat das Verhaeltnis
 bud_area / mother_area beim ersten Auftreten berechnet (Spalte
 bud_area_fraction), und ein Kandidat oberhalb der Schwelle wird verworfen.
 Die Schwelle kommt aus den Daten (bud_size.py: Antimodus der zweigipfligen
-Verteilung, Rueckfallwert aus config.py) und wird von run_analysis.py als
-bud_size_threshold uebergeben; ohne Schwelle (None) greift kein Filter.
+Verteilung) und wird von run_analysis.py als bud_size_threshold uebergeben.
+Ist die Verteilung nicht zweigipflig - auf den echten Daten der Fall -, ist
+die Schwelle unendlich und es greift KEIN Filter; ebenso ohne Schwelle
+(None). Zusaetzlich traegt jedes Event Diagnose-Spalten (Flaechenabnahme der
+Mutter beim Auftauchen, Wachstum des Kandidaten danach, Kontaktverhaeltnis),
+mit denen bud_size.py nach einem tragfaehigen Unterscheidungsmerkmal sucht.
 """
 
 from __future__ import annotations
@@ -166,6 +170,13 @@ def classify_mother_bud(
         bud_area, bud_area_fraction (Flaeche des Buds beim ersten Auftreten,
             absolut und relativ zur Mutter), bud_size_threshold (die
             angewandte Schwelle, NaN = kein Groessenfilter),
+        mother_area_prev, mother_area_next, mother_area_drop,
+            mother_area_drop_over_bud, mother_age_frames, bud_area_plus1,
+            bud_area_plus3, contact_ratio, bud_eccentricity (falls vorhanden):
+            Diagnose fuer bud_size.py - verliert die Mutter beim Auftauchen
+            des Kandidaten Flaeche (eine echte Knospe wird aus ihrer Maske
+            herausgeloest), waechst der Kandidat danach, sitzt er an der
+            Mutter an (contact_ratio ~ 1)?
         bud_final_track_length, bud_was_washed_out (finale Gesamttracklaenge
             des Buds bzw. ob sie <= bud_max_frames liegt - reine Report-Info,
             siehe Modul-Docstring "FIX"),
@@ -225,6 +236,9 @@ def classify_mother_bud(
         # Sortierte Frame-Liste pro Track - Grundlage der KAUSALEN
         # "etabliert zum Zeitpunkt bud_frame"-Pruefung weiter unten.
         frames_by_track = group.groupby("cell_uid")["frame"].apply(lambda s: np.sort(s.unique()))
+        # Flaeche je (Zelle, Frame) fuer die Diagnose-Spalten: Mutterflaeche
+        # im Frame VOR dem Auftauchen, Flaeche des Kandidaten danach.
+        area_lookup = dict(zip(zip(group["cell_uid"], group["frame"]), group["area"]))
 
         # 1. ALLE neu auftauchenden Tracks sind Bud-KANDIDATEN - bewusst
         # KEIN Filter auf ihre eigene (finale) Tracklaenge mehr (siehe
@@ -308,8 +322,29 @@ def classify_mother_bud(
                 "bud_was_washed_out": bud_final_length <= params.bud_max_frames,
                 "mother_is_canonical_mother": mother_final_length >= params.mother_min_frames,
             }
+            # Diagnose-Spalten (siehe Docstring): Flaechenbilanz der Mutter um
+            # das Auftauchen herum, Wachstum des Kandidaten, Kontakt.
+            mom_uid = mom_row["cell_uid"]
+            mom_frames = frames_by_track[mom_uid]
+            k_prev = int(np.searchsorted(mom_frames, bud_frame)) - 1
+            mother_area_prev = (float(area_lookup.get((mom_uid, mom_frames[k_prev]), np.nan))
+                                if k_prev >= 0 else np.nan)
+            mother_area_drop = mother_area_prev - mother_area if np.isfinite(mother_area_prev) else np.nan
+            contact = np.sqrt(mother_area / np.pi) + np.sqrt(bud_area / np.pi) if mother_area > 0 and bud_area > 0 else np.nan
+            record.update({
+                "mother_area_prev": mother_area_prev,
+                "mother_area_next": float(area_lookup.get((mom_uid, bud_frame + 1), np.nan)),
+                "mother_area_drop": mother_area_drop,
+                "mother_area_drop_over_bud": (mother_area_drop / bud_area
+                                              if np.isfinite(mother_area_drop) and bud_area > 0 else np.nan),
+                "mother_age_frames": k_prev + 1,
+                "bud_area_plus1": float(area_lookup.get((bud_tid, bud_frame + 1), np.nan)),
+                "bud_area_plus3": float(area_lookup.get((bud_tid, bud_frame + 3), np.nan)),
+                "contact_ratio": float(dists[best_mom_idx]) / contact if np.isfinite(contact) and contact > 0 else np.nan,
+            })
             if has_eccentricity:
                 record["mother_eccentricity"] = mom_row["eccentricity"]
+                record["bud_eccentricity"] = bud_group["eccentricity"].iloc[0]
             if has_cell_uid:
                 record["mother_cell_uid"] = mom_row["cell_uid"]
                 record["bud_cell_uid"] = bud_group["cell_uid"].iloc[0]
