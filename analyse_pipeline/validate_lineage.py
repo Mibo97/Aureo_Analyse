@@ -364,8 +364,11 @@ def test_detection_rate_across_conditions(
             # dividiert dann durch eine Ties-Korrektur von 0 und gibt NaN mit
             # RuntimeWarning zurueck. Das ist kein Testergebnis, sondern der
             # bestmoegliche Fall - entsprechend benennen statt NaN zu melden.
+            # Ueberall 0 heisst dagegen: es wurden keine Events geladen.
             record["h_statistic"], record["p_value"] = np.nan, np.nan
-            record["note"] = f"alle Erkennungsraten identisch ({pooled[0]:.3f}) - kein Test noetig"
+            record["note"] = (f"alle Erkennungsraten identisch ({pooled[0]:.3f}) - kein Test noetig"
+                              if pooled[0] > 0 else
+                              "alle Erkennungsraten 0 - keine Budding-Events geladen? (run_analysis.py komplett laufen lassen)")
         else:
             h, p = stats.kruskal(*batches)
             record["h_statistic"], record["p_value"] = h, p
@@ -764,7 +767,14 @@ def main() -> None:
         len(cells), len(lineage_events), len(frames), [str(p) for p in event_paths],
     )
     if lineage_events.empty:
-        logger.warning("Keine Budding-Events geladen - alle Kandidaten gelten als nicht zugeordnet.")
+        # Ohne Events waere jede Erkennungsrate 0.000 und lv_03 saehe aus wie
+        # "alle identisch" - eine Tabelle ohne Aussage. Das passiert z.B. nach
+        # einem Teillauf (--steps 00) in einem frischen Ausgabeordner: der
+        # schreibt 00_cell_positions.parquet, aber keine 20_budding_events.csv.
+        raise SystemExit(
+            f"Keine Budding-Events geladen ({[str(p) for p in event_paths] or 'keine Datei'}). "
+            f"Erst run_analysis.py komplett (mit Schritt 20) laufen lassen, dann validieren."
+        )
 
     bud_size_threshold = args.bud_size_threshold
     if bud_size_threshold is None:
