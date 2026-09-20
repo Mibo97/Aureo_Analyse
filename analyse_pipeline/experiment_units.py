@@ -131,12 +131,25 @@ def add_experiment_units(
         )
         out.loc[osc, "unit_rule"] = UNIT_RULE_OSC
 
+    # Kultur = physischer Chip = Vorkultur = Datum. Ein physischer Chip traegt
+    # 2-3 Strukturen, jede mit einer Periode; 'chip' oben ist die STRUKTUR.
+    # Perioden derselben Kultur sind direkt vergleichbar, Perioden
+    # verschiedener Kulturen nicht (endpoint_trends.within_culture_trend()).
+    # Statisch: jeder Chip hat seine eigene Vorkultur, Kultur = Chip.
+    out["culture"] = out["chip"]
+    if osc.any():
+        out.loc[osc, "culture"] = (
+            out.loc[osc, "biosensor"].astype(str) + "__"
+            + out.loc[osc, "osc_type"].astype(str) + "__"
+            + out.loc[osc, "date"].astype(str).replace("", "nodate")
+        )
+
     n_chips = out["chip"].nunique()
     logger.info(
-        "Versuchseinheiten abgeleitet: %d Chips (%d statisch, %d Oszillation/PKO). "
-        "Oszillation: EIN Chip pro Bedingung - Fehlerbalken innerhalb einer Bedingung sind "
-        "technisch (Kammern eines Chips).",
-        n_chips, out.loc[static, "chip"].nunique(), out.loc[osc, "chip"].nunique(),
+        "Versuchseinheiten abgeleitet: %d Strukturen ('chip'; %d statisch, %d Oszillation/PKO) in "
+        "%d Kulturen (physischer Chip = Vorkultur = Datum). Oszillation: EINE Struktur pro Bedingung - "
+        "Fehlerbalken innerhalb einer Bedingung sind technisch (Kammern einer Struktur).",
+        n_chips, out.loc[static, "chip"].nunique(), out.loc[osc, "chip"].nunique(), out["culture"].nunique(),
     )
     return out
 
@@ -170,7 +183,11 @@ def chip_overview(cells: pd.DataFrame) -> pd.DataFrame:
         frames_min=("n_frames", "min"), frames_max=("n_frames", "max"),
         date=("date", lambda s: ",".join(sorted(set(",".join(s).split(",")) - {""}))),
     ).reset_index()
-    return wide.merge(totals, on=key, how="left")
+    out = wide.merge(totals, on=key, how="left")
+    if "culture" in df.columns:
+        out["culture"] = out["chip"].map(df.groupby("chip")["culture"].first())
+        out["n_structures_in_culture"] = out.groupby("culture")["chip"].transform("nunique")
+    return out
 
 
 def run_order_check(overview: pd.DataFrame) -> pd.DataFrame:
@@ -293,6 +310,13 @@ def summarise_hierarchical(
         per_chamber.groupby(condition_cols + [chip_col], dropna=False)["value"]
         .agg(value="mean", sd_chamber="std", n_chambers="count").reset_index()
     )
+    # Kultur (physischer Chip = Vorkultur = Datum) als Begleitspalte, NICHT
+    # als Gruppierung: bei den statischen Daten ist sie der Chip selbst und
+    # wuerde sonst die Chip-Mittelung je Bedingung zerlegen.
+    if "culture" in work.columns and "culture" not in per_chip.columns:
+        chip_culture = work.groupby(chip_col)["culture"].first()
+        per_chip["culture"] = per_chip[chip_col].map(chip_culture)
+        per_chamber["culture"] = per_chamber[chip_col].map(chip_culture)
 
     def _sem(s):
         return s.std(ddof=1) / np.sqrt(len(s)) if len(s) > 1 else np.nan

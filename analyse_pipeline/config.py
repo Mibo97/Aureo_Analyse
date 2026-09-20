@@ -303,10 +303,16 @@ DOCUMENTED_DEFAULTS: dict[str, tuple[object, object, str]] = {
 # Methodische Eigenheiten, die kein einzelner Zahlenwert sind, aber beim Lesen
 # der Ergebnistabellen bekannt sein müssen.
 METHOD_CAVEATS: list[str] = [
-    "VERSUCHSEINHEITEN: pro (Stamm, osc_type, Periode) gibt es EINEN Chip aus EINER Vorkultur; "
-    "'replicate' ist ein Array-Index, kein Replikat. Innerhalb einer Oszillationsbedingung gibt "
-    "es keine biologische Replikation (n = 1 Chip). Fehlerbalken dort sind Kammer-Fehlerbalken - "
-    "siehe Spalte 'error_unit' in den Aggregaten. Statisch: jedes 'replicate' ist ein Chip.",
+    "VERSUCHSEINHEITEN: pro (Stamm, osc_type, Periode) gibt es EINE Struktur (im Code und in den "
+    "Tabellen 'chip'); ein physischer Chip traegt 2-3 Strukturen = 2-3 Perioden aus EINER Vorkultur "
+    "an EINEM Tag (Spalte 'culture'). 'replicate' ist ein Array-Index, kein Replikat. Innerhalb "
+    "einer Oszillationsbedingung gibt es keine biologische Replikation (n = 1 Struktur); Perioden "
+    "derselben Kultur sind direkt vergleichbar, Perioden verschiedener Kulturen nicht. Fehlerbalken "
+    "sind Kammer-Fehlerbalken - siehe 'error_unit'. Statisch: jedes 'replicate' ist ein Chip.",
+    "KONTROLL-TREND: die Kontrollen einer Struktur (konstantes Medium) koennen auf die Periode nicht "
+    "reagieren. Laufen sie ueber die Strukturen einer Serie trotzdem mit der Periode "
+    "(*_control_trend.csv, rho_ctrl_mean), traegt die Struktur den Trend, nicht die Periode. Fuer die "
+    "Knospungsrate ist das in den echten Daten der Fall.",
     "summarise_growth_rate() und summarise_area_growth() aggregieren ueber EINZELNE Zellen/"
     "Intervalle (11_*_summary.csv, 12_*_summary_*.csv): sd_mu/sd_mu_area sind Streuung ueber Zellen.",
     "Spearman gegen die Periode laeuft auf Chip-Mittelwerten (n = Zahl der Perioden) und ist bei "

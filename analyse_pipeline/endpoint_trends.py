@@ -328,6 +328,151 @@ def spearman_against_period(
     return out
 
 
+def control_trend_check(
+    per_chip: pd.DataFrame,
+    value_col: str = "value",
+    freq_col: str = "osc_freq",
+    group_cols: Optional[Sequence[str]] = None,
+    min_periods: int = MIN_PERIODS_FOR_TREND,
+    strong: float = 0.6,
+) -> pd.DataFrame:
+    """Laufen die KONTROLLEN einer Struktur mit deren Periode?
+
+    Jede Periode ist eine Struktur (im Code 'chip') mit eigenen PosCtrl- und
+    NegCtrl-Kammern in konstantem Medium. Die Kontrollen koennen auf die
+    Periode nicht reagieren. Aendern sie sich ueber die Strukturen einer Serie
+    trotzdem monoton mit der Periode, traegt die Struktur selbst den Trend
+    (Position auf dem physischen Chip, Beladungsreihenfolge, Kulturalter am
+    Tag, Stroemung) - und der Trend der Oszillationskammern ist erst dann ein
+    Periodeneffekt, wenn er ueber die Kontrollen HINAUSgeht
+    (rho_osc_minus_ctrl). Das ist die Differenz-Variante des Bracket-Scores,
+    die auch dann etwas sagt, wenn PosCtrl und NegCtrl nicht auseinanderliegen.
+
+    Eine Zeile je (value_col, biosensor, osc_type): rho gegen die Periode fuer
+    die Oszillationskammern, PosCtrl, NegCtrl, das Kontrollmittel und
+    Osc - Kontrollmittel, mit n_periods und verdict.
+    """
+    if per_chip is None or per_chip.empty or value_col not in per_chip.columns:
+        return pd.DataFrame()
+    df = add_condition_type(per_chip) if "condition_type" not in per_chip.columns else per_chip.copy()
+    df = df.assign(_period=period_minutes(df[freq_col])).dropna(subset=["_period", value_col])
+    if df.empty:
+        return pd.DataFrame()
+    if group_cols is None:
+        group_cols = [c for c in ["value_col", "biosensor", "osc_type"] if c in df.columns]
+    group_cols = list(group_cols)
+
+    def _rho(x: pd.Series, y: pd.Series) -> float:
+        ok = x.notna() & y.notna()
+        if ok.sum() < min_periods or y[ok].nunique() < 2:
+            return np.nan
+        return float(stats.spearmanr(x[ok], y[ok])[0])
+
+    rows = []
+    for keys, grp in df.groupby(group_cols, dropna=False):
+        keys = keys if isinstance(keys, tuple) else (keys,)
+        wide = grp.pivot_table(index="_period", columns="condition_type", values=value_col, aggfunc="mean")
+        for col in ("Oscillation", "PosCtrl", "NegCtrl"):
+            if col not in wide.columns:
+                wide[col] = np.nan
+        wide["ctrl_mean"] = wide[["PosCtrl", "NegCtrl"]].mean(axis=1)
+        wide["osc_minus_ctrl"] = wide["Oscillation"] - wide["ctrl_mean"]
+        period = pd.Series(wide.index.to_numpy(dtype=float), index=wide.index)
+        rec = dict(zip(group_cols, keys))
+        rec.update({
+            "n_periods": int(wide["Oscillation"].notna().sum()),
+            "rho_osc": _rho(period, wide["Oscillation"]),
+            "rho_posctrl": _rho(period, wide["PosCtrl"]),
+            "rho_negctrl": _rho(period, wide["NegCtrl"]),
+            "rho_ctrl_mean": _rho(period, wide["ctrl_mean"]),
+            "rho_osc_minus_ctrl": _rho(period, wide["osc_minus_ctrl"]),
+        })
+        r_osc, r_ctrl, r_diff = rec["rho_osc"], rec["rho_ctrl_mean"], rec["rho_osc_minus_ctrl"]
+        if np.isnan(r_osc) or np.isnan(r_ctrl):
+            verdict = "fewer than 3 periods with oscillation and control values"
+        elif abs(r_ctrl) >= strong and np.sign(r_ctrl) == np.sign(r_osc):
+            verdict = ("structure effect: the constant-medium controls trend with the period like the "
+                       "oscillation chambers" + ("; Osc - controls still trends, period effect on top"
+                                                  if not np.isnan(r_diff) and abs(r_diff) >= strong else
+                                                  "; no period effect beyond the controls"))
+        elif abs(r_osc) >= strong and abs(r_ctrl) < strong:
+            verdict = "period effect: oscillation chambers trend, their controls do not"
+        else:
+            verdict = "no monotone trend"
+        rec["verdict"] = verdict
+        rows.append(rec)
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        n_struct = int(out["verdict"].str.startswith("structure effect").sum())
+        n_period = int(out["verdict"].str.startswith("period effect").sum())
+        logger.info(
+            "Kontroll-Trend-Check (%s): %d Serien mit Struktureffekt (Kontrollen laufen mit der Periode), "
+            "%d mit Periodeneffekt ohne Kontrolltrend, %d ohne monotonen Trend.",
+            value_col if "value_col" not in out.columns else ", ".join(sorted(out["value_col"].astype(str).unique())),
+            n_struct, n_period, int((out["verdict"] == "no monotone trend").sum()),
+        )
+    return out
+
+
+def within_culture_trend(
+    per_chip: pd.DataFrame,
+    value_col: str = "value",
+    freq_col: str = "osc_freq",
+    culture_col: str = "culture",
+    group_cols: Optional[Sequence[str]] = None,
+) -> pd.DataFrame:
+    """Aenderung von der kuerzesten zur laengsten Periode INNERHALB einer Kultur.
+
+    Kultur = physischer Chip = Vorkultur = Datum; er traegt 2-3 Strukturen mit
+    je einer Periode. Zwischen Kulturen ist ein Periodenvergleich mit der
+    Kultur konfundiert, innerhalb einer Kultur nicht. Eine Zeile je
+    (value_col, biosensor, osc_type, culture): die Perioden, die Werte der
+    Oszillationskammern und ihrer Kontrollen an der kuerzesten und laengsten
+    Periode und die Differenzen (delta_* < 0 = faellt mit der Periode).
+    """
+    if per_chip is None or per_chip.empty or value_col not in per_chip.columns or culture_col not in per_chip.columns:
+        return pd.DataFrame()
+    df = add_condition_type(per_chip) if "condition_type" not in per_chip.columns else per_chip.copy()
+    df = df.assign(_period=period_minutes(df[freq_col])).dropna(subset=["_period", value_col, culture_col])
+    if df.empty:
+        return pd.DataFrame()
+    if group_cols is None:
+        group_cols = [c for c in ["value_col", "biosensor", "osc_type"] if c in df.columns]
+    group_cols = list(group_cols) + [culture_col]
+    rows = []
+    for keys, grp in df.groupby(group_cols, dropna=False):
+        keys = keys if isinstance(keys, tuple) else (keys,)
+        wide = grp.pivot_table(index="_period", columns="condition_type", values=value_col, aggfunc="mean").sort_index()
+        if "Oscillation" not in wide.columns or wide["Oscillation"].notna().sum() < 2:
+            continue
+        for col in ("PosCtrl", "NegCtrl"):
+            if col not in wide.columns:
+                wide[col] = np.nan
+        wide["ctrl_mean"] = wide[["PosCtrl", "NegCtrl"]].mean(axis=1)
+        osc = wide["Oscillation"].dropna()
+        first, last = osc.index.min(), osc.index.max()
+        rec = dict(zip(group_cols, keys))
+        rec.update({
+            "periods": " ".join(f"{p:g}" for p in osc.index),
+            "n_structures": int(len(osc)),
+            "osc_shortest": float(osc.loc[first]), "osc_longest": float(osc.loc[last]),
+            "delta_osc": float(osc.loc[last] - osc.loc[first]),
+            "delta_ctrl": float(wide.loc[last, "ctrl_mean"] - wide.loc[first, "ctrl_mean"]),
+        })
+        rec["delta_osc_minus_ctrl"] = rec["delta_osc"] - rec["delta_ctrl"]
+        rows.append(rec)
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        n = int(out["delta_osc"].notna().sum())
+        logger.info(
+            "Innerhalb der Kulturen (%d Kulturen mit >= 2 Perioden): Osc faellt zur laengeren Periode in %d, "
+            "Kontrollen in %d, Osc - Kontrollen in %d.",
+            n, int((out["delta_osc"] < 0).sum()), int((out["delta_ctrl"] < 0).sum()),
+            int((out["delta_osc_minus_ctrl"] < 0).sum()),
+        )
+    return out
+
+
 def bracket_normalise(
     per_chip: pd.DataFrame,
     degenerate_k: float = 2.0,
