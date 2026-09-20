@@ -719,6 +719,16 @@ def main() -> None:
             logger.warning("Keine '20_budding_events.csv' unterhalb von %s gefunden.", OUTPUT_DIR)
 
     cells = _read_table(cells_path)
+    if "in_lineage_window" in cells.columns:
+        # Die Heuristik lief nur im Sparse-Phase-Fenster (relink.py); Kandidaten
+        # ausserhalb waeren hier lauter "nicht zugeordnete" Fragmente.
+        n_all = len(cells)
+        cells = cells[cells["in_lineage_window"].astype(bool)]
+        logger.info(
+            "Sparse-Phase-Fenster (Spalte in_lineage_window): %d von %d Zellzeilen in %d Kammern - "
+            "nur dort lief die Heuristik, nur dort wird validiert.",
+            len(cells), n_all, cells["exp_id"].nunique(),
+        )
     frames = [_read_table(p) for p in event_paths if Path(p).exists()]
     frames = [f for f in frames if not f.empty]
     lineage_events = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()

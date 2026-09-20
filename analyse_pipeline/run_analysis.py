@@ -75,6 +75,12 @@ from config import (
     LINEAGE_PARAMS,
     BUD_MAX_AREA_FRACTION_FALLBACK,
     BUD_SIZE_PLAUSIBLE_RANGE,
+    LINEAGE_SPARSE_MAX_OBJECTS,
+    LINEAGE_SPARSE_SMOOTH_FRAMES,
+    LINEAGE_SPARSE_MIN_FRAMES,
+    RELINK_MAX_GAP_FRAMES,
+    RELINK_MAX_DISTANCE_PX,
+    RELINK_MAX_AREA_RATIO,
     log_active_configuration,
 )
 from data_loading import load_all_results
@@ -95,9 +101,61 @@ from pipeline_steps import STEPS, PipelineContext
 from pko_comparison import run_pko_comparison
 from experiment_units import add_experiment_units, chip_overview
 from bud_size import run_bud_size_threshold
+from relink import (
+    gap_close_tracks,
+    track_fragmentation,
+    detect_sparse_window,
+    flag_lineage_window,
+    plot_lineage_window,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _gap_close_and_report(cells: pd.DataFrame, out_dir: Path, stage_before: str):
+    """Gap Closing (relink.py) plus die Kennzahlen davor/danach als Tabellen."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    frag_before = track_fragmentation(cells, stage=stage_before)
+    cells, relinks, relink_stats = gap_close_tracks(
+        cells, max_gap=RELINK_MAX_GAP_FRAMES, max_distance_px=RELINK_MAX_DISTANCE_PX,
+        max_area_ratio=RELINK_MAX_AREA_RATIO, window_col="in_lineage_window",
+    )
+    frag_after = track_fragmentation(cells, stage="after gap closing (sparse window only)")
+    pd.concat([frag_before, frag_after], ignore_index=True).to_csv(out_dir / "00_track_fragmentation.csv", index=False)
+    relinks.to_csv(out_dir / "00_track_relinks.csv", index=False)
+    relink_stats.to_csv(out_dir / "00_track_relinks_per_chamber.csv", index=False)
+    logger.info(
+        "Tabellen gespeichert: 00_track_fragmentation.csv, 00_track_relinks.csv (%d Verknuepfungen); "
+        "Median-Tracklaenge %.0f -> %.0f Frames, neue Tracks je Objekt und Frame %.3f -> %.3f",
+        len(relinks), frag_before["median_track_frames"].median(), frag_after["median_track_frames"].median(),
+        frag_before["new_tracks_per_object_frame"].median(), frag_after["new_tracks_per_object_frame"].median(),
+    )
+    return cells, relinks, relink_stats
+
+
+def _flag_sparse_window_and_report(cells: pd.DataFrame, out_dir: Path, plot: bool) -> pd.DataFrame:
+    """Sparse-Phase-Fenster je Kammer bestimmen, Tabelle/Abbildung schreiben,
+    Spalte in_lineage_window setzen."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    window = detect_sparse_window(
+        cells, max_objects=LINEAGE_SPARSE_MAX_OBJECTS,
+        smooth_frames=LINEAGE_SPARSE_SMOOTH_FRAMES, min_frames=LINEAGE_SPARSE_MIN_FRAMES,
+    )
+    meta_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber", "chip"]
+                 if c in cells.columns]
+    if meta_cols and not window.empty:
+        window = window.merge(cells[["exp_id"] + meta_cols].drop_duplicates("exp_id"), on="exp_id", how="left")
+    window.to_csv(out_dir / "20_lineage_window.csv", index=False)
+    if plot:
+        plot_lineage_window(cells, window, out_dir / "20_lineage_window.pdf",
+                            max_objects=LINEAGE_SPARSE_MAX_OBJECTS, min_frames=LINEAGE_SPARSE_MIN_FRAMES)
+    cells = flag_lineage_window(cells, window)
+    logger.info(
+        "Tabelle gespeichert: 20_lineage_window.csv - %d von %d Zellzeilen liegen im Lineage-Fenster.",
+        int(cells["in_lineage_window"].sum()), len(cells),
+    )
+    return cells
 
 
 def resolve_x_order(cells: pd.DataFrame, col: str, preferred_order: list[str] | None) -> list[str]:
@@ -304,8 +362,20 @@ def main(argv: list[str] | None = None) -> int:
     failed: list[str] = []
 
     # ------------------------------------------------------------------
-    # 2a. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
-    #     allen Daten nach QC, fuer alle Zweige dieselbe (bud_size.py).
+    # 2a. Sparse-Phase-Fenster je Kammer (relink.py): nur dort laeuft die
+    #     Mutter/Bud-Heuristik. Spalte in_lineage_window an allen Zellen;
+    #     die Kontexte lesen sie ueber PipelineContext.cells_lineage.
+    # 2b. Gap Closing im Fenster: eindeutige Tracking-Luecken automatisch
+    #     schliessen - NACH den manuellen Merges, die Vorrang haben, und nur
+    #     im duenn besetzten Feld, wo eindeutig auch richtig heisst.
+    # ------------------------------------------------------------------
+    cells = _flag_sparse_window_and_report(cells, OUTPUT_DIR, plot=True)
+    cells, relinks, relink_stats = _gap_close_and_report(cells, OUTPUT_DIR, stage_before="after manual QC")
+
+    # ------------------------------------------------------------------
+    # 2c. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
+    #     allen Daten im Sparse-Phase-Fenster, fuer alle Zweige dieselbe
+    #     (bud_size.py).
     # ------------------------------------------------------------------
     # Angespuelte Blastokonidien tauchen "neu" neben sitzenden Zellen auf und
     # bestehen die raeumliche Zuordnung wie eine Knospe - sind aber beim ersten
@@ -315,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     # 20_bud_size_threshold.csv / 20_bud_size_at_appearance.*.
     try:
         bud_size_threshold = run_bud_size_threshold(
-            cells, OUTPUT_DIR, params=LINEAGE_PARAMS,
+            cells[cells["in_lineage_window"]], OUTPUT_DIR, params=LINEAGE_PARAMS,
             fallback=BUD_MAX_AREA_FRACTION_FALLBACK, plausible=BUD_SIZE_PLAUSIBLE_RANGE,
         )
     except Exception:
@@ -337,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("  Oszillationsperioden:   %s", sorted(cells["osc_freq"].dropna().unique()))
 
     # ------------------------------------------------------------------
-    # 2b. Statische Daten (Data/<Biosensor>/static/static_<medium>/...,
+    # 2d. Statische Daten (Data/<Biosensor>/static/static_<medium>/...,
     #     condition St.omlp/St.ypd) von den Oszillationsdaten trennen - ab
     #     hier laufen beide komplett getrennt durch dieselben Schritte,
     #     landen aber in eigenen Output-Ordnern/Dateien.
@@ -376,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     # ------------------------------------------------------------------
-    # 2c. Zell-Positionen für die QC-Kalibrierung exportieren
+    # 2e. Zell-Positionen für die QC-Kalibrierung exportieren
     # ------------------------------------------------------------------
     # plot_qc_lineage_overlay.py und validate_lineage.py brauchen den
     # Zelldatensatz NACH Track-Merges und Exclusions - genau den Stand, auf dem
@@ -388,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
                         ["exp_id", "cell_uid", "track_id", "frame", "centroid_x", "centroid_y",
                          "area", "filename",
                          "biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber",
-                         "chip", "chip_family", "medium", "date"]
+                         "chip", "chip_family", "medium", "date", "in_lineage_window"]
                         if c in cells.columns]
     qc_positions_path = OUTPUT_DIR / "00_cell_positions.parquet"
     cells[qc_position_cols].to_parquet(qc_positions_path, index=False)
@@ -510,8 +580,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         logger.info("QC-beruehrte Batches (Vergleich mit/ohne QC):\n%s", batches.to_string(index=False))
         keys = set(map(tuple, batches[["biosensor", "osc_type", "osc_freq"]].astype(str).values))
+        # Dieselben AUTOMATISCHEN Schritte wie im Hauptlauf (Gap Closing,
+        # Sparse-Phase-Fenster) - nur das manuelle QC fehlt.
         raw = add_time_column(cells_raw, MIN_PER_FRAME)
         raw = add_experiment_units(raw, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX)
+        raw = _flag_sparse_window_and_report(raw, OUTPUT_DIR / "no_qc", plot=False)
+        raw, _, _ = _gap_close_and_report(raw, OUTPUT_DIR / "no_qc", stage_before="raw")
         in_batches = pd.Series(
             list(map(tuple, raw[["biosensor", "osc_type", "osc_freq"]].astype(str).values)),
             index=raw.index,

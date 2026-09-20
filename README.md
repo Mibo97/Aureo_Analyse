@@ -136,6 +136,7 @@ Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
 | `qc_exclusions.py` | Nicht-destruktives manuelles QC: Track-Merges & Exclusions |
 | `sensors.py` | Ratiometrische Sensoren → `ratio_*`-Spalten (`SENSOR_CONFIG`) |
 | `lineage.py` | Mutter/Bud-Heuristik, Budding Ratio pro Mutter |
+| `relink.py` | Gap Closing und Sparse-Phase-Fenster gegen die Track-Fragmentierung |
 | `growth_rate.py` | µ_event aus Budding-Intervallen (Eq. 2) |
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
 | `budding_ratio_timeseries.py` | Budding Ratio als Zeitreihe (Eq. 3) |
@@ -156,10 +157,10 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 | Präfix | Inhalt |
 | --- | --- |
-| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip** |
+| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
-| `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
+| `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
 | `50_` | Zusammenfassungstabelle |
@@ -307,6 +308,12 @@ und verschiedenen Zielen teilen einen Track mit Tracker-Sprung auf.
 
 `--skip-qc-comparison` lässt beides weg.
 
+Ergebnis für den QC-Batch: über den ganzen Lauf ändert das manuelle QC 2,6 %
+der Budding-Events, im Sparse-Phase-Fenster 19 %. Es korrigiert einzelne
+Zellen, behebt aber nicht die Track-Fragmentierung (siehe
+„Sparse-Phase-Lineage“). Der Lauf ohne QC enthält dieselben automatischen
+Schritte (Gap Closing, Fenster) — verglichen wird wirklich nur das manuelle QC.
+
 ## Die Lineage-Heuristik validieren
 
 `lineage.classify_mother_bud()` entscheidet über Budding Ratio, µ_event, den
@@ -316,10 +323,56 @@ gehört vor jede Aussage eine Validierung. Beide Werkzeuge lesen die Dateien,
 die `run_analysis.py` erzeugt:
 
 ```
-analysis_output/00_cell_positions.parquet   Zellpositionen NACH QC
+analysis_output/00_cell_positions.parquet   Zellpositionen NACH QC und Gap Closing,
+                                            Spalte in_lineage_window
 analysis_output/20_budding_events.csv       erkannte Events (je eine Datei
 analysis_output/static/20_budding_events.csv   pro Teil-Pipeline)
 ```
+
+### Sparse-Phase-Lineage: die Heuristik läuft nur im dünn besetzten Feld
+
+Der Tracker der Bildverarbeitung vergibt in diesen Daten mit etwa 12 % pro
+Objekt und Frame eine neue Track-ID, unabhängig von der Zelldichte (QC-Batch
+WT/pH/6: 9 063 Tracks in 11 Kammern, Median-Tracklänge 3 Frames, 30 %
+Ein-Frame-Tracks). Jede „neu auftauchende Zelle“ ist damit zunächst ein
+Fragment. Weil sich die Kammern von 2 auf bis zu 180 Objekte füllen, folgt die
+Zahl der Budding-Events der Dichte: im QC-Batch 462 pro Kammer, davon 243 in
+den letzten 22 Frames — Fragment-Statistik, keine Biologie. Das manuelle QC
+(248 Merges, 214 Hintergrund-Ausschlüsse) entfernte davon 2,6 %.
+
+Deshalb:
+
+1. **Fenster je Kammer** (`20_lineage_window.csv/.pdf`, `LINEAGE_SPARSE_*` in
+   `config.py`): vom Start bis zum letzten Frame, bevor der rollende Median der
+   Objekte pro Frame 20 übersteigt; Kammern mit weniger als 20 solchen Frames
+   fallen aus der Lineage-Auswertung. Budding Ratio, Panel A, die
+   Budding-Ratio-Zeitreihe, µ_event, der Stammbaum und die Mutter/Knospe-
+   Trennung von µ_area stammen nur aus diesem Fenster
+   (`PipelineContext.cells_lineage`). Endzustand, µ_area und R(t)/R(p) sehen
+   weiterhin den ganzen Lauf.
+2. **Gap Closing im Fenster** (`00_track_relinks.csv`, `RELINK_*`): ein neu
+   beginnender Track wird an einen höchstens 2 Frames vorher beendeten Track
+   angehängt, wenn Abstand ≤ 150 px, Flächenverhältnis in [0.5, 2] und die
+   Zuordnung in beide Richtungen eindeutig ist. Manuelle Merges aus
+   `qc_exclusions.csv` laufen vorher und haben Vorrang. Kalibrierung am
+   QC-Batch: von den 70 manuellen Verknüpfungen im Fenster findet die Regel
+   40 %; der Rest ist mehrdeutig (Sprünge derselben Zelle von median 97 px bei
+   mehreren Kandidaten) und bleibt bewusst offen — lieber ein Bruch zu viel
+   als zwei Zellen vermischt. Größere Radien oder Lücken finden *weniger*,
+   weil die Mehrdeutigkeit schneller wächst als die Trefferzahl.
+3. **Kennzahlen** (`00_track_fragmentation.csv`): Objekte pro Frame, Tracks,
+   Median-Tracklänge, neue Tracks je Objekt und Frame, Anteil der
+   Objekt-Frames in Tracks ≥ 10 Frames — vor und nach dem Gap Closing, je
+   Kammer. Diese Tabelle gehört in die Arbeit, sobald Lineage-Ergebnisse
+   gezeigt werden.
+
+Im QC-Batch bleiben im Fenster 136 Events in 11 Kammern (manuelles QC: 128,
+beides zusammen: 116), 118 davon mit einer über ≥ 30 Frames verfolgten Mutter
+— die Größenordnung, die das Zellwachstum im Fenster (2 → 20 Objekte in
+etwa 11 h) erwarten lässt. Die Budding Ratio ist damit eine Aussage über die
+ersten Stunden eines Laufs, nicht über den ganzen Lauf. `µ_area` fittet
+außerdem nur noch Tracks mit ≥ 10 Frames (`AREA_GROWTH_MIN_FRAMES`); der alte
+Default von 2 Frames fittete überwiegend Fragmente.
 
 ### Größenkriterium: angespülte Zellen sind keine Knospen
 
@@ -465,6 +518,9 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
 
 * `lineage.py` leitet Mutter/Bud aus räumlicher Nähe, Tracklänge und der Größe
   beim ersten Auftreten ab; es gibt **kein** echtes Lineage-Tracking aus der
-  Bildverarbeitung. Vor jeder Publikation mit `inspect_lineage.py` gegen echte
+  Bildverarbeitung, und der Tracker fragmentiert (~12 % neue IDs je Objekt und
+  Frame). Die Heuristik läuft deshalb nur im Sparse-Phase-Fenster je Kammer
+  (`relink.py`): alle Lineage-Ergebnisse beschreiben die ersten Stunden eines
+  Laufs. Vor jeder Publikation mit `inspect_lineage.py` gegen echte
   QC-Overlays kalibrieren.
 * `tolerance_px` ist ein Pixel-Wert und damit von Kamera/Optik abhängig.
