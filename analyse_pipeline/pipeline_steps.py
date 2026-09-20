@@ -67,6 +67,8 @@ from endpoint_trends import (
     spearman_against_period,
     plot_endpoint_vs_period,
     bracket_normalise,
+    control_trend_check,
+    within_culture_trend,
     detect_saturation_frame,
     static_endpoint_window,
 )
@@ -517,6 +519,7 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                     100 * ENDPOINT_LAST_FRACTION, value_cols)
 
     all_per_replicate, all_summary, all_trend, all_scores, all_chambers = [], [], [], [], []
+    all_ctrl_trend, all_within = [], []
     for value_col in value_cols:
         per_replicate, summary = compute_endpoint_per_replicate(
             cells, value_col, last_fraction=ENDPOINT_LAST_FRACTION, frame_window=frame_window,
@@ -540,6 +543,14 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
             all_trend.append(trend)
 
         if ctx.x_col == "osc_freq":
+            # Laufen die Kontrollen der Strukturen mit der Periode? Und was
+            # passiert innerhalb einer Kultur (2-3 Perioden, eine Vorkultur)?
+            ctrl_trend = control_trend_check(per_replicate)
+            if not ctrl_trend.empty:
+                all_ctrl_trend.append(ctrl_trend)
+            within = within_culture_trend(per_replicate)
+            if not within.empty:
+                all_within.append(within)
             # Bracket-Score: jede Periode relativ zu den Kontrollen IHRES Chips.
             score = bracket_normalise(per_replicate)
             score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
@@ -592,6 +603,15 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         trend_all.to_csv(output_dir / "13_endpoint_spearman.csv", index=False)
         logger.info("Tabelle gespeichert: 13_endpoint_spearman.csv\n%s",
                     trend_all.to_string(index=False))
+    if all_ctrl_trend:
+        ctrl_all = pd.concat(all_ctrl_trend, ignore_index=True)
+        ctrl_all.to_csv(output_dir / "13_endpoint_control_trend.csv", index=False)
+        logger.info("Tabelle gespeichert: 13_endpoint_control_trend.csv\n%s",
+                    ctrl_all[["value_col", "biosensor", "osc_type", "rho_osc", "rho_ctrl_mean",
+                              "rho_osc_minus_ctrl", "verdict"]].round(2).to_string(index=False))
+    if all_within:
+        pd.concat(all_within, ignore_index=True).to_csv(output_dir / "13_endpoint_within_culture.csv", index=False)
+        logger.info("Tabelle gespeichert: 13_endpoint_within_culture.csv")
     else:
         logger.info(
             "Schritt 13: kein Spearman-Trendtest geschrieben - dafuer braucht es mindestens "
@@ -628,6 +648,15 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
             pd.concat(trends, ignore_index=True).to_csv(output_dir / "21_budding_rate_spearman.csv", index=False)
         if not score.empty:
             score.to_csv(output_dir / "21_budding_rate_bracket_score.csv", index=False)
+        ctrl_trend = control_trend_check(per_chip)
+        if not ctrl_trend.empty:
+            ctrl_trend.to_csv(output_dir / "21_budding_rate_control_trend.csv", index=False)
+            logger.info("Tabelle gespeichert: 21_budding_rate_control_trend.csv\n%s",
+                        ctrl_trend[["biosensor", "osc_type", "rho_osc", "rho_ctrl_mean",
+                                    "rho_osc_minus_ctrl", "verdict"]].round(2).to_string(index=False))
+        within = within_culture_trend(per_chip)
+        if not within.empty:
+            within.to_csv(output_dir / "21_budding_rate_within_culture.csv", index=False)
         for osc_type in sorted(per_chip["osc_type"].dropna().unique()):
             sel = per_chip["osc_type"] == osc_type
             plot_endpoint_vs_period(

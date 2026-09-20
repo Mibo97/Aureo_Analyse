@@ -98,7 +98,7 @@ Bildverarbeitung und bedeuten **nicht**, was ihre Namen nahelegen.
 
 | Zweig | pro (Stamm, osc_type, Periode) | `replicate` ist … | biologische Einheit | n je Bedingung |
 | --- | --- | --- | --- | --- |
-| Oszillation, PKO | **ein Chip**, ein Tag, **eine Vorkultur**; ~11 Kammern (5 Osc, 3 PosCtrl, 3 NegCtrl) auf mehreren Arrays | ein Array-Index, der gleiche Positionslabels (`ChamA13` ×3) auseinanderhält | der **Chip** (= der Batch) | **1** |
+| Oszillation, PKO | **eine Struktur** (im Code und in allen Tabellen `chip`); ~11 Kammern (5 Osc, 3 PosCtrl, 3 NegCtrl) auf mehreren Arrays. Ein **physischer Chip trägt 2–3 Strukturen** = 2–3 Perioden aus **einer Vorkultur an einem Tag** (Spalte `culture`, `00_chip_overview.csv`: `n_structures_in_culture`) | ein Array-Index, der gleiche Positionslabels (`ChamA13` ×3) auseinanderhält | die **Kultur** (physischer Chip); die Struktur ist die Behandlungseinheit | **1** Struktur; 2 Kulturen je Serie (Glc: 3 + 3 Perioden, pH: 2 + 2) |
 | statisch | — | **ein eigener Chip** mit eigener Vorkultur; `chamber` ist immer `ChamA0` | der Chip | 4–5 pro Medium und Chip-Familie |
 
 Drei Folgen, die in die Arbeit gehören:
@@ -111,10 +111,18 @@ Drei Folgen, die in die Arbeit gehören:
    Perioden ist **ein Chip pro Dosis** (6 bei Glc, 4 bei pH); Spearman läuft
    auf Chip-Mittelwerten mit n = Zahl der Perioden und ist damit eine
    Effektstärke, kein Test, auf den man sich stützt.
-2. **Die Kontrollen liegen auf demselben Chip wie die Behandlung.** Jede
+2. **Die Kontrollen liegen auf derselben Struktur wie die Behandlung.** Jede
    Periode kann deshalb gegen *ihre eigenen* PosCtrl/NegCtrl normiert werden
-   (Bracket-Score, Schritt 13) — das entfernt den Chip-/Tages-/Kultur-Effekt,
-   ohne dass man den Chip kennen müsste.
+   (Bracket-Score, Schritt 13) — das entfernt den Struktur-/Kultur-Effekt,
+   ohne dass man ihn kennen müsste. Und die Kontrollen sind der Prüfstein für
+   jeden Trend gegen die Periode: sie liegen in konstantem Medium und können
+   auf die Periode nicht reagieren. `13_endpoint_control_trend.csv` und
+   `21_budding_rate_control_trend.csv` stellen dem Spearman der
+   Oszillationskammern den der Kontrollen derselben Strukturen gegenüber
+   (`rho_ctrl_mean`) und den der Differenz (`rho_osc_minus_ctrl`). Laufen die
+   Kontrollen mit, trägt die Struktur den Trend, nicht die Periode.
+   `*_within_culture.csv` zeigt dasselbe innerhalb einer Kultur (2–3
+   Perioden, eine Vorkultur), wo der Kulturvergleich entfällt.
 3. **Kammerposition und Bedingung sind konfundiert**, weil der Chip die
    Medien fest verdrahtet: `A1/A2` = Feast, `A13/A14` = Famine, `A3–A12` =
    Wechsel. „Die Kontrollen verhalten sich anders“ und „die Randreihen
