@@ -350,7 +350,11 @@ def control_trend_check(
 
     Eine Zeile je (value_col, biosensor, osc_type): rho gegen die Periode fuer
     die Oszillationskammern, PosCtrl, NegCtrl, das Kontrollmittel und
-    Osc - Kontrollmittel, mit n_periods und verdict.
+    Osc - Kontrollmittel, mit n_periods und verdict. Ein 'period effect'
+    verlangt drei Dinge zugleich: die Oszillationskammern trenden
+    (|rho| >= strong), KEINE Kontrollart trendet gleichsinnig, und die
+    Differenz Osc - Kontrollen trendet ebenfalls (sonst sind die
+    Kontrollschwankungen zwischen den Strukturen so gross wie der Trend).
     """
     if per_chip is None or per_chip.empty or value_col not in per_chip.columns:
         return pd.DataFrame()
@@ -387,29 +391,41 @@ def control_trend_check(
             "rho_ctrl_mean": _rho(period, wide["ctrl_mean"]),
             "rho_osc_minus_ctrl": _rho(period, wide["osc_minus_ctrl"]),
         })
-        r_osc, r_ctrl, r_diff = rec["rho_osc"], rec["rho_ctrl_mean"], rec["rho_osc_minus_ctrl"]
+        r_osc, r_diff = rec["rho_osc"], rec["rho_osc_minus_ctrl"]
+        # Der staerkste Kontrolltrend zaehlt: schon EINE Kontrollart, die mit
+        # der Periode laeuft, belegt einen Struktureffekt - Kontrollen in
+        # konstantem Medium koennen auf die Periode nicht reagieren.
+        ctrl_rhos = [rec["rho_posctrl"], rec["rho_negctrl"], rec["rho_ctrl_mean"]]
+        ctrl_rhos = [r for r in ctrl_rhos if not np.isnan(r)]
+        r_ctrl = max(ctrl_rhos, key=abs) if ctrl_rhos else np.nan
+        rec["rho_ctrl_strongest"] = r_ctrl
+        same_sign_diff = (not np.isnan(r_diff)) and abs(r_diff) >= strong and np.sign(r_diff) == np.sign(r_osc)
         if np.isnan(r_osc) or np.isnan(r_ctrl):
             verdict = "fewer than 3 periods with oscillation and control values"
+        elif abs(r_osc) < strong:
+            verdict = "no monotone trend of the oscillation chambers"
         elif abs(r_ctrl) >= strong and np.sign(r_ctrl) == np.sign(r_osc):
-            verdict = ("structure effect: the constant-medium controls trend with the period like the "
-                       "oscillation chambers" + ("; Osc - controls still trends, period effect on top"
-                                                  if not np.isnan(r_diff) and abs(r_diff) >= strong else
-                                                  "; no period effect beyond the controls"))
-        elif abs(r_osc) >= strong and abs(r_ctrl) < strong:
-            verdict = "period effect: oscillation chambers trend, their controls do not"
+            verdict = ("structure effect: a constant-medium control trends with the period like the "
+                       "oscillation chambers" + ("; Osc - controls still trends, residual period effect on top"
+                                                  if same_sign_diff else "; no period effect beyond the controls"))
+        elif same_sign_diff:
+            verdict = "period effect: oscillation chambers trend, their controls do not, and the difference trends"
         else:
-            verdict = "no monotone trend"
+            verdict = ("not robust: oscillation chambers trend, but not after subtracting their controls "
+                       "(control swings between structures as large as the trend)")
         rec["verdict"] = verdict
         rows.append(rec)
     out = pd.DataFrame(rows)
     if not out.empty:
         n_struct = int(out["verdict"].str.startswith("structure effect").sum())
         n_period = int(out["verdict"].str.startswith("period effect").sum())
+        n_weak = int(out["verdict"].str.startswith("not robust").sum())
         logger.info(
-            "Kontroll-Trend-Check (%s): %d Serien mit Struktureffekt (Kontrollen laufen mit der Periode), "
-            "%d mit Periodeneffekt ohne Kontrolltrend, %d ohne monotonen Trend.",
+            "Kontroll-Trend-Check (%s): %d Serien mit Struktureffekt (eine Kontrolle laeuft mit der Periode), "
+            "%d mit robustem Periodeneffekt (Osc und Osc - Kontrollen trenden, Kontrollen nicht), "
+            "%d nicht robust (Osc trendet, die Differenz nicht), %d ohne Osc-Trend.",
             value_col if "value_col" not in out.columns else ", ".join(sorted(out["value_col"].astype(str).unique())),
-            n_struct, n_period, int((out["verdict"] == "no monotone trend").sum()),
+            n_struct, n_period, n_weak, int(out["verdict"].str.startswith("no monotone").sum()),
         )
     return out
 

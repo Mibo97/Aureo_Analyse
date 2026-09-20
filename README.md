@@ -119,8 +119,14 @@ Drei Folgen, die in die Arbeit gehören:
    auf die Periode nicht reagieren. `13_endpoint_control_trend.csv` und
    `21_budding_rate_control_trend.csv` stellen dem Spearman der
    Oszillationskammern den der Kontrollen derselben Strukturen gegenüber
-   (`rho_ctrl_mean`) und den der Differenz (`rho_osc_minus_ctrl`). Laufen die
-   Kontrollen mit, trägt die Struktur den Trend, nicht die Periode.
+   (`rho_ctrl_mean`, `rho_ctrl_strongest`) und den der Differenz
+   (`rho_osc_minus_ctrl`). Läuft auch nur eine Kontrollart mit, trägt die
+   Struktur den Trend, nicht die Periode. Ein `period effect` verlangt drei
+   Dinge zugleich: die Oszillationskammern trenden, keine Kontrollart trendet
+   gleichsinnig, und die Differenz trendet ebenfalls. In den echten Daten
+   erfüllt das von 28 Readout-Serien-Kombinationen keine, die über Stämme
+   hinweg wiederkehrt; die Sensor-Ratios (OxPro, pHluorin) laufen in den
+   NegCtrl-Kammern genauso mit der Periode wie in den Oszillationskammern.
    `*_within_culture.csv` zeigt dasselbe innerhalb einer Kultur (2–3
    Perioden, eine Vorkultur), wo der Kulturvergleich entfällt.
 3. **Kammerposition und Bedingung sind konfundiert**, weil der Chip die
