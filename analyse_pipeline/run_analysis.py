@@ -99,7 +99,7 @@ from sensors import compute_ratios, SENSOR_CONFIG
 from analysis import add_time_column, find_intensity_columns
 from pipeline_steps import STEPS, PipelineContext
 from pko_comparison import run_pko_comparison
-from experiment_units import add_experiment_units, chip_overview
+from experiment_units import add_experiment_units, chip_overview, run_order_check
 from bud_size import run_bud_size_threshold
 from relink import (
     gap_close_tracks,
@@ -358,6 +358,15 @@ def main(argv: list[str] | None = None) -> int:
     overview_chips = chip_overview(cells)
     overview_chips.to_csv(OUTPUT_DIR / "00_chip_overview.csv", index=False)
     logger.info("Tabelle gespeichert: 00_chip_overview.csv (%d Chips)", len(overview_chips))
+    # Laufreihenfolge gegen Periode: ein Chip pro Periode und Tag - wurde in
+    # Periodenreihenfolge gefahren, ist ein Trend nicht von einer Tagesdrift
+    # zu trennen (experiment_units.run_order_check()).
+    run_order = run_order_check(overview_chips)
+    if not run_order.empty:
+        run_order.to_csv(OUTPUT_DIR / "00_chip_run_order.csv", index=False)
+        logger.info("Tabelle gespeichert: 00_chip_run_order.csv\n%s",
+                    run_order[["biosensor", "osc_type", "n_chips", "periods_in_run_order",
+                               "spearman_period_vs_date", "verdict"]].to_string(index=False))
 
     failed: list[str] = []
 
