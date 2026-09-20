@@ -337,8 +337,12 @@ Verteilung nicht zweigipflig, wird **kein** Größenfilter angewendet
 der Grund steht in der Spalte `source`. Auf den echten Daten ist genau das der
 Fall: eine breite Mode um 0.4–0.5 ohne zweiten Gipfel. Das Kriterium bleibt
 dort inaktiv, bis ein tragfähiges Unterscheidungsmerkmal gefunden ist — dafür
-trägt `20_bud_size_at_appearance.csv` Diagnosespalten (Flächenabnahme der
-Mutter beim Auftauchen, Wachstum des Kandidaten danach, Kontaktverhältnis).
+trägt `20_bud_size_at_appearance.csv` Diagnosespalten: gerade beendeter Track
+an derselben Stelle (`ended_track_*`, Tracking-Bruch statt Knospe — im
+manuellen QC die häufigste Korrektur), Wachstum des Kandidaten danach,
+Kontaktverhältnis, Bewegung im nächsten Frame, Flächenbilanz der Mutter (nur
+Kontrolle: die Muttermaske ändert sich beim ersten Segmentieren einer Knospe
+praktisch nicht).
 
 | Datei (direkt in `analysis_output/`) | Inhalt |
 | --- | --- |

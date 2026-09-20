@@ -79,11 +79,15 @@ logger = logging.getLogger(__name__)
 
 CANDIDATE_COLS = ["exp_id", "mother_cell_uid", "bud_cell_uid", "budding_frame",
                   "mother_area", "bud_area", "bud_area_fraction",
-                  # Diagnose (lineage.classify_mother_bud): Flaechenbilanz der
-                  # Mutter, Wachstum des Kandidaten, Kontakt, Tracklaengen.
+                  # Diagnose (lineage.classify_mother_bud, Docstring dort):
+                  # gerade beendeter Track in der Naehe (Tracking-Bruch?),
+                  # Wachstum, Kontakt, Bewegung, Flaechenbilanz der Mutter.
+                  "ended_track_cell_uid", "ended_track_gap_frames",
+                  "ended_track_distance_px", "ended_track_area_ratio",
+                  "bud_area_plus1", "bud_area_plus3", "contact_ratio",
+                  "bud_move_plus1_px", "mother_move_plus1_px", "rel_move_plus1_px",
                   "mother_area_prev", "mother_area_next", "mother_area_drop",
                   "mother_area_drop_over_bud", "mother_age_frames",
-                  "bud_area_plus1", "bud_area_plus3", "contact_ratio",
                   "distance_px", "adaptive_radius_px", "bud_final_track_length",
                   "bud_was_washed_out", "mother_eccentricity", "bud_eccentricity"]
 META_COLS = ["biosensor", "osc_type", "osc_freq", "condition", "chip", "chip_family", "medium"]

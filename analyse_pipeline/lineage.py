@@ -83,9 +83,16 @@ Die Schwelle kommt aus den Daten (bud_size.py: Antimodus der zweigipfligen
 Verteilung) und wird von run_analysis.py als bud_size_threshold uebergeben.
 Ist die Verteilung nicht zweigipflig - auf den echten Daten der Fall -, ist
 die Schwelle unendlich und es greift KEIN Filter; ebenso ohne Schwelle
-(None). Zusaetzlich traegt jedes Event Diagnose-Spalten (Flaechenabnahme der
-Mutter beim Auftauchen, Wachstum des Kandidaten danach, Kontaktverhaeltnis),
-mit denen bud_size.py nach einem tragfaehigen Unterscheidungsmerkmal sucht.
+(None). Zusaetzlich traegt jedes Event Diagnose-Spalten, mit denen
+bud_size.py nach einem tragfaehigen Unterscheidungsmerkmal sucht - vor allem:
+lag im Frame davor ein gerade BEENDETER Track an derselben Stelle? Dann ist
+der Kandidat sehr wahrscheinlich dieselbe Zelle nach einem Tracking-Bruch
+(im manuellen QC von WT/pH/6 die haeufigste Korrektur: 248 Merges wegen
+Zellbewegung) und keine Knospe. Weitere Spalten: Wachstum des Kandidaten
+danach, Kontaktverhaeltnis, Bewegung im naechsten Frame, Flaechenbilanz der
+Mutter (laut Bildgebung bleibt die Muttermaske beim ersten Segmentieren einer
+Knospe praktisch unveraendert - die Bilanz ist deshalb nur eine Kontrolle,
+kein Kriterium).
 """
 
 from __future__ import annotations
@@ -100,6 +107,11 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+# Diagnose-Spalten ended_track_*: wie viele Frames vor dem Auftauchen eines
+# Kandidaten darf ein Track geendet haben, um als "gerade beendet" zu zaehlen?
+ENDED_TRACK_MAX_GAP = 5
 
 
 @dataclass
@@ -170,13 +182,26 @@ def classify_mother_bud(
         bud_area, bud_area_fraction (Flaeche des Buds beim ersten Auftreten,
             absolut und relativ zur Mutter), bud_size_threshold (die
             angewandte Schwelle, NaN = kein Groessenfilter),
+        Diagnose fuer bud_size.py (kein Filter, nur Spalten):
+        ended_track_cell_uid, ended_track_gap_frames, ended_track_distance_px,
+            ended_track_area_ratio: der naechste Track, der hoechstens
+            ENDED_TRACK_MAX_GAP Frames vor dem Auftauchen des Kandidaten
+            GEENDET hat - Abstand zu dessen letzter Position, Frame-Luecke
+            und Flaechenverhaeltnis. Ein Kandidat mit kleinem Abstand und
+            Flaechenverhaeltnis ~ 1 ist derselbe Zelltrack nach einem
+            Tracking-Bruch, keine Knospe (NaN = kein Track geendet).
+        bud_area_plus1, bud_area_plus3: Flaeche des Kandidaten 1 bzw. 3
+            Frames spaeter (Wachstum). contact_ratio: Centroid-Abstand /
+            (r_Mutter + r_Kandidat), ~1 = beruehrend.
+        bud_move_plus1_px, mother_move_plus1_px, rel_move_plus1_px: Bewegung
+            von Kandidat und Mutter zum naechsten Frame und Aenderung ihres
+            Abstands (eine angewachsene Knospe bewegt sich mit der Mutter).
         mother_area_prev, mother_area_next, mother_area_drop,
-            mother_area_drop_over_bud, mother_age_frames, bud_area_plus1,
-            bud_area_plus3, contact_ratio, bud_eccentricity (falls vorhanden):
-            Diagnose fuer bud_size.py - verliert die Mutter beim Auftauchen
-            des Kandidaten Flaeche (eine echte Knospe wird aus ihrer Maske
-            herausgeloest), waechst der Kandidat danach, sitzt er an der
-            Mutter an (contact_ratio ~ 1)?
+            mother_area_drop_over_bud, mother_age_frames: Flaechenbilanz und
+            Alter der Mutter um das Auftauchen herum - nur Kontrolle: laut
+            Bildgebung bleibt die Muttermaske beim ersten Segmentieren einer
+            Knospe praktisch unveraendert.
+        bud_eccentricity (falls vorhanden).
         bud_final_track_length, bud_was_washed_out (finale Gesamttracklaenge
             des Buds bzw. ob sie <= bud_max_frames liegt - reine Report-Info,
             siehe Modul-Docstring "FIX"),
@@ -236,9 +261,19 @@ def classify_mother_bud(
         # Sortierte Frame-Liste pro Track - Grundlage der KAUSALEN
         # "etabliert zum Zeitpunkt bud_frame"-Pruefung weiter unten.
         frames_by_track = group.groupby("cell_uid")["frame"].apply(lambda s: np.sort(s.unique()))
-        # Flaeche je (Zelle, Frame) fuer die Diagnose-Spalten: Mutterflaeche
-        # im Frame VOR dem Auftauchen, Flaeche des Kandidaten danach.
+        # Flaeche und Position je (Zelle, Frame) fuer die Diagnose-Spalten.
         area_lookup = dict(zip(zip(group["cell_uid"], group["frame"]), group["area"]))
+        pos_lookup = dict(zip(zip(group["cell_uid"], group["frame"]),
+                              zip(group["centroid_x"], group["centroid_y"])))
+        # Letzte Zeile jedes Tracks: wo und wie gross war er, als er endete?
+        # Ein Kandidat, der kurz danach an derselben Stelle auftaucht, ist
+        # derselbe Zelltrack nach einem Tracking-Bruch (siehe Docstring).
+        last_rows = group.groupby("cell_uid").tail(1).set_index("cell_uid")
+        last_frame_arr = last_rows["frame"].to_numpy()
+        last_x_arr = last_rows["centroid_x"].to_numpy(dtype=float)
+        last_y_arr = last_rows["centroid_y"].to_numpy(dtype=float)
+        last_area_arr = last_rows["area"].to_numpy(dtype=float)
+        last_uid_arr = last_rows.index.to_numpy()
 
         # 1. ALLE neu auftauchenden Tracks sind Bud-KANDIDATEN - bewusst
         # KEIN Filter auf ihre eigene (finale) Tracklaenge mehr (siehe
@@ -331,16 +366,44 @@ def classify_mother_bud(
                                 if k_prev >= 0 else np.nan)
             mother_area_drop = mother_area_prev - mother_area if np.isfinite(mother_area_prev) else np.nan
             contact = np.sqrt(mother_area / np.pi) + np.sqrt(bud_area / np.pi) if mother_area > 0 and bud_area > 0 else np.nan
+            # Gerade beendeter Track in der Naehe? (Tracking-Bruch statt Knospe)
+            ended = (last_frame_arr < bud_frame) & (last_frame_arr >= bud_frame - ENDED_TRACK_MAX_GAP)
+            ended_uid, ended_gap, ended_dist, ended_ratio = pd.NA, np.nan, np.nan, np.nan
+            if ended.any():
+                d_end = np.hypot(last_x_arr[ended] - bud_x, last_y_arr[ended] - bud_y)
+                j = int(np.nanargmin(d_end))
+                ended_uid = last_uid_arr[ended][j]
+                ended_gap = int(bud_frame - last_frame_arr[ended][j])
+                ended_dist = float(d_end[j])
+                a_end = last_area_arr[ended][j]
+                ended_ratio = bud_area / a_end if a_end > 0 else np.nan
+
+            # Bewegung zum naechsten Frame: Kandidat, Mutter, ihr Abstand.
+            b_next = pos_lookup.get((bud_tid, bud_frame + 1))
+            m_next = pos_lookup.get((mom_uid, bud_frame + 1))
+            bud_move = float(np.hypot(b_next[0] - bud_x, b_next[1] - bud_y)) if b_next else np.nan
+            mother_move = (float(np.hypot(m_next[0] - mom_row["centroid_x"], m_next[1] - mom_row["centroid_y"]))
+                           if m_next else np.nan)
+            rel_move = (float(abs(np.hypot(b_next[0] - m_next[0], b_next[1] - m_next[1]) - dists[best_mom_idx]))
+                        if (b_next and m_next) else np.nan)
+
             record.update({
+                "ended_track_cell_uid": ended_uid,
+                "ended_track_gap_frames": ended_gap,
+                "ended_track_distance_px": ended_dist,
+                "ended_track_area_ratio": ended_ratio,
+                "bud_area_plus1": float(area_lookup.get((bud_tid, bud_frame + 1), np.nan)),
+                "bud_area_plus3": float(area_lookup.get((bud_tid, bud_frame + 3), np.nan)),
+                "contact_ratio": float(dists[best_mom_idx]) / contact if np.isfinite(contact) and contact > 0 else np.nan,
+                "bud_move_plus1_px": bud_move,
+                "mother_move_plus1_px": mother_move,
+                "rel_move_plus1_px": rel_move,
                 "mother_area_prev": mother_area_prev,
                 "mother_area_next": float(area_lookup.get((mom_uid, bud_frame + 1), np.nan)),
                 "mother_area_drop": mother_area_drop,
                 "mother_area_drop_over_bud": (mother_area_drop / bud_area
                                               if np.isfinite(mother_area_drop) and bud_area > 0 else np.nan),
                 "mother_age_frames": k_prev + 1,
-                "bud_area_plus1": float(area_lookup.get((bud_tid, bud_frame + 1), np.nan)),
-                "bud_area_plus3": float(area_lookup.get((bud_tid, bud_frame + 3), np.nan)),
-                "contact_ratio": float(dists[best_mom_idx]) / contact if np.isfinite(contact) and contact > 0 else np.nan,
             })
             if has_eccentricity:
                 record["mother_eccentricity"] = mom_row["eccentricity"]
