@@ -637,6 +637,7 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
                 score=score[score["osc_type"] == osc_type] if not score.empty else None,
                 score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
                 ylabel="buds per mother-hour\n(sparse-phase window)",
+                title="budding rate in the sparse-phase window vs cycle period — one chip per period",
             )
     else:
         plot_point_errorbar(
