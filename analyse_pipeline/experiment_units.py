@@ -201,6 +201,8 @@ def run_order_check(overview: pd.DataFrame) -> pd.DataFrame:
         by_date = g.sort_values(["_date", "_period"])
         rec = {
             "biosensor": bs, "osc_type": ot, "n_chips": int(len(g)),
+            "n_dates": int(g["_date"].nunique()),
+            "chips_per_date_max": int(g.groupby("_date").size().max()),
             "periods_in_run_order": " < ".join(f"{p:g}" for p in by_date["_period"]),
             "dates_by_period": " ".join(f"{p:g}:{int(d)}" for p, d in zip(g["_period"], g["_date"])),
             "spearman_period_vs_date": np.nan, "p_value": np.nan, "verdict": "",
@@ -209,12 +211,14 @@ def run_order_check(overview: pd.DataFrame) -> pd.DataFrame:
             rho, p = stats.spearmanr(g["_period"], g["_date"])
             rec.update(spearman_period_vs_date=float(rho), p_value=float(p))
             rec["verdict"] = (
-                "run in period order: a day-to-day drift would look like a period effect"
+                "run in period order (in day blocks): a day-to-day drift would look like a period effect"
                 if abs(rho) >= 0.8 else
                 "mixed run order: a day-to-day drift cannot mimic a monotone period effect"
             )
+        elif len(g) >= 3:
+            rec["verdict"] = "all chips on one date: no day-to-day drift possible within this series"
         else:
-            rec["verdict"] = "fewer than 3 chips or all on one date"
+            rec["verdict"] = "fewer than 3 chips"
         rows.append(rec)
     out = pd.DataFrame(rows)
     if not out.empty:
