@@ -159,7 +159,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip** |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
-| `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum |
+| `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
 | `50_` | Zusammenfassungstabelle |
@@ -292,12 +292,18 @@ diese Batches zusätzlich auf den **Rohdaten** (keine Merges, keine Ausschlüsse
 nach `analysis_output/no_qc/` und stellt in `analysis_output/qc_comparison/`
 Kammer für Kammer gegenüber, was das QC geändert hat:
 
+Ausschlüsse werden **vor und nach** den Merges angewendet (ein Ausschluss auf
+dem Quell-Track greift vor dem Umbenennen, einer auf dem Ziel-Track trifft
+danach auch die hineingemergten Frames). `frame_from`/`frame_to` gelten auch
+für Merges: zwei Merge-Zeilen derselben `cell_uid` mit disjunkten Bereichen
+und verschiedenen Zielen teilen einen Track mit Tracker-Sprung auf.
+
 | Datei | Inhalt |
 | --- | --- |
 | `70_qc_effect.pdf` | mit QC (x) gegen ohne QC (y), ein Punkt pro Kammer; auf der Diagonale = kein Effekt |
 | `70_qc_effect_summary.csv` | Median der relativen Änderung je Kennzahl und Kontrollart |
 | `70_qc_exclusion_inventory.csv` | Zeilen je Kammer, Aktion (merge/exclude) und Grund |
-| `70_qc_exclusions_conflicts.csv` | Tracks, die mehrfach gelistet sind: `double_merge` (erste Zeile gewinnt, zweite wird verworfen), `merge_and_exclude`, `duplicate` — mit Zeilennummern |
+| `70_qc_exclusions_conflicts.csv` | Tracks, die mehrfach gelistet sind, mit Konsequenz: `split_merge` (zwei Merges mit disjunkten Frame-Bereichen — beide werden ausgeführt, der Track wird aufgeteilt), `double_merge` (zwei Merges ohne Bereiche — die erste Zeile gewinnt), `merge_and_exclude` (beides wird ausgeführt), `redundant_exclusion`, `duplicate` — mit Zeilennummern |
 
 `--skip-qc-comparison` lässt beides weg.
 
@@ -315,6 +321,32 @@ analysis_output/20_budding_events.csv       erkannte Events (je eine Datei
 analysis_output/static/20_budding_events.csv   pro Teil-Pipeline)
 ```
 
+### Größenkriterium: angespülte Zellen sind keine Knospen
+
+Blastokonidien werden laufend aus anderen Kammern angespült und tauchen
+„neu“ neben sitzenden Zellen auf — für die räumliche Zuordnung sind sie von
+einer Knospe nicht zu unterscheiden. Eine echte Knospe beginnt aber klein,
+eine angespülte Zelle ist etwa so groß wie die Zelle, neben der sie landet.
+`run_analysis.py` berechnet deshalb für jeden Kandidaten das Verhältnis
+*Fläche beim ersten Auftreten / Fläche der zugeordneten Mutter* und verwirft
+alles über einer Schwelle (`bud_size.py`). Die Schwelle kommt aus den Daten:
+Antimodus der zweigipfligen Verteilung (Kerndichte auf log10, kleinste
+Bandbreite mit genau zwei Gipfeln), **eine** Schwelle für alle Zweige. Greift
+stattdessen der Rückfallwert `BUD_MAX_AREA_FRACTION_FALLBACK`, steht der
+Grund in der Spalte `source`.
+
+| Datei (direkt in `analysis_output/`) | Inhalt |
+| --- | --- |
+| `20_bud_size_at_appearance.pdf` | Verteilung des Verhältnisses mit Dichte, beiden Gipfeln und Schwelle; rechts je Stamm/osc_type |
+| `20_bud_size_threshold.csv` | angewandte Schwelle (`scope = global`), Quelle, Gipfel, Antimodus; Kontrollzeilen je Gruppe |
+| `20_bud_size_at_appearance.csv` | ein Kandidat pro Zeile (`bud_area`, `mother_area`, `bud_area_fraction`) |
+
+`validate_lineage.py` wendet dieselbe Schwelle an (liest sie aus
+`20_bud_size_threshold.csv`; `--bud-size-threshold` überschreibt, `inf`
+schaltet ab): zu große Kandidaten zählen nicht in den Nenner der
+Erkennungsrate und stehen pro Kammer in `n_rejected_by_size`. Im QC-Overlay
+(`plot_qc_lineage_overlay.py`) erscheinen sie als Kandidaten ohne Mutter.
+
 **1. Quantitativ, über alle Kammern:**
 
 ```bash
@@ -327,7 +359,7 @@ Erzeugt in `analysis_output/lineage_validation/`:
 | Datei | Frage, die sie beantwortet |
 | --- | --- |
 | `lv_01_d_over_r_distribution.pdf` | Lagen die Buds komfortabel im Suchradius, oder hat die Toleranz sie gerade noch hereingeholt? |
-| `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Bedingungen konstant? |
+| `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Bedingungen konstant? Nenner: Kandidaten, die das Größenkriterium bestehen |
 | `lv_03_detection_rate_kruskal.csv` | Kruskal-Wallis dazu: p < 0.05 = Erkennung mit der Bedingung konfundiert |
 | `lv_03_assignment_ambiguity.pdf` | Wie oft kamen mehrere Mütter in Frage (greedy Nearest-Neighbour)? |
 | `lv_04_tolerance_sweep.pdf` | Sitzt `tolerance_px` auf einem Plateau oder auf einer Flanke? |
@@ -422,7 +454,8 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
 
 **Heuristik**
 
-* `lineage.py` leitet Mutter/Bud aus räumlicher Nähe und Tracklänge ab; es gibt
-  **kein** echtes Lineage-Tracking aus der Bildverarbeitung. Vor jeder
-  Publikation mit `inspect_lineage.py` gegen echte QC-Overlays kalibrieren.
+* `lineage.py` leitet Mutter/Bud aus räumlicher Nähe, Tracklänge und der Größe
+  beim ersten Auftreten ab; es gibt **kein** echtes Lineage-Tracking aus der
+  Bildverarbeitung. Vor jeder Publikation mit `inspect_lineage.py` gegen echte
+  QC-Overlays kalibrieren.
 * `tolerance_px` ist ein Pixel-Wert und damit von Kamera/Optik abhängig.

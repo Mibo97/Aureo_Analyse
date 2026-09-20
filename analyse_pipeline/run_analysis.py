@@ -72,6 +72,9 @@ from config import (
     STATIC_MEDIUM_ORDER,
     PANEL_A_GROUP_COL_STATIC,
     OSCILLATION_START_MIN,
+    LINEAGE_PARAMS,
+    BUD_MAX_AREA_FRACTION_FALLBACK,
+    BUD_SIZE_PLAUSIBLE_RANGE,
     log_active_configuration,
 )
 from data_loading import load_all_results
@@ -91,6 +94,7 @@ from analysis import add_time_column, find_intensity_columns
 from pipeline_steps import STEPS, PipelineContext
 from pko_comparison import run_pko_comparison
 from experiment_units import add_experiment_units, chip_overview
+from bud_size import run_bud_size_threshold
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -250,9 +254,9 @@ def main(argv: list[str] | None = None) -> int:
     ratio_cols = [c for c in cells.columns if c.startswith("ratio_")]
 
     # ------------------------------------------------------------------
-    # 2. QC: Track-Merges DANN Exclusions anwenden (nicht-destruktiv)
+    # 2. QC: Exclusions, Track-Merges, Exclusions (nicht-destruktiv)
     # ------------------------------------------------------------------
-    # WICHTIG: Track-Merges müssen VOR den Exclusions UND vor jeglicher
+    # WICHTIG: Track-Merges müssen VOR jeglicher
     # Lineage-Klassifikation laufen - sonst sieht classify_mother_bud() weiterhin
     # zwei getrennte Tracks und ein Tracking-Bruch (z.B. durch starke
     # Zellbewegung) wird fälschlich als neuer Bud interpretiert.
@@ -269,14 +273,21 @@ def main(argv: list[str] | None = None) -> int:
         (OUTPUT_DIR / "qc_comparison").mkdir(parents=True, exist_ok=True)
         conflicts.to_csv(OUTPUT_DIR / "qc_comparison" / "70_qc_exclusions_conflicts.csv", index=False)
 
+    qc_summary = summarise_qc_exclusions(exclusions)
+    if not qc_summary.empty:
+        logger.info("QC-Exclusions pro Experiment:\n%s", qc_summary.to_string(index=False))
+
+    # Ausschluesse ZWEIMAL: vor den Merges auf die urspruengliche cell_uid (sonst
+    # verliert ein Track, der gemergt UND ausgeschlossen ist, seinen Ausschluss,
+    # weil der Merge ihn umbenennt), und nach den Merges noch einmal, damit ein
+    # Ausschluss auf dem ZIEL-Track auch die hineingemergten Frames trifft.
+    # Ausschluesse sind idempotent - der zweite Durchlauf kostet nichts Falsches.
+    cells = apply_qc_exclusions(cells, exclusions, mode="remove")
+
     merge_summary = summarise_track_merges(exclusions)
     if not merge_summary.empty:
         logger.info("Konfigurierte Track-Merges:\n%s", merge_summary.to_string(index=False))
     cells = apply_track_merges(cells, exclusions)
-
-    qc_summary = summarise_qc_exclusions(exclusions)
-    if not qc_summary.empty:
-        logger.info("QC-Exclusions pro Experiment:\n%s", qc_summary.to_string(index=False))
 
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
     cells = add_time_column(cells, MIN_PER_FRAME)
@@ -289,6 +300,31 @@ def main(argv: list[str] | None = None) -> int:
     overview_chips = chip_overview(cells)
     overview_chips.to_csv(OUTPUT_DIR / "00_chip_overview.csv", index=False)
     logger.info("Tabelle gespeichert: 00_chip_overview.csv (%d Chips)", len(overview_chips))
+
+    failed: list[str] = []
+
+    # ------------------------------------------------------------------
+    # 2a. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
+    #     allen Daten nach QC, fuer alle Zweige dieselbe (bud_size.py).
+    # ------------------------------------------------------------------
+    # Angespuelte Blastokonidien tauchen "neu" neben sitzenden Zellen auf und
+    # bestehen die raeumliche Zuordnung wie eine Knospe - sind aber beim ersten
+    # Auftreten etwa so gross wie die vermeintliche Mutter. Die Schwelle ist
+    # der Antimodus der zweigipfligen Verteilung von bud_area / mother_area;
+    # Tabelle, Abbildung und die gewaehlte Quelle ('source') landen in
+    # 20_bud_size_threshold.csv / 20_bud_size_at_appearance.*.
+    try:
+        bud_size_threshold = run_bud_size_threshold(
+            cells, OUTPUT_DIR, params=LINEAGE_PARAMS,
+            fallback=BUD_MAX_AREA_FRACTION_FALLBACK, plausible=BUD_SIZE_PLAUSIBLE_RANGE,
+        )
+    except Exception:
+        logger.exception(
+            "Groessenkriterium konnte nicht aus den Daten abgeleitet werden - "
+            "Rueckfallwert %.2f wird verwendet.", BUD_MAX_AREA_FRACTION_FALLBACK,
+        )
+        bud_size_threshold = BUD_MAX_AREA_FRACTION_FALLBACK
+        failed.append("bud_size_threshold")
 
     logger.info("=== Daten nach QC (gesamt, vor Trennung Oszillation/statisch) ===")
     logger.info("  Zeilen total:                    %d", len(cells))
@@ -363,8 +399,6 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     # 3. Schritte ausfuehren - erst Oszillation, dann statisch, dann PKO
     # ------------------------------------------------------------------
-    failed = []
-
     osc_freq_order = resolve_x_order(cells_osc, "osc_freq", FREQ_ORDER)
     osc_ctx = PipelineContext(
         cells=cells_osc, output_dir=OUTPUT_DIR,
@@ -372,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
         intensity_cols=intensity_cols, ratio_cols=ratio_cols,
         run_sensor_controls=True,
         run_control_consistency=len(osc_freq_order) >= 2,
+        bud_size_threshold=bud_size_threshold,
     )
     run_steps(osc_ctx, steps)
     failed += [f"Oszillation/{k}" for k in osc_ctx.failed_steps]
@@ -404,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
             # die Abbildung konnte die Frage des statischen Experiments
             # ("komplexes vs. minimales Medium") gar nicht beantworten.
             panel_a_group_col=PANEL_A_GROUP_COL_STATIC,
+            bud_size_threshold=bud_size_threshold,
         )
         run_steps(static_ctx, steps)
         failed += [f"statisch/{k}" for k in static_ctx.failed_steps]
@@ -435,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
             intensity_cols=[], ratio_cols=[],
             run_sensor_controls=False,
             run_control_consistency=len(pko_freq_order) >= 2,
+            bud_size_threshold=bud_size_threshold,
         )
         run_steps(pko_ctx, steps)
         failed += [f"PKO/{k}" for k in pko_ctx.failed_steps]
@@ -493,6 +530,7 @@ def main(argv: list[str] | None = None) -> int:
                 intensity_cols=intensity_cols, ratio_cols=ratio_cols,
                 run_sensor_controls=False,
                 run_control_consistency=len(noqc_freq_order) >= 2,
+                bud_size_threshold=bud_size_threshold,
             )
             run_steps(noqc_ctx, steps)
             failed += [f"no_qc/{k}" for k in noqc_ctx.failed_steps]

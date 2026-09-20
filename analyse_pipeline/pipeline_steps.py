@@ -198,6 +198,13 @@ class PipelineContext:
     # osc_type. Statisch: Chip-Familie (W109/W65), damit die beiden Chips
     # nebeneinander stehen statt in einer Facette 'Static' zu verschwinden.
     panel_a_facet_col: str = PANEL_A_FACET_COL
+    # Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): ein Kandidat
+    # zaehlt nur als Knospe, wenn seine Flaeche beim ersten Auftreten hoechstens
+    # diesen Anteil der Mutterflaeche hat - alles darueber ist eine angespuelte
+    # Zelle. run_analysis.py leitet den Wert EINMAL aus allen Daten nach QC ab
+    # und gibt ihn an alle Kontexte weiter (auch no_qc), damit die Zweige
+    # vergleichbar bleiben. None = kein Groessenfilter.
+    bud_size_threshold: Optional[float] = None
     # Von run_steps() gefuellt: Schluessel der Schritte, die eine Exception
     # geworfen haben. Ein einzelner fehlgeschlagener Plot soll den Rest des
     # Laufs nicht mitreissen, aber auch nicht unbemerkt bleiben.
@@ -226,7 +233,10 @@ class PipelineContext:
         lineage.py und validate_lineage.py."""
         return self._lazy(
             "lineage_events",
-            lambda: classify_mother_bud(self.cells, LINEAGE_PARAMS, flux_config=FLUX_CONFIG),
+            lambda: classify_mother_bud(
+                self.cells, LINEAGE_PARAMS, flux_config=FLUX_CONFIG,
+                bud_size_threshold=self.bud_size_threshold,
+            ),
         )
 
     @property

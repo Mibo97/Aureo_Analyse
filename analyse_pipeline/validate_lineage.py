@@ -36,6 +36,14 @@ WAS ES PRÜFT
    tolerance_px zugeordnet? Zeigt, ob der aktuelle Wert auf einem Plateau
    liegt (robust) oder auf einer steilen Flanke (jede kleine Änderung
    verschiebt die Ergebnisse).
+5. GROESSENKRITERIUM (bud_size.py): angespuelte Blastokonidien tauchen "neu"
+   neben sitzenden Zellen auf und bestehen die raeumliche Zuordnung wie eine
+   Knospe - sind aber beim ersten Auftreten etwa so gross wie die Mutter.
+   Kandidaten ueber der Schwelle (bud_area / mother_area) zaehlen hier NICHT
+   in den Nenner der Erkennungsrate; sie stehen pro Kammer in
+   n_rejected_by_size. Die Schwelle ist dieselbe, mit der run_analysis.py
+   die Events erzeugt hat (20_bud_size_threshold.csv), damit die Validierung
+   die Heuristik prueft, die tatsaechlich gelaufen ist.
 
 AUSFÜHREN
 ---------
@@ -65,6 +73,7 @@ from scipy import stats  # noqa: E402
 
 from analysis import natural_freq_sort, pretty_label  # noqa: E402
 from lineage import LineageParams  # noqa: E402
+from bud_size import load_bud_size_threshold, resolve_bud_size_threshold  # noqa: E402
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -96,11 +105,20 @@ def compute_candidate_diagnostics(
     mitgezogen werden - sie ist bewusst eigenständig, damit die Validierung
     nicht einfach die Implementierung gegen sich selbst prüft.
 
+    Groessenkriterium (lineage.py, bud_size.py): pro Kandidat wird zusaetzlich
+    bud_area_fraction = Flaeche beim ersten Auftreten / Flaeche der
+    Referenzmutter berechnet - der naechsten etablierten Zelle im adaptiven
+    Radius (exakt die Zuordnung der Heuristik), ersatzweise der naechsten
+    etablierten Zelle ueberhaupt. Ob ein Kandidat damit als Knospe in Frage
+    kommt, entscheidet apply_size_eligibility() mit derselben Schwelle, die
+    run_analysis.py verwendet hat.
+
     Returns
     -------
     exp_id, bud_cell_uid, budding_frame, assigned, mother_cell_uid,
     distance_px, adaptive_radius_px, d_over_r, n_competing_mothers,
-    nearest_distance_px, nearest_radius_px, required_tolerance_px (+ Metadaten)
+    nearest_distance_px, nearest_radius_px, required_tolerance_px,
+    bud_area, reference_mother_area, bud_area_fraction (+ Metadaten)
 
     required_tolerance_px ist der tolerance_px-Wert, der MINDESTENS nötig
     gewesen wäre, damit dieser Kandidat der nächstgelegenen etablierten Zelle
@@ -140,6 +158,7 @@ def compute_candidate_diagnostics(
                 continue
             bud_x = float(bud_row["centroid_x"].iloc[0])
             bud_y = float(bud_row["centroid_y"].iloc[0])
+            bud_area = float(bud_row["area"].iloc[0])
 
             others = bud_rows[bud_rows["cell_uid"] != bud_uid]
             record = {
@@ -150,6 +169,9 @@ def compute_candidate_diagnostics(
                 "nearest_distance_px": np.nan,
                 "nearest_radius_px": np.nan,
                 "required_tolerance_px": np.nan,
+                "bud_area": bud_area,
+                "reference_mother_area": np.nan,
+                "bud_area_fraction": np.nan,
             }
 
             if not others.empty:
@@ -174,6 +196,17 @@ def compute_candidate_diagnostics(
                     record["nearest_radius_px"] = float(radii[nearest])
                     # Welcher Toleranzwert haette diesen Kandidaten gerettet?
                     record["required_tolerance_px"] = float(dists[nearest] - cell_radii[nearest])
+
+                    # Referenzmutter fuer das Groessenkriterium: die naechste
+                    # Zelle IM Radius (= Wahl der Heuristik), sonst die
+                    # naechste etablierte Zelle ueberhaupt.
+                    if within.any():
+                        reference = int(np.nanargmin(np.where(within, dists, np.inf)))
+                    else:
+                        reference = nearest
+                    mother_area = float(established["area"].to_numpy(dtype=float)[reference])
+                    record["reference_mother_area"] = mother_area
+                    record["bud_area_fraction"] = bud_area / mother_area if mother_area > 0 else np.nan
 
             ev = assigned_lookup.get((str(exp_id), str(bud_uid)))
             record["assigned"] = ev is not None
@@ -211,24 +244,79 @@ def compute_candidate_diagnostics(
     return out
 
 
+def apply_size_eligibility(diagnostics: pd.DataFrame, bud_size_threshold: Optional[float]) -> pd.DataFrame:
+    """Spalten size_eligible / bud_size_threshold: darf der Kandidat nach dem
+    Groessenkriterium ueberhaupt eine Knospe sein?
+
+    Kandidaten ohne berechenbares Verhaeltnis (keine etablierte Zelle in der
+    Kammer) bleiben 'eligible' - sie fallen ohnehin an der raeumlichen
+    Zuordnung, nicht an der Groesse. None oder eine unendliche Schwelle
+    schaltet das Kriterium ab (alle eligible).
+    """
+    out = diagnostics.copy()
+    if out.empty:
+        return out
+    if bud_size_threshold is not None and np.isfinite(bud_size_threshold):
+        threshold = float(bud_size_threshold)
+        out["size_eligible"] = ~(out["bud_area_fraction"] > threshold)
+        out["bud_size_threshold"] = threshold
+        n_rejected = int((~out["size_eligible"]).sum())
+        logger.info(
+            "Groessenkriterium (Schwelle %.2f x Mutterflaeche): %d von %d Kandidaten sind zu "
+            "gross fuer eine Knospe und zaehlen nicht in die Erkennungsrate.",
+            threshold, n_rejected, len(out),
+        )
+        inconsistent = int((out["assigned"].astype(bool) & ~out["size_eligible"]).sum())
+        if inconsistent:
+            logger.warning(
+                "%d ZUGEORDNETE Events liegen UEBER der Groessenschwelle. Die Budding-Events "
+                "stammen vermutlich aus einem Lauf ohne Groessenkriterium oder mit einer "
+                "anderen Schwelle - run_analysis.py neu laufen lassen, sonst vergleicht die "
+                "Validierung zwei verschiedene Heuristiken.", inconsistent,
+            )
+    else:
+        out["size_eligible"] = True
+        out["bud_size_threshold"] = np.nan
+    return out
+
+
 def summarise_per_chamber(diagnostics: pd.DataFrame) -> pd.DataFrame:
     """Erkennungsrate pro Kammer - die Zahl, die zwischen Bedingungen
-    vergleichbar sein MUSS, damit Bedingungsvergleiche Biologie messen."""
+    vergleichbar sein MUSS, damit Bedingungsvergleiche Biologie messen.
+
+    Nenner sind nur die Kandidaten, die das Groessenkriterium bestehen
+    (size_eligible); die zu grossen (angespuelte Zellen) stehen separat in
+    n_rejected_by_size, damit sichtbar bleibt, wie viel das Kriterium pro
+    Kammer wegnimmt. Ohne die Spalte size_eligible zaehlen alle Kandidaten.
+    """
     if diagnostics.empty:
         return pd.DataFrame()
 
     meta_cols = [c for c in META_COLS if c in diagnostics.columns]
+    d = diagnostics.copy()
+    eligible = (d["size_eligible"].astype(bool) if "size_eligible" in d.columns
+                else pd.Series(True, index=d.index))
+    d["_eligible"] = eligible
+    d["_assigned_eligible"] = d["assigned"].astype(bool) & eligible
+    d["_competing_eligible"] = d["n_competing_mothers"].where(eligible)
     summary = (
-        diagnostics.groupby(["exp_id"] + meta_cols, dropna=False)
+        d.groupby(["exp_id"] + meta_cols, dropna=False)
         .agg(
-            n_candidates=("assigned", "size"),
-            n_assigned=("assigned", "sum"),
+            n_candidates_all=("assigned", "size"),
+            n_rejected_by_size=("_eligible", lambda s: int((~s).sum())),
+            n_candidates=("_eligible", "sum"),
+            n_assigned=("_assigned_eligible", "sum"),
             median_d_over_r=("d_over_r", "median"),
-            frac_ambiguous=("n_competing_mothers", lambda s: float((s > 1).mean())),
+            frac_ambiguous=("_competing_eligible",
+                            lambda s: float((s.dropna() > 1).mean()) if s.notna().any() else np.nan),
         )
         .reset_index()
     )
-    summary["assignment_rate"] = summary["n_assigned"] / summary["n_candidates"]
+    summary["n_candidates"] = summary["n_candidates"].astype(int)
+    summary["n_assigned"] = summary["n_assigned"].astype(int)
+    # Kammern, in denen kein Kandidat klein genug war, haben keine Rate (NaN),
+    # nicht 0 - sonst zoegen sie den Batch-Test nach unten.
+    summary["assignment_rate"] = summary["n_assigned"] / summary["n_candidates"].where(summary["n_candidates"] > 0)
     return summary
 
 
@@ -260,10 +348,11 @@ def test_detection_rate_across_conditions(
     results = []
     for keys, grp in per_chamber.groupby(group_cols, dropna=False):
         keys = keys if isinstance(keys, tuple) else (keys,)
-        batches = [g["assignment_rate"].to_numpy() for _, g in grp.groupby(freq_col) if len(g) >= 2]
+        rates = grp.dropna(subset=["assignment_rate"])
+        batches = [g["assignment_rate"].to_numpy() for _, g in rates.groupby(freq_col) if len(g) >= 2]
         record = dict(zip(group_cols, keys))
         record["n_batches"] = len(batches)
-        record["n_chambers"] = int(len(grp))
+        record["n_chambers"] = int(len(rates))
         pooled = np.concatenate(batches) if batches else np.array([])
         if len(batches) < 2:
             record["h_statistic"], record["p_value"] = np.nan, np.nan
@@ -313,6 +402,12 @@ def tolerance_sweep(
     """
     if diagnostics.empty or "required_tolerance_px" not in diagnostics.columns:
         return pd.DataFrame()
+    if "size_eligible" in diagnostics.columns:
+        # Zu grosse Kandidaten sind keine Knospen - sie sollen auch nicht als
+        # "mit mehr Toleranz zuordenbar" in den Sweep eingehen.
+        diagnostics = diagnostics[diagnostics["size_eligible"].astype(bool)]
+        if diagnostics.empty:
+            return pd.DataFrame()
     if tolerances is None:
         tolerances = np.arange(0, 101, 2.5)
 
@@ -479,13 +574,30 @@ def run_validation(
     params: LineageParams,
     out_dir: Path,
     freq_order: Optional[list[str]] = None,
+    bud_size_threshold: Optional[float] = None,
 ) -> pd.DataFrame:
+    """bud_size_threshold: die Schwelle des Groessenkriteriums, mit der die
+    Budding-Events erzeugt wurden (20_bud_size_threshold.csv). None = aus den
+    Verhaeltnissen der Spiegel-Implementierung hier ableiten (dieselbe
+    Statistik wie bud_size.py, aber nicht dieselben Zahlen)."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     diagnostics = compute_candidate_diagnostics(cells, lineage_events, params)
     if diagnostics.empty:
         logger.warning("Keine Kandidaten - Validierung abgebrochen.")
         return diagnostics
+    if bud_size_threshold is None:
+        from config import BUD_MAX_AREA_FRACTION_FALLBACK, BUD_SIZE_PLAUSIBLE_RANGE
+        resolved = resolve_bud_size_threshold(
+            diagnostics["bud_area_fraction"],
+            fallback=BUD_MAX_AREA_FRACTION_FALLBACK, plausible=BUD_SIZE_PLAUSIBLE_RANGE,
+        )
+        bud_size_threshold = resolved.threshold
+        logger.info(
+            "Keine Groessenschwelle uebergeben - aus den eigenen Kandidaten abgeleitet: "
+            "%.2f (%s, n = %d).", resolved.threshold, resolved.source, resolved.n_candidates,
+        )
+    diagnostics = apply_size_eligibility(diagnostics, bud_size_threshold)
     diagnostics.to_csv(out_dir / "lv_01_candidate_diagnostics.csv", index=False)
 
     per_chamber = summarise_per_chamber(diagnostics)
@@ -520,7 +632,20 @@ def _log_verdict(
 
     logger.info("=== Validierung der Lineage-Heuristik: Kurzfassung ===")
     logger.info("  Bud-Kandidaten gesamt:        %d", len(diagnostics))
-    logger.info("  davon zugeordnet:             %d (%.1f%%)", int(assigned.sum()), 100 * assigned.mean())
+    if "size_eligible" in diagnostics.columns:
+        eligible = diagnostics["size_eligible"].astype(bool)
+        thr = diagnostics["bud_size_threshold"].dropna()
+        logger.info(
+            "  zu gross fuer eine Knospe:    %d (%.1f%%; Schwelle %s x Mutterflaeche)",
+            int((~eligible).sum()), 100 * float((~eligible).mean()),
+            f"{thr.iloc[0]:.2f}" if not thr.empty else "keine",
+        )
+        logger.info("  Kandidaten nach Groesse:      %d", int(eligible.sum()))
+        if eligible.any():
+            logger.info("  davon zugeordnet:             %d (%.1f%%)",
+                        int(assigned[eligible].sum()), 100 * float(assigned[eligible].mean()))
+    else:
+        logger.info("  davon zugeordnet:             %d (%.1f%%)", int(assigned.sum()), 100 * assigned.mean())
     if not d_over_r.empty:
         logger.info("  d/r Median:                   %.2f", d_over_r.median())
         frac_marginal = float((d_over_r > 0.8).mean())
@@ -566,6 +691,12 @@ def main() -> None:
                              "'nicht zugeordnet' erscheinen.")
     parser.add_argument("--out-dir", type=Path, default=None,
                         help="Ausgabeordner (Default: OUTPUT_DIR/lineage_validation)")
+    parser.add_argument("--bud-size-threshold", type=float, default=None,
+                        help="Schwelle des Groessenkriteriums (bud_area / mother_area beim ersten "
+                             "Auftreten). Default: aus OUTPUT_DIR/20_bud_size_threshold.csv, also "
+                             "genau die Schwelle, mit der run_analysis.py die Events erzeugt hat; "
+                             "fehlt die Datei, wird sie aus den Kandidaten hier abgeleitet. "
+                             "'inf' schaltet das Kriterium ab.")
     args = parser.parse_args()
 
     from config import LINEAGE_PARAMS, OUTPUT_DIR, FREQ_ORDER, log_active_configuration
@@ -598,7 +729,12 @@ def main() -> None:
     if lineage_events.empty:
         logger.warning("Keine Budding-Events geladen - alle Kandidaten gelten als nicht zugeordnet.")
 
-    run_validation(cells, lineage_events, LINEAGE_PARAMS, out_dir, freq_order=FREQ_ORDER)
+    bud_size_threshold = args.bud_size_threshold
+    if bud_size_threshold is None:
+        bud_size_threshold = load_bud_size_threshold(OUTPUT_DIR)
+
+    run_validation(cells, lineage_events, LINEAGE_PARAMS, out_dir, freq_order=FREQ_ORDER,
+                   bud_size_threshold=bud_size_threshold)
     logger.info("=== Fertig. Ergebnisse in: %s ===", out_dir)
 
 
