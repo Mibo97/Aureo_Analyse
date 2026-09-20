@@ -590,6 +590,7 @@ def compute_budding_ratio(
     lineage_events: pd.DataFrame,
     cells: pd.DataFrame,
     mothers: pd.DataFrame,
+    min_per_frame: Optional[float] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Berechnet die Budding Ratio (Buds pro Mutterzelle) aus den von
@@ -614,9 +615,23 @@ def compute_budding_ratio(
 
     Returns
     -------
-    per_mother : eine Zeile pro Mutter-cell_uid mit n_buds (>= 0) und
-                 budding_ratio (== n_buds, da 1 Mutter pro Zeile)
-    per_experiment : aggregierte Budding Ratio pro exp_id
+    min_per_frame : Frame-Intervall in Minuten. Falls gesetzt, kommen
+            ZEITNORMIERTE Spalten dazu - pro Mutter observed_h (beobachtete
+            Frames x Intervall) und budding_rate_per_h = n_buds / observed_h,
+            pro Kammer mother_hours (Summe ueber ihre Muetter) und
+            budding_rate_per_h = n_buds_total / mother_hours. Noetig, weil das
+            Sparse-Phase-Fenster (relink.py) je Kammer verschieden lang ist:
+            ein reiner Zaehler pro Mutter waere mit der Beobachtungsdauer
+            konfundiert.
+
+    Returns
+    -------
+    per_mother : eine Zeile pro Mutter-cell_uid mit n_buds (>= 0),
+                 budding_ratio (== n_buds, da 1 Mutter pro Zeile),
+                 observed_frames (+ observed_h, budding_rate_per_h)
+    per_experiment : aggregierte Budding Ratio pro exp_id: n_mothers,
+                 n_buds_total, budding_ratio, observed_frames_total
+                 (+ mother_hours, budding_rate_per_h)
     """
     if "cell_uid" not in cells.columns:
         raise ValueError("compute_budding_ratio() braucht eine 'cell_uid' Spalte in 'cells'.")
@@ -654,15 +669,29 @@ def compute_budding_ratio(
     per_mother = mothers_meta.merge(buds_per_mother, on="cell_uid", how="left")
     per_mother["n_buds"] = per_mother["n_buds"].fillna(0).astype(int)
     per_mother["budding_ratio"] = per_mother["n_buds"]
+    frames_per_mother = mothers.drop_duplicates("cell_uid").set_index("cell_uid")["n_frames"]
+    per_mother["observed_frames"] = per_mother["cell_uid"].map(frames_per_mother).astype(float)
+    if min_per_frame is not None:
+        per_mother["observed_h"] = per_mother["observed_frames"] * float(min_per_frame) / 60.0
+        per_mother["budding_rate_per_h"] = (
+            per_mother["n_buds"] / per_mother["observed_h"].where(per_mother["observed_h"] > 0)
+        )
 
     per_experiment = (
         per_mother.groupby("exp_id")
-        .agg(n_mothers=("cell_uid", "nunique"), n_buds_total=("n_buds", "sum"))
+        .agg(n_mothers=("cell_uid", "nunique"), n_buds_total=("n_buds", "sum"),
+             observed_frames_total=("observed_frames", "sum"))
         .reset_index()
     )
     per_experiment["budding_ratio"] = per_experiment["n_buds_total"] / per_experiment["n_mothers"]
+    if min_per_frame is not None:
+        per_experiment["mother_hours"] = per_experiment["observed_frames_total"] * float(min_per_frame) / 60.0
+        per_experiment["budding_rate_per_h"] = (
+            per_experiment["n_buds_total"] / per_experiment["mother_hours"].where(per_experiment["mother_hours"] > 0)
+        )
 
-    meta_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
+    meta_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber",
+                             "chip", "chip_family", "medium", "date"]
                  if c in cells.columns]
     meta = cells[["exp_id"] + meta_cols].drop_duplicates("exp_id")
     per_experiment = per_experiment.merge(meta, on="exp_id", how="left")
