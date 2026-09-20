@@ -599,6 +599,57 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         )
 
 
+def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) -> None:
+    """Knospungsrate (Buds je Mutter-Stunde im Sparse-Phase-Fenster) gegen die
+    Periode - dieselbe Chip-Logik wie Schritt 13: ein Chip pro Periode mit
+    SEINEN Kontrollen, Kammer-Fehlerbalken, Bracket-Score, Spearman ueber
+    Chips. Zeitnormiert, weil das Fenster je Kammer verschieden lang ist
+    (in den echten Daten 27 bis 133 Frames)."""
+    value_col = "budding_rate_per_h"
+    output_dir = ctx.output_dir
+    if per_experiment.empty or value_col not in per_experiment.columns:
+        logger.warning("Knospungsrate: Spalte '%s' fehlt - 21_budding_rate_* uebersprungen.", value_col)
+        return
+    per_chip, summary = summarise_per_replicate(per_experiment, value_col)
+    if summary.empty:
+        logger.warning("Knospungsrate: keine Werte - 21_budding_rate_* uebersprungen.")
+        return
+    per_chip.to_csv(output_dir / "21_budding_rate_per_chip.csv", index=False)
+    summary.to_csv(output_dir / "21_budding_rate_summary.csv", index=False)
+
+    if ctx.x_col == "osc_freq":
+        trend = spearman_against_period(per_chip)
+        score = bracket_normalise(per_chip)
+        score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
+        trends = [trend] if not trend.empty else []
+        if not score_trend.empty:
+            trends.append(score_trend.assign(value_col=f"{value_col}__bracket_score"))
+        if trends:
+            pd.concat(trends, ignore_index=True).to_csv(output_dir / "21_budding_rate_spearman.csv", index=False)
+        if not score.empty:
+            score.to_csv(output_dir / "21_budding_rate_bracket_score.csv", index=False)
+        for osc_type in sorted(per_chip["osc_type"].dropna().unique()):
+            sel = per_chip["osc_type"] == osc_type
+            plot_endpoint_vs_period(
+                per_chip[sel], output_dir / f"21_budding_rate_vs_period_{osc_type}.pdf",
+                value_col=value_col,
+                trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
+                score=score[score["osc_type"] == osc_type] if not score.empty else None,
+                score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
+                ylabel="buds per mother-hour\n(sparse-phase window)",
+                title="budding rate in the sparse-phase window vs cycle period — one chip per period",
+            )
+    else:
+        plot_point_errorbar(
+            summary, value_col="mean", sd_col="sem",
+            out_path=output_dir / f"21_budding_rate_vs_{ctx.x_col}.pdf",
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
+            x_order=ctx.freq_order, ylabel="buds per mother-hour (sparse-phase window)",
+            title="Budding rate in the sparse-phase window, mean ± SEM over chips",
+        )
+    logger.info("Knospungsrate gespeichert: 21_budding_rate_per_chip.csv / _summary.csv (+ Plots)")
+
+
 def step_20_lineage(ctx: PipelineContext) -> None:
     """Budding-Events, Budding Ratio, Panel A, Stammbaum - alles aus dem
     Sparse-Phase-Fenster (ctx.cells_lineage), siehe relink.py."""
@@ -622,11 +673,13 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
     # -- Budding Ratio "pro Mutter über die gesamte Beobachtungsdauer"
     #    (NICHT die Paper-Eq.-3-Zeitreihe, siehe weiter unten dafür)
-    per_mother, per_experiment = compute_budding_ratio(lineage_events, cells, mothers)
+    per_mother, per_experiment = compute_budding_ratio(lineage_events, cells, mothers, min_per_frame=MIN_PER_FRAME)
     if not per_mother.empty:
         per_mother.to_csv(output_dir / "21_budding_ratio_per_mother.csv", index=False)
         per_experiment.to_csv(output_dir / "21_budding_ratio_per_experiment.csv", index=False)
         logger.info("Tabellen gespeichert: 21_budding_ratio_per_mother.csv / _per_experiment.csv")
+        # Die Lineage-Abbildung: Knospungsrate gegen die Periode, mit eigenen Kontrollen.
+        _lineage_rate_outputs(ctx, per_experiment)
 
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",

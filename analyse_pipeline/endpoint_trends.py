@@ -391,8 +391,13 @@ def plot_endpoint_vs_period(
     score_trend: Optional[pd.DataFrame] = None,
     ylabel: Optional[str] = None,
     strain_order: Optional[Sequence[str]] = None,
+    title: Optional[str] = None,
 ) -> None:
     """Endzustand gegen die Periode: EIN Chip pro Periode, mit SEINEN Kontrollen.
+
+    title: erste Zeile des Abbildungstitels; Default beschreibt den Endzustand.
+    Schritt 20 nutzt dieselbe Abbildung fuer die Knospungsrate und setzt den
+    Titel entsprechend.
 
     Obere Reihe (Rohwert): pro Periode der Chip-Mittelwert ueber die
     Oszillationskammern (Fehlerbalken = Kammern dieses Chips, technisch), und
@@ -495,7 +500,7 @@ def plot_endpoint_vs_period(
         fig.legend(handles, labels, loc="lower center", ncol=min(len(labels), 3),
                    bbox_to_anchor=(0.5, -0.10 if has_score else -0.16), frameon=False, fontsize=8)
     fig.suptitle(
-        f"{value_col}: cumulative endpoint vs cycle period — one chip per period\n"
+        (title or f"{value_col}: cumulative endpoint vs cycle period — one chip per period") + "\n"
         "(shaded = PosCtrl/NegCtrl pooled over chips, mean ± SD; markers = controls of that chip)",
         y=1.02,
     )

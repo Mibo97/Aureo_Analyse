@@ -160,7 +160,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
-| `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
+| `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
 | `50_` | Zusammenfassungstabelle |
@@ -373,6 +373,15 @@ etwa 11 h) erwarten lässt. Die Budding Ratio ist damit eine Aussage über die
 ersten Stunden eines Laufs, nicht über den ganzen Lauf. `µ_area` fittet
 außerdem nur noch Tracks mit ≥ 10 Frames (`AREA_GROWTH_MIN_FRAMES`); der alte
 Default von 2 Frames fittete überwiegend Fragmente.
+
+Die Lineage-Abbildung ist damit `21_budding_rate_vs_period_<osc_type>.pdf`:
+Buds je Mutter-Stunde im Fenster (`21_budding_rate_per_chip.csv`, aus
+`budding_rate_per_h` in `21_budding_ratio_per_experiment.csv`), ein Chip pro
+Periode mit seinen eigenen Kontrollen, Kammer-Fehlerbalken, Bracket-Score und
+Spearman über Chips — dieselbe Logik wie `13_endpoint_vs_period_*`.
+Zeitnormiert, weil das Fenster je Kammer verschieden lang ist (in den echten
+Daten 27 bis 133 Frames; 211 von 565 Kammern werden nie voll). Für die
+statischen Chips: `21_budding_rate_vs_medium.pdf`.
 
 ### Größenkriterium: angespülte Zellen sind keine Knospen
 
