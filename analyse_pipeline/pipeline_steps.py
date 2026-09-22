@@ -447,7 +447,8 @@ def step_10_growth(ctx: PipelineContext) -> None:
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
                 x_order=freq_order,
                 ylabel="µ_area, all cells [h⁻¹]",
-                title="µ_area over all cells — mean ± SEM over biological replicates\n"
+                title="µ_area over all cells — mean ± SEM; error unit per table "
+                      "(chambers of one structure for oscillations, chips for static)\n"
                       "(no mother/bud filter, so independent of the lineage heuristic)",
             )
 

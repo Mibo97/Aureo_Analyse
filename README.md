@@ -89,6 +89,10 @@ Benötigte Spalten in `Combined_Results`: `track_id`, `frame`, `centroid_x`,
 `centroid_y`, `area`, `condition`, `replicate`, `chamber`.
 Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 
+> **Die Argumentation der Arbeit** — welche Abbildung und Tabelle welchen Schritt
+> trägt, von den Versuchseinheiten über die Tracking-Grenze bis zum Befund, dass die
+> Kontrollen die Trends tragen — steht in [`docs/data_story.md`](docs/data_story.md).
+
 ## Versuchseinheiten: was ist hier ein Replikat?
 
 Die Spalten `replicate` und `chamber` kommen aus dem Dateinamen der
