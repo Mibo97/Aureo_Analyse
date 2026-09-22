@@ -103,7 +103,8 @@ Bildverarbeitung und bedeuten **nicht**, was ihre Namen nahelegen.
 | Zweig | pro (Stamm, osc_type, Periode) | `replicate` ist … | biologische Einheit | n je Bedingung |
 | --- | --- | --- | --- | --- |
 | Oszillation, PKO | **eine Struktur** (im Code und in allen Tabellen `chip`); ~11 Kammern (5 Osc, 3 PosCtrl, 3 NegCtrl) auf mehreren Arrays. Ein **physischer Chip trägt 2–3 Strukturen** = 2–3 Perioden aus **einer Vorkultur an einem Tag** (Spalte `culture`, `00_chip_overview.csv`: `n_structures_in_culture`) | ein Array-Index, der gleiche Positionslabels (`ChamA13` ×3) auseinanderhält | die **Kultur** (physischer Chip); die Struktur ist die Behandlungseinheit | **1** Struktur; 2 Kulturen je Serie (Glc: 3 + 3 Perioden, pH: 2 + 2) |
-| statisch | — | **ein eigener Chip** mit eigener Vorkultur; `chamber` ist immer `ChamA0` | der Chip | 4–5 pro Medium und Chip-Familie |
+| statisch W109 | — | ein Chip je `replicate` **(Annahme — die vier `replicate` eines Mediums tragen dasselbe Datum; ob sie ein Chip waren, ist offen)**; `chamber` ist immer `ChamA0` | der Chip | 4 pro Medium |
+| statisch W65 | — | eine **Kammer** auf dem einen W65-Chip: ein Chip, eine Vorkultur, beide Medien (`STATIC_SINGLE_CHIP_FAMILIES`) | die Kultur (n = 1); Fehlerbalken über Kammern | 5 Kammern pro Medium |
 
 Drei Folgen, die in die Arbeit gehören:
 
@@ -181,7 +182,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
-| `50_` | Zusammenfassungstabelle |
+| `50_` | Zusammenfassungstabelle; `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`) |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
 | `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |

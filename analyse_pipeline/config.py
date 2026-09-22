@@ -119,6 +119,13 @@ STATIC_CHIP_LABELS: dict[str, str] = {
 }
 STATIC_MEDIUM_PREFIX = "St."
 STATIC_MEDIUM_ORDER = ["omlp", "ypd"]
+# Chip-Familien, bei denen ALLE 'replicate' auf EINEM Chip aus EINER Vorkultur
+# liegen: 'replicate' ist dort die Kammer, die Einheit ist der eine Chip, und
+# die Fehlerbalken sind Kammer-Fehlerbalken (n = 1 Kultur). W65 laut Laborbuch.
+# Fuer W109 (Ordner static_omlp/static_ypd, je 4 'replicate' an einem Tag) ist
+# offen, ob es ein Chip oder vier sind - solange nicht hier eingetragen, gilt
+# jedes 'replicate' als eigener Chip.
+STATIC_SINGLE_CHIP_FAMILIES = {"W65"}
 
 # --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
 # Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
@@ -308,7 +315,9 @@ METHOD_CAVEATS: list[str] = [
     "an EINEM Tag (Spalte 'culture'). 'replicate' ist ein Array-Index, kein Replikat. Innerhalb "
     "einer Oszillationsbedingung gibt es keine biologische Replikation (n = 1 Struktur); Perioden "
     "derselben Kultur sind direkt vergleichbar, Perioden verschiedener Kulturen nicht. Fehlerbalken "
-    "sind Kammer-Fehlerbalken - siehe 'error_unit'. Statisch: jedes 'replicate' ist ein Chip.",
+    "sind Kammer-Fehlerbalken - siehe 'error_unit'. Statisch: W65 ist EIN Chip aus EINER Vorkultur "
+    "('replicate' = Kammer, STATIC_SINGLE_CHIP_FAMILIES); bei W109 gilt jedes 'replicate' als Chip, "
+    "solange nicht anders bekannt.",
     "KONTROLL-TREND: die Kontrollen einer Struktur (konstantes Medium) koennen auf die Periode nicht "
     "reagieren. Laufen sie ueber die Strukturen einer Serie trotzdem mit der Periode "
     "(*_control_trend.csv, rho_ctrl_mean), traegt die Struktur den Trend, nicht die Periode. Fuer die "

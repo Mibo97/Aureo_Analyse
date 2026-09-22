@@ -26,7 +26,11 @@ Bildverarbeitung und bedeuten NICHT, was ihre Namen nahelegen:
       in 'condition' (St.omlp / St.ypd); 'osc_freq' benennt die Chip-Familie
       (W109: static_omlp/static_ypd, W65: static_W65 mit beiden Medien).
 
-      => Biologische Einheit = das Replikat = der Chip. n = 4-5 pro Medium.
+      => W109: jedes 'replicate' gilt als eigener Chip (n = 4 pro Medium) -
+         ob die vier an einem Tag EIN Chip waren, ist offen. W65: laut
+         Laborbuch EIN Chip aus EINER Vorkultur, 'replicate' ist die Kammer
+         (config.STATIC_SINGLE_CHIP_FAMILIES): n = 1 Kultur, Fehlerbalken
+         ueber Kammern.
 
 Dieses Modul leitet daraus die Spalten ab, auf die der Rest der Pipeline
 aggregiert, und stellt EINE hierarchische Aggregation bereit
@@ -57,6 +61,7 @@ DATE_RE = re.compile(r"^(\d{6,8})[_-]")
 # Dokumentiert in jeder Ausgabe, welche Regel die Einheiten erzeugt hat.
 UNIT_RULE_OSC = "one chip per (biosensor, osc_type, osc_freq); 'replicate' = array index"
 UNIT_RULE_STATIC = "one chip per 'replicate'; 'osc_freq' = chip family; medium from 'condition'"
+UNIT_RULE_STATIC_SINGLE = "one chip for all 'replicate' (= chambers); 'osc_freq' = chip family; medium from 'condition'"
 
 
 def is_static_mask(df: pd.DataFrame) -> pd.Series:
@@ -67,6 +72,7 @@ def add_experiment_units(
     cells: pd.DataFrame,
     static_chip_labels: Mapping[str, str],
     static_medium_prefix: str = "St.",
+    static_single_chip_families: Sequence[str] = (),
     filename_col: str = "filename",
 ) -> pd.DataFrame:
     """Ergaenzt date, medium, chip_family, chip, unit_rule.
@@ -115,12 +121,16 @@ def add_experiment_units(
         # derselbe Chip ist, wissen die Daten nicht. Getrennte Ordner werden
         # deshalb NIE zu einem Chip zusammengelegt; bei W65 (ein Ordner, beide
         # Medien) ist Rep1 ohnehin ein Chip mit zwei Bedingungen.
-        out.loc[static, "chip"] = (
-            out.loc[static, "chip_family"].astype(str) + "_"
-            + out.loc[static, "osc_freq"].astype(str) + "_"
+        family = out.loc[static, "chip_family"].astype(str)
+        chip_per_replicate = (
+            family + "_" + out.loc[static, "osc_freq"].astype(str) + "_"
             + out.loc[static, "replicate"].astype(str)
         )
-        out.loc[static, "unit_rule"] = UNIT_RULE_STATIC
+        # Familien, deren 'replicate' Kammern EINES Chips sind (W65): ein Chip.
+        single = family.isin(set(static_single_chip_families))
+        chip_single = family + "_" + out.loc[static, "osc_freq"].astype(str)
+        out.loc[static, "chip"] = chip_per_replicate.where(~single, chip_single)
+        out.loc[static, "unit_rule"] = np.where(single, UNIT_RULE_STATIC_SINGLE, UNIT_RULE_STATIC)
 
     osc = ~static
     if osc.any():

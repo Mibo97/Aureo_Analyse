@@ -1,7 +1,7 @@
 # The story of the data
 
 Argumentation of the thesis results, with the figures and tables of the pipeline that carry each step.
-Draft of 2026-09-22 (English; can be translated). Paths are relative to `analysis_output/`.
+Draft of 2026-09-22, English like the thesis. Paths are relative to `analysis_output/`.
 Numbers marked *QC batch* come from the manually curated batch WT/pH/6 and its raw `Combined_Results.csv`;
 everything else comes from the full run. Statements marked **(open)** need the author's input, see section 9.
 
@@ -19,8 +19,9 @@ and position were aligned; the periods were shorter than the sampling interval, 
 effects could ever be read; and every structure carried its own feast and famine controls, which is
 the only reason the drift could be told from a treatment effect. Underneath, the tracker fragments
 every cell track into pieces of a few frames, so budding can only be counted in the sparse first
-hours of a chamber. The one section with independent cultures, complex versus minimal medium on
-the W109 chips, shows a coherent medium effect: larger, rounder, less budding cells in complex medium.
+hours of a chamber. The static comparison of complex versus minimal medium on the W109 chips shows
+a coherent medium effect, larger, rounder, less budding cells in complex medium; whether its four
+replicates are four cultures or one is still open, and W65, one chip and one culture, does not repeat it.
 
 ---
 
@@ -36,7 +37,7 @@ the W109 chips, shows a coherent medium effect: larger, rounder, less budding ce
 | one structure | one period; 5 oscillation chambers, 3 constant-feast (PosCtrl) and 3 constant-famine (NegCtrl) chambers on several arrays; `replicate` is the array index, `chamber` the position (A1/A2 feast, A13/A14 famine, A3 to A12 switching) |
 | one physical chip | 2 or 3 structures = 2 or 3 periods, one pre-culture, one day (`culture`) |
 | oscillation and PKO total | 50 structures, 547 chambers, 24 cultures |
-| static | W109: 4 chips per medium; W65: 5 chips, each with both media; `chamber` always A0; every chip its own culture |
+| static | W109: four `replicate` per medium, all on one day, treated as four chips **(open: one chip or four?)**; W65: one chip, one pre-culture, five chambers per medium; `chamber` always A0 |
 
 The pipeline calls a structure `chip` in every table and figure. `culture` is the physical chip.
 
@@ -147,11 +148,15 @@ and now requires 10 frames instead of 2. The lineage readouts describe the spars
 
 ---
 
-## 3. Section 1: static medium, the section with replication
+## 3. Section 1: static medium
 
-Four (W109) and five (W65) independent chips per medium; the unit is the chip, the error bar a chip error bar.
+W109 has four `replicate` per medium, all dated the same day; the pipeline treats them as four chips, and
+the p-values below are over those four values. **(open)**: if the four were chambers of one chip, as W65 is,
+they are technical replicates of one culture and the p-values describe chamber scatter, not cultures. W65
+was one chip with one pre-culture and five chambers per medium (`STATIC_SINGLE_CHIP_FAMILIES`); its error
+bars are chamber error bars and its n is one culture.
 
-| W109, complex (ypd) vs minimal (omlp) | omlp | ypd | Welch p over chip means |
+| W109, complex (ypd) vs minimal (omlp) | omlp | ypd | Welch p over the four replicates |
 | --- | --- | --- | --- |
 | endpoint cell area, px² (`static/13_endpoint_summary.csv`) | 5 049 | 14 451 | 0.004 |
 | endpoint eccentricity | 0.79 | 0.74 | 0.06 |
@@ -160,14 +165,17 @@ Four (W109) and five (W65) independent chips per medium; the unit is the chip, t
 Cells in complex medium end up almost three times larger, slightly rounder, and bud a fifth as often per
 mother-hour: growth goes into cell size rather than into blastoconidia.
 
-The W65 chips do not confirm it. Every direction flips (area ratio ypd/omlp 0.73, p 0.45; eccentricity 0.45
-vs 0.69, p 0.04; budding 0.18 vs 0.24, p 0.20), and the W65 minimal-medium chips are not one population: area
-varies by 71 % between chips and eccentricity by 42 %, against 14 to 19 % in every other group. W65 cells are
-also three to five times larger than W109 cells in both media, so the two families cannot be pooled. **(open)**:
-the five W65 omlp chips need a per-chip look (`static/13_endpoint_per_chip.csv`) before this section is written.
+The W65 chip does not repeat it. Every direction flips (area ratio ypd/omlp 0.73; eccentricity 0.45 vs
+0.69; budding 0.18 vs 0.24, all over chambers of one chip), and the five W65 minimal-medium chambers are
+not one population: their area varies by 71 % and their eccentricity by 42 %, against 14 to 19 % in every
+other group. W65 cells are also three to five times larger than W109 cells in both media, a chip-family
+difference, so the two families cannot be pooled. With one culture on W65, the section's claim rests on
+W109 and on the answer to the open question above; the W65 chambers are worth a look one by one
+(`static/13_endpoint_per_chamber.csv`).
 
 - Main text: `static/13_endpoint_vs_medium_area.pdf`, `static/13_endpoint_vs_medium_eccentricity.pdf`,
-  `static/21_budding_rate_vs_medium.pdf` (mean ± SEM over chips, one panel per chip family).
+  `static/21_budding_rate_vs_medium.pdf` (mean ± SEM, one panel per chip family; the error unit per family
+  stands in `error_unit`: chips for W109, chambers for W65).
 - Appendix: `static/10_cell_area_over_time.pdf` (the ypd chambers saturate, which fixes the endpoint window,
   `static/13_endpoint_saturation_per_chamber.csv`), `static/21_panel_a_violin.pdf`,
   `static/12_area_growth_rate_all.pdf`, `static/40_Rp_*.pdf`.
@@ -233,15 +241,24 @@ Constant-medium chambers cannot respond to the period. On the same structures th
   the same controls compared across the structures of a series; they differ.
 
 The mechanism: the structure sets the readout for all its chambers, and the shortest period usually sat on the
-same structure position, so position and period were confounded within every culture. The day blocks add a
-culture effect on top, balanced across strains for Glc, aligned with the period for pH (`00_chip_run_order.csv`).
-Without the controls every drift in section 4 would have been reported as a dose response.
+same structure position, so position and period were confounded within every culture. No run sheet records the
+position, so it stays inferred from the period order. The day blocks add a culture effect on top, balanced
+across strains for Glc, aligned with the period for pH (`00_chip_run_order.csv`). Without the controls every
+drift in section 4 would have been reported as a dose response.
+
+`50_control_trend_summary.pdf` (with `50_control_trend_summary.csv`) shows the whole finding in one figure:
+one point per readout and strain series, the oscillation Spearman on x, the strongest control Spearman on y,
+coloured by verdict; points along the diagonal are the structure effects. It collects the control-trend tables
+of the endpoint (`13_`), of µ_area (`12_area_growth_rate_control_trend.csv`) and of the budding rate (`21_`).
 
 ---
 
 ## 6. Section 3: biosensors
 
-The sensors report differences between structures, and their famine controls report the same differences.
+On the real data none of the sensors shows a clear feast versus famine difference between its PosCtrl and
+NegCtrl chambers (`95_*_comparison.pdf`, author's reading), so the sensors' dynamic range in this setup is
+not established. Beyond that, the sensors report differences between structures, and their famine controls
+report the same differences.
 `ratio_OxPro` and `ratio_pHluorin` rise with the period in the NegCtrl chambers exactly as in the oscillation
 chambers; `ratio_GlyRNA` rises in the oscillation chambers but not after its controls are subtracted;
 `ratio_Queen-2m` shows no trend. Nothing the sensors show is attributable to the period.
@@ -251,7 +268,7 @@ chambers; `ratio_GlyRNA` rises in the oscillation chambers but not after its con
 - Whether a sensor responds to feast versus famine at all, independent of the period:
   `95_<strain>_<osc_type>_ratio_<sensor>_comparison.pdf` (PosCtrl against NegCtrl per structure),
   `95_..._control_chambers.pdf` (every control chamber within every structure), `95_..._timeseries.pdf`,
-  `95_..._raw_channels.pdf`, with `95_..._summary_per_replicate.csv`. **(open)**: not yet reviewed on the real data.
+  `95_..._raw_channels.pdf`, with `95_..._summary_per_replicate.csv`: no clear difference for any sensor.
 - Appendix: `30_<channel>_over_time_<osc_type>.pdf`, `31_ratio_<sensor>_over_time_<osc_type>.pdf` (drift over
   hours; cycles are below the sampling limit), `40_Rp_ratio_*.pdf`, `40_Rt_population_ratio_*.pdf`.
 
@@ -276,9 +293,9 @@ unexplained at n = 1.
 | Methods: units and sampling | none (a schematic of chip, structures, arrays and chambers is the author's) | `00_n_tracks_overview_summary.pdf` | `00_chip_overview.csv`, `00_chip_run_order.csv` |
 | Methods: tracking and sparse window | `20_lineage_window.pdf` | `qc_comparison/70_qc_effect.pdf`, `lineage_validation/lv_02_detection_rate.pdf`, `20_bud_size_at_appearance.pdf` | `00_track_fragmentation.csv`, `00_track_relinks_per_chamber.csv`, `70_qc_effect_summary.csv`, `lv_03_detection_rate_kruskal.csv` |
 | 1 Static medium | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf` | `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/10_cell_area_over_time.pdf`, `static/21_panel_a_violin.pdf` | `static/13_endpoint_summary.csv`, `static/13_endpoint_per_chip.csv`, `static/21_budding_rate_summary.csv` |
-| 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf`, `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv` |
+| 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (now with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `12_area_growth_rate_spearman.csv` |
 | 3 Biosensors | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | `95_*_comparison.pdf`, `31_ratio_*_over_time_*.pdf` | ratio rows of `13_endpoint_control_trend.csv`, `95_*_summary_per_replicate.csv` |
-| 4 Controls (the pivot) | proposed summary figure (section 9); `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf`, bracket rows of the `13_`/`21_` figures | `13_endpoint_control_trend.csv`, `21_budding_rate_control_trend.csv`, `*_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
+| 4 Controls (the pivot) | `50_control_trend_summary.pdf`; `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf`, bracket rows of the `13_`/`21_` figures | `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `*_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
 | PKO | `pko/61_pko_control_agreement.pdf` | `pko/13_endpoint_vs_period_area_Glc.pdf` | `pko/60_pko_within_chip_agreement.csv`, `pko/60_pko_control_bracket.csv` |
 
 Suggested order of the results chapter: static first (the clean result), then the tracking limit as a short
@@ -289,26 +306,26 @@ is not a separate finding after the others; it is what the others turn into.
 
 ## 9. Open points and proposed additions
 
-Questions for the author:
+Answered so far: the thesis is in English and the four sections stay in the results chapter; W65 was one chip
+with one pre-culture; the sensors show no clear feast/famine difference on the real data; there is no run sheet
+of structure positions, so the outlook asks for one.
 
-1. **Language and chapter structure.** Is the thesis written in German, and are the four sections the results
-   chapters as planned, or does the control pivot become part of the oscillation chapter?
-2. **W65 minimal medium.** Which of the five omlp chips carry the 71 % spread? Aggregates, a failed run, or real?
-3. **Sensor dynamic range.** Do the `95_*` figures show a feast/famine difference for each sensor on the real
-   data? Section 3 needs that sentence before the structure argument.
-4. **Structure position.** "Most of the time" the shortest period sat on the same structure: is there a run sheet
-   that says which structure each period had? A column `structure_position` per structure would let the
-   pipeline test position directly instead of inferring it.
+Still open:
 
-Proposed additions to the pipeline, none of them started:
+1. **W109.** The four `replicate` of each medium carry the same date. Were they four chips with four
+   pre-cultures, four chambers of one chip, or one chip per medium? The answer decides whether section 1
+   has replication (`STATIC_SINGLE_CHIP_FAMILIES` in `config.py` is where the pipeline learns it).
+2. **W65 chambers.** Which of the five minimal-medium chambers carry the 71 % spread, and what do they look
+   like in the images?
 
-- A **control-trend summary figure**: one point per readout and series, oscillation Spearman on x, strongest
-  control Spearman on y; points on the diagonal are structure effects. This is the single figure for section 4.
+Built: the control-trend summary figure (`50_control_trend_summary.pdf`) and the control-trend check for µ_area
+(`12_area_growth_rate_control_trend.csv`, controls back in `12_area_growth_rate_all.pdf`).
+
+Not built, still possible:
+
 - An **events-against-density figure** over the full run for the QC batch, to show that raw budding events follow
   the object count; it costs one full-run lineage pass and would replace the numbers quoted in 2.2.
-- **Per-chip points** on the static figures, so the W65 heterogeneity is visible in the figure itself.
-- The **control-trend check for µ_area** (`12_area_growth_rate_per_chip.csv`), and the controls back into
-  `12_area_growth_rate_all.pdf`, which currently shows oscillation conditions only.
+- **Per-chamber points** on the static figures, so the W65 spread is visible in the figure itself.
 
 ---
 

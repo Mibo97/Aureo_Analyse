@@ -430,6 +430,89 @@ def control_trend_check(
     return out
 
 
+_READOUT_LABELS = {
+    "area": "endpoint area", "eccentricity": "endpoint eccentricity",
+    "mu_area": "µ_area", "budding_rate_per_h": "budding rate (sparse window)",
+}
+
+
+def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong: float = 0.6) -> None:
+    """EINE Abbildung fuer den Befund: pro Readout und Serie der Spearman der
+    Oszillationskammern gegen die Periode (x) und der der staerksten Kontrolle
+    derselben Strukturen (y). Punkte nahe der Diagonale: die Struktur traegt
+    beide. Farbe = verdict aus control_trend_check(), Marker = Readout,
+    Beschriftung = Stamm. Eine Facette je Oszillationstyp."""
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch, Rectangle
+
+    if ctrl_trend is None or ctrl_trend.empty:
+        return
+    df = ctrl_trend.dropna(subset=["rho_osc", "rho_ctrl_strongest"]).copy()
+    if df.empty:
+        logger.warning("plot_control_trend_summary(): keine Serie mit >= 3 Perioden - uebersprungen.")
+        return
+    if "osc_type" not in df.columns:
+        df["osc_type"] = "all"
+    osc_types = sorted(df["osc_type"].dropna().astype(str).unique())
+    readouts = list(dict.fromkeys(df["value_col"].astype(str)))
+    marker_cycle = ["o", "s", "^", "D", "v", "P", "X", "*", "<", ">"]
+    markers = {r: marker_cycle[i % len(marker_cycle)] for i, r in enumerate(readouts)}
+
+    def style(verdict: str) -> tuple[str, str]:
+        v = str(verdict)
+        if v.startswith("structure"):
+            return "C3", "C3"
+        if v.startswith("period"):
+            return "C0", "C0"
+        if v.startswith("not robust"):
+            return "none", "C0"
+        return "0.65", "0.65"
+
+    fig, axes = plt.subplots(1, len(osc_types), figsize=(4.9 * len(osc_types), 5.2), squeeze=False, sharey=True)
+    for ax, ot in zip(axes[0], osc_types):
+        sub = df[df["osc_type"].astype(str) == ot]
+        # Zonen: rot = Kontrolle trendet gleichsinnig (Struktureffekt), blau = nur die
+        # Oszillationskammern trenden (Periodeneffekt moeglich).
+        for sx, sy in ((1, 1), (-1, -1)):
+            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), min(sy * strong, sy * 1.05)),
+                                   1.05 - strong, 1.05 - strong, color="C3", alpha=0.07, lw=0))
+        for sx in (1, -1):
+            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), -strong), 1.05 - strong, 2 * strong,
+                                   color="C0", alpha=0.07, lw=0))
+        ax.plot([-1.05, 1.05], [-1.05, 1.05], color="0.5", lw=0.8, ls="--")
+        ax.axhline(0, color="0.85", lw=0.6)
+        ax.axvline(0, color="0.85", lw=0.6)
+        for _, r in sub.iterrows():
+            fc, ec = style(r.get("verdict", ""))
+            ax.scatter(r["rho_osc"], r["rho_ctrl_strongest"], marker=markers[str(r["value_col"])], s=64,
+                       facecolors=fc, edgecolors=ec, linewidths=1.3, zorder=3)
+            ax.annotate(str(r.get("biosensor", "")), (r["rho_osc"], r["rho_ctrl_strongest"]),
+                        xytext=(4, 3), textcoords="offset points", fontsize=7, color="0.3")
+        ax.set_xlim(-1.05, 1.05)
+        ax.set_ylim(-1.05, 1.05)
+        ax.set_aspect("equal")
+        ax.set_title(f"{ot}  (n = {len(sub)} readout × strain series)", fontsize=10)
+        ax.set_xlabel("Spearman ρ vs period: oscillation chambers")
+    axes[0][0].set_ylabel("Spearman ρ vs period: strongest control\nof the same structures")
+
+    handles = [Line2D([], [], marker=markers[r], color="0.3", ls="", label=_READOUT_LABELS.get(r, r))
+               for r in readouts]
+    handles += [
+        Patch(color="C3", alpha=0.35, label=f"structure effect: a control trends the same way (|ρ| ≥ {strong:g})"),
+        Patch(color="C0", alpha=0.35, label="period effect: oscillation chambers trend, controls do not"),
+        Line2D([], [], marker="o", mfc="none", mec="C0", ls="", label="not robust: trend vanishes after subtracting the controls"),
+        Line2D([], [], marker="o", color="0.65", ls="", label="no trend of the oscillation chambers"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=8, frameon=False,
+               bbox_to_anchor=(0.5, -0.02 - 0.05 * ((len(handles) + 1) // 2)))
+    fig.suptitle("Do the constant-medium controls trend with the period like the treated chambers?\n"
+                 "one point per readout and strain series; the diagonal is where the structure carries both",
+                 fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight", dpi=180)
+    plt.close(fig)
+
+
 def within_culture_trend(
     per_chip: pd.DataFrame,
     value_col: str = "value",

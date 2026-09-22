@@ -70,6 +70,7 @@ from config import (
     STATIC_CHIP_LABELS,
     STATIC_MEDIUM_PREFIX,
     STATIC_MEDIUM_ORDER,
+    STATIC_SINGLE_CHIP_FAMILIES,
     PANEL_A_GROUP_COL_STATIC,
     OSCILLATION_START_MIN,
     LINEAGE_PARAMS,
@@ -354,7 +355,8 @@ def main(argv: list[str] | None = None) -> int:
     # dem QC, damit die Kammerzahlen pro Chip den ausgewerteten Stand zeigen.
     # WICHTIG fuer alles Weitere: 'replicate' ist ein Array-Index, kein
     # Replikat - siehe experiment_units.py.
-    cells = add_experiment_units(cells, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX)
+    cells = add_experiment_units(cells, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX,
+                                 static_single_chip_families=STATIC_SINGLE_CHIP_FAMILIES)
     overview_chips = chip_overview(cells)
     overview_chips.to_csv(OUTPUT_DIR / "00_chip_overview.csv", index=False)
     logger.info("Tabelle gespeichert: 00_chip_overview.csv (%d Chips)", len(overview_chips))
@@ -592,7 +594,8 @@ def main(argv: list[str] | None = None) -> int:
         # Dieselben AUTOMATISCHEN Schritte wie im Hauptlauf (Gap Closing,
         # Sparse-Phase-Fenster) - nur das manuelle QC fehlt.
         raw = add_time_column(cells_raw, MIN_PER_FRAME)
-        raw = add_experiment_units(raw, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX)
+        raw = add_experiment_units(raw, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX,
+                                   static_single_chip_families=STATIC_SINGLE_CHIP_FAMILIES)
         raw = _flag_sparse_window_and_report(raw, OUTPUT_DIR / "no_qc", plot=False)
         raw, _, _ = _gap_close_and_report(raw, OUTPUT_DIR / "no_qc", stage_before="raw")
         in_batches = pd.Series(
