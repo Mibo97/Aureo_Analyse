@@ -93,6 +93,11 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 > trägt, von den Versuchseinheiten über die Tracking-Grenze bis zum Befund, dass die
 > Kontrollen die Trends tragen — steht in [`docs/data_story.md`](docs/data_story.md).
 
+> Der Befund zur Cellpose-Pipeline und zum Tracking — warum Tracks abreißen, was ein
+> Re-Linker auf der Tabelle noch retten kann und welche Optionen es gibt — steht in
+> [`docs/tracking_diagnosis.md`](docs/tracking_diagnosis.md); `analyse_pipeline/diagnose_tracking.py`
+> reproduziert die Zahlen aus einer Combined_Results-Datei.
+
 ## Versuchseinheiten: was ist hier ein Replikat?
 
 Die Spalten `replicate` und `chamber` kommen aus dem Dateinamen der
