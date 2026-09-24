@@ -177,18 +177,20 @@ def frag_stats(g: pd.DataFrame, col: str) -> dict:
                 share_tracks_ge_10_frames=float((length >= 10).mean()), n_tracks=int(g[col].nunique()))
 
 
-def manual_link_recall(df: pd.DataFrame, key: str, qc_path: Path, col: str) -> pd.DataFrame:
-    """Welche manuellen Verbindungen (merge_into_track_id) reproduziert der Prototyp? Zuordnung ueber
-    (condition, replicate, chamber, track_id) - die letzten Teile der cell_uid."""
+def manual_link_recall(df: pd.DataFrame, key: str, qc_path: Path, col: str, old_col: str = "track_id") -> pd.DataFrame:
+    """Welche manuellen Verbindungen (merge_into_track_id) sind in Spalte `col` dieselbe Spur? Die cell_uid
+    der QC-Datei nennt die IDs der Pipeline v11; in einer re-getrackten Tabelle stehen die in
+    `track_id_v11` (old_col), die neuen IDs in `track_id`. Zuordnung ueber (condition, replicate, chamber,
+    old_col) - die letzten Teile der cell_uid."""
     q = pd.read_csv(qc_path)
     m = q[q.merge_into_track_id.notna()].copy()
     parts = m.cell_uid.str.split("__")
     m["condition"], m["replicate"], m["chamber"] = parts.str[-4], parts.str[-3], parts.str[-2]
     m["track_id"] = parts.str[-1].str.replace("track", "").astype(int)
     m["target_id"] = m.merge_into_track_id.astype(int)
-    idx = df.drop_duplicates([key, "track_id"]).set_index(["condition", "replicate", "chamber", "track_id"])[key]
-    newid = df.groupby([key, "track_id"])[col].agg(lambda s: s.mode().iloc[0])
-    lastf = df.groupby([key, "track_id"])["frame"].max(); firstf = df.groupby([key, "track_id"])["frame"].min()
+    idx = df.drop_duplicates([key, old_col]).set_index(["condition", "replicate", "chamber", old_col])[key]
+    newid = df.groupby([key, old_col])[col].agg(lambda s: s.mode().iloc[0])
+    lastf = df.groupby([key, old_col])["frame"].max(); firstf = df.groupby([key, old_col])["frame"].min()
     rows = []
     for r in m.itertuples():
         ka, kb = (r.condition, r.replicate, r.chamber, r.track_id), (r.condition, r.replicate, r.chamber, r.target_id)
@@ -237,15 +239,22 @@ def main() -> None:
         rows.append(dict(unit=fn, **{f"{k}_before": v for k, v in b.items()}, **{f"{k}_after": v for k, v in a.items()}))
     res = pd.DataFrame(rows)
     res.to_csv(out / "tracking_relink_prototype.csv", index=False)
-    print("\nprototype re-linker (centroid + area, memory, no IoU gate), mean over units:")
+    print("\nprototype re-linker (centroid + area, memory, no IoU gate) on top of the input IDs, mean over units:")
     print(res.drop(columns="unit").mean().round(3).to_string())
     if args.qc is not None and args.qc.exists():
-        rec = manual_link_recall(df, key, args.qc, "relinked_id")
-        rec.to_csv(out / "tracking_manual_link_recall.csv", index=False)
-        if len(rec):
-            print(f"\nmanual merge links usable: {len(rec)}, reproduced: {rec.reproduced.mean():.2f}")
-            print(rec.groupby(pd.cut(rec.gap_frames, [-1000, 0, 1, 2, 5, 1000], labels=["overlap", "1", "2", "3-5", ">5"]),
-                              observed=True)["reproduced"].agg(["size", "mean"]).round(2).to_string())
+        old_col = "track_id_v11" if "track_id_v11" in df.columns else "track_id"
+        if old_col == "track_id_v11":
+            df["track_id_v11"] = df["track_id_v11"].astype(int)
+        checks = [("relinked_id", "prototype re-linker on top of the input IDs")]
+        if old_col == "track_id_v11":
+            checks.insert(0, ("track_id", "input IDs (track_labels.py)"))
+        for col, label in checks:
+            rec = manual_link_recall(df, key, args.qc, col, old_col=old_col)
+            rec.to_csv(out / f"tracking_manual_link_recall_{col}.csv", index=False)
+            if len(rec):
+                print(f"\nmanual merge links usable: {len(rec)}, same track in {label}: {rec.reproduced.mean():.2f}")
+                print(rec.groupby(pd.cut(rec.gap_frames, [-1000, 0, 1, 2, 5, 1000], labels=["overlap", "1", "2", "3-5", ">5"]),
+                                  observed=True)["reproduced"].agg(["size", "mean"]).round(2).to_string())
 
 
 if __name__ == "__main__":
