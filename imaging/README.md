@@ -71,7 +71,7 @@ Stand mit `squeue -u $USER`, Ausgabe in `logs/`.
 ## Was `track_labels.py` in die Tabelle schreibt
 
 `track_id` (neu), `track_id_v11` (alt = Label im Stack), `parent_track_id` (−1 = keins),
-`parent_area_ratio`, `link_type` (`continued`, `gap`, `long_range`, `split`, `new_touching`, `new`),
+`parent_area_ratio`, `link_type` (`continued`, `gap`, `long_range`, `unmerge`, `split`, `new_touching`, `new`),
 `gap_frames`, `overlap_prev_frac`, `n_candidates`, `axis_major`, `axis_minor`, `perimeter`, `circularity`,
 optional `skeleton_px` (`--skeleton`). Alle alten Spalten (Fluoreszenz, Metadaten) bleiben erhalten.
 Ereignisse (merge, split, gap, long_range) stehen je Film in `04_tracking/<stem>_events.csv`.
@@ -81,7 +81,8 @@ Ereignisse (merge, split, gap, long_range) stehen je Film in `04_tracking/<stem>
 | | v11-artig (IoU-Tor, kein Gedaechtnis) | `track_labels.py` |
 | --- | --- | --- |
 | Verknuepfungen ueber 1 Frame wiedergefunden | 0.97 | 0.97 |
-| Verknuepfungen ueber 2–3 Frames (Objekt zwischendurch nicht segmentiert) | 0.06–0.08 | 0.90–0.92 |
-| Spuren je Objekt (Objekte mit >= 5 Auftritten) | 6.4–6.7 | 2.7–2.9 |
-| Identitaetswechsel (Spur auf zwei Objekten) | 0–1 | 1–2 |
+| Verknuepfungen ueber 2–3 Frames (Objekt zwischendurch nicht segmentiert) | 0.06–0.08 | 0.95–0.96 |
+| Spuren je Objekt (Objekte mit >= 5 Auftritten) | 6.4–6.7 | 2.3 |
+| Identitaetswechsel (Spur auf zwei Objekten) | 0–1 | 1–3 |
 | Knospen mit richtigem Elternteil | 0 | 0.95–1.00 |
+| dito mit 12 % verschmolzenen Masken je Objekt-Frame (`--p-merge 0.12`): Spuren je Objekt | 8.2–8.6 | 2.6–2.7 |

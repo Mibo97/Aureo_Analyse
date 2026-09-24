@@ -18,8 +18,11 @@ Regeln (Begruendung in docs/tracking_diagnosis.md):
   * Duenne Frames (<= sparse_n Objekte): ein zweiter Durchgang verknuepft uebrig gebliebene Paare ueber
     einen grossen Radius, aber nur, wenn das Paar innerhalb dieses Radius eindeutig ist.
   * Merge/Split aus der Ueberlappung: deckt ein Objekt zwei Vorgaenger ab, laeuft die groessere Spur
-    weiter und die kleinere endet mit Vermerk; zerfaellt ein Vorgaenger in zwei Objekte, bekommt das
-    kleinere eine neue ID mit parent_track_id = Vorgaenger (link_type 'split').
+    weiter; die kleinere gilt als 'in der Nachbarmaske aufgegangen' und bleibt bis zu memory_merged
+    Frames verknuepfbar, solange die Wirtsspur lebt. Zerfaellt die Wirtsmaske wieder, bekommt das
+    abgetrennte Stueck zuerst diese aufgegangene Spur zurueck (link_type 'unmerge'); gibt es keine,
+    bekommt es eine neue ID mit parent_track_id = Wirt (link_type 'split'). So erzeugt das Flackern
+    Mutter+Knospe-in-einer-Maske / getrennt keine neuen IDs.
   * Elternregel: ein neues Objekt, dessen Maske (um touch_px erweitert) eine getrackte Maske beruehrt,
     bekommt parent_track_id = beruehrte Spur (link_type 'new_touching'), zusammen mit parent_area_ratio.
     Ob das eine Knospe ist, entscheidet die Analyse (Groessenverhaeltnis, Persistenz), nicht der Tracker.
@@ -56,6 +59,7 @@ if not logger.handlers:
 @dataclass
 class TrackParams:
     memory: int = 3              # Frames, die eine verlorene Spur verknuepfbar bleibt (gap <= memory)
+    memory_merged: int = 15      # dito fuer Spuren, die in einer Nachbarmaske aufgegangen sind (solange der Wirt lebt)
     dist_frac: float = 1.5       # Tor: d <= dist_frac * r_max * sqrt(gap) + dist_add
     dist_add: float = 10.0
     max_ratio: float = 2.5       # Tor: max(area)/min(area) <= max_ratio
@@ -141,7 +145,18 @@ class LabelTracker:
 
     # -- Hilfen
     def _candidates(self, t: int) -> list[int]:
-        return [k for k, v in self.tracks.items() if 0 < t - v["last_frame"] <= self.p.memory]
+        out = []
+        for k, v in self.tracks.items():
+            g = t - v["last_frame"]
+            if g <= 0:
+                continue
+            if g <= self.p.memory:
+                out.append(k)
+            elif v.get("merged_into") is not None and g <= self.p.memory_merged:
+                host = self.tracks.get(v["merged_into"])
+                if host is not None and t - host["last_frame"] <= 1:   # Wirtsspur lebt noch
+                    out.append(k)
+        return out
 
     def _cost_matrix(self, t: int, cand: list[int], objs: pd.DataFrame, labels: np.ndarray):
         p = self.p
@@ -220,9 +235,11 @@ class LabelTracker:
                         c = oc.get((v["label"], int(lab)), 0)
                         if assign[j] >= 0 and assign[j] != k and c >= p.merge_min_frac * v["area"]:
                             self.events.append(dict(frame=t, type="merge", track_id=k, other_track_id=int(assign[j]), gap_frames=1))
-                            v["merged_into"] = int(assign[j]); v["last_frame"] = -10**9  # Spur beendet
+                            v["merged_into"] = int(assign[j]); v["merged_frame"] = t   # bleibt verknuepfbar (memory_merged)
                             break
-                # split: ein Vorgaenger (gap 1, zugeordnet) deckt ein weiteres, freies Objekt ab
+                # split: ein Vorgaenger (gap 1, zugeordnet) deckt ein weiteres, freies Objekt ab.
+                # Zuerst bekommt eine in DIESEM Wirt aufgegangene Spur das Stueck zurueck (unmerge).
+                assigned_now = set(int(a) for a in assign if a >= 0)
                 for i, k in enumerate(cand):
                     v = self.tracks[k]
                     if i not in used or v["last_frame"] != prev_frame:
@@ -232,10 +249,24 @@ class LabelTracker:
                             continue
                         c = oc.get((v["label"], int(lab)), 0)
                         if c >= p.split_min_frac * objs.area.values[j]:
-                            nid = self.next_id; self.next_id += 1
-                            assign[j] = nid; link_type[j] = "split"; parent[j] = k
-                            parent_ratio[j] = objs.area.values[j] / v["area"]
-                            self.events.append(dict(frame=t, type="split", track_id=nid, other_track_id=k, gap_frames=1))
+                            oy, ox, oa = objs.centroid_y.values[j], objs.centroid_x.values[j], objs.area.values[j]
+                            best, best_d = None, np.inf
+                            for m, vm in self.tracks.items():
+                                if vm.get("merged_into") != k or m in assigned_now or t - vm["last_frame"] > p.memory_merged:
+                                    continue
+                                d = np.hypot(vm["cy"] - oy, vm["cx"] - ox); rm = max(vm["r"], np.sqrt(oa / np.pi))
+                                ratio = max(vm["area"], oa) / min(vm["area"], oa)
+                                if d <= 2.0 * rm + 20 and ratio <= 3.0 and d < best_d:
+                                    best, best_d = m, d
+                            if best is not None:
+                                assign[j] = best; assigned_now.add(best); link_type[j] = "unmerge"
+                                gap_frames[j] = t - self.tracks[best]["last_frame"]
+                                self.events.append(dict(frame=t, type="unmerge", track_id=best, other_track_id=k, gap_frames=int(gap_frames[j])))
+                            else:
+                                nid = self.next_id; self.next_id += 1
+                                assign[j] = nid; assigned_now.add(nid); link_type[j] = "split"; parent[j] = k
+                                parent_ratio[j] = oa / v["area"]
+                                self.events.append(dict(frame=t, type="split", track_id=nid, other_track_id=k, gap_frames=1))
         # neue Objekte: ID vergeben, Beruehrungsregel fuer die Elternschaft
         lab_to_track = {int(l): int(assign[j]) for j, l in enumerate(objs.label.values) if assign[j] >= 0}
         for j in np.where(assign < 0)[0]:
@@ -313,7 +344,7 @@ def tracking_summary(table: pd.DataFrame, events: pd.DataFrame) -> dict:
         share_tracks_1_frame=float((length == 1).mean()),
         n_new_touching=int((t.link_type == "new_touching").sum()),
         n_gap_links=int(ev.get("gap", 0)), n_long_range=int(ev.get("long_range", 0)),
-        n_merge=int(ev.get("merge", 0)), n_split=int(ev.get("split", 0)),
+        n_merge=int(ev.get("merge", 0)), n_split=int(ev.get("split", 0)), n_unmerge=int(ev.get("unmerge", 0)),
     )
 
 
@@ -407,11 +438,11 @@ def main(argv=None) -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--no-zarr", action="store_true", help="keinen tracks_<stem>.zarr schreiben")
     ap.add_argument("--skeleton", action="store_true", help="Skelettlaenge je Objekt berechnen")
-    for name, default in (("memory", 3), ("dist-frac", 1.5), ("dist-add", 10.0), ("max-ratio", 2.5),
+    for name, default in (("memory", 3), ("memory-merged", 15), ("dist-frac", 1.5), ("dist-add", 10.0), ("max-ratio", 2.5),
                           ("sparse-n", 20), ("sparse-frac", 6.0), ("sparse-add", 20.0), ("touch-px", 2)):
         ap.add_argument(f"--{name}", type=type(default), default=default)
     a = ap.parse_args(argv)
-    params = TrackParams(memory=a.memory, dist_frac=a.dist_frac, dist_add=a.dist_add, max_ratio=a.max_ratio,
+    params = TrackParams(memory=a.memory, memory_merged=a.memory_merged, dist_frac=a.dist_frac, dist_add=a.dist_add, max_ratio=a.max_ratio,
                          sparse_n=a.sparse_n, sparse_frac=a.sparse_frac, sparse_add=a.sparse_add,
                          touch_px=a.touch_px, skeleton=a.skeleton)
     logger.info("Parameter: %s", asdict(params))

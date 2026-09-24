@@ -170,6 +170,30 @@ interactively with `srun -p cuda --gres=gpu:1 --pty bash` on one movie to measur
 - `analyse_pipeline`: `AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"` switches the analysis to the
   re-tracked tables (own cache file).
 
+## 6b. First cluster results (probe, re-tracking of WT/Glc/0.75, mini sweep)
+
+- Node wohlrose: NVIDIA L40S 48 GB (plus L4 and a second L40S), 168 CPUs, no time limits; Cellpose 4.1.1,
+  torch 2.12 cu130, zarr 3.2.1, nd2 0.11.3. Cellpose `cpsam_v2` takes 0.7–1.4 s per frame at 1139 × 1041
+  px, so one 133-frame movie is 2–3 minutes and the whole data set 20–30 GPU-hours on one card.
+- **Pixel size 0.0733 µm/px** (nd2 metadata). The chamber crop is 83 × 76 µm. The median object of the
+  QC batch, 3,730 px², is 20 µm² (equivalent diameter 5.1 µm), the largest 29,000 px² are 160 µm². In
+  Rensink's terms a blastoconidium of 9–11 × 3–6.5 µm is 20–56 µm² (3,700–10,500 px²) and a swollen cell of
+  12 × 9 to 15 × 11 µm is 85–130 µm² (16,000–24,000 px²); the size classes are calibrated on our own
+  distribution, since Cellpose masks exclude the phase halo.
+- Re-tracking of WT/Glc/0.75 (11 chambers, 3–61 objects per frame) from the existing masks: losses of an
+  object that is still in the table fell from 31 % of new IDs (v11 tracker on the QC batch) to 2.5 %.
+  The remaining new IDs are small and short-lived: median 714 px² (3.8 µm²), 67 % below 1,000 px²
+  (5.4 µm²) while a blastoconidium is at least 20 µm²; 47 % appear isolated, in the sparsest frames 78 %.
+  Debris and halo fragments passing through the chamber under flow, and buds at their first frames.
+  Consequence for the analysis: an object counts as a cell above a size floor and after two frames; the
+  table keeps everything.
+- A flaw found on the way and fixed: a track absorbed into a neighbour's mask was ended, so every
+  merge-and-split flicker of a mother-and-bud mask produced a new ID. Absorbed tracks now stay linkable
+  for `memory_merged` frames while the host lives. Synthetic test with 12 % merged masks: tracks per
+  object 2.6–2.7 versus 8.2–8.6 for the v11-like tracker.
+- Mini sweep (two settings on a movie with 2–3 cells): identical results, `niter` makes no difference
+  there. The sweep needs a chamber with tens of cells to say anything.
+
 Next checkpoint: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the

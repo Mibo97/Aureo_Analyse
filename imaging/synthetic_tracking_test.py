@@ -22,7 +22,7 @@ def ellipse_radius(c, ang):
     return c["a"] * c["b"] / np.sqrt((c["b"] * np.cos(th)) ** 2 + (c["a"] * np.sin(th)) ** 2)
 
 
-def make_movie(T=80, H=700, W=700, n0=30, seed=0):
+def make_movie(T=80, H=700, W=700, n0=30, seed=0, p_merge=0.02):
     rng = np.random.default_rng(seed)
     yy, xx = np.mgrid[0:H, 0:W]
     cells = {}   # gt_id -> dict(cy, cx, a, b, ang, alive, bud_of, is_bud, detach_r, transient_until)
@@ -85,7 +85,7 @@ def make_movie(T=80, H=700, W=700, n0=30, seed=0):
                     split_counter[0] += 1; kind = "split"
                     img[mask & (X < 0)] = k; img[mask & (X >= 0)] = split_counter[0]
                 else:
-                    if rng.random() < 0.02:  # mit einem beruehrenden Nachbarn verschmolzen
+                    if rng.random() < p_merge:  # mit einem beruehrenden Nachbarn verschmolzen
                         for k2 in alive:
                             c2 = cells[k2]
                             if k2 != k and np.hypot(c2["cy"] - c["cy"], c2["cx"] - c["cx"]) < max(c["a"], c["b"]) + max(c2["a"], c2["b"]) + 4:
@@ -167,8 +167,8 @@ def score(table: pd.DataFrame, gt: pd.DataFrame, memory=3) -> dict:
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=0); ap.add_argument("--frames", type=int, default=80)
-    ap.add_argument("--out", type=Path, default=None); a = ap.parse_args()
-    stack, gt = make_movie(T=a.frames, seed=a.seed)
+    ap.add_argument("--out", type=Path, default=None); ap.add_argument("--p-merge", type=float, default=0.02); a = ap.parse_args()
+    stack, gt = make_movie(T=a.frames, seed=a.seed, p_merge=a.p_merge)
     n_obj = int((stack > 0).any(axis=(1, 2)).sum())
     print(f"movie: {a.frames} frames, {gt.gt_id.nunique()} objects incl. {gt[gt.is_bud].gt_id.nunique()} buds and "
           f"{gt[gt.transient].gt_id.nunique()} transient cells; kinds: {gt.kind.value_counts().to_dict()}")
