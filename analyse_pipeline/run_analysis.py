@@ -57,6 +57,7 @@ import pandas as pd
 # inspect_lineage.py und validate_lineage.py lesen dieselbe Datei, damit
 # Kalibrierung, Validierung und Auswertung mit denselben Schwellen laufen.
 from config import (
+    RESULTS_PATTERN,
     DATA_ROOT,
     OUTPUT_DIR,
     OUTPUT_DIR_STATIC,
@@ -294,7 +295,8 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     # 1. Daten laden
     # ------------------------------------------------------------------
-    cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD)
+    cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD,
+                             filename_pattern=RESULTS_PATTERN)
 
     # ------------------------------------------------------------------
     # 1b. Ratiometrische Biosensoren: Verhältnis-Spalten berechnen

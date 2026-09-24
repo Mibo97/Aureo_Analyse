@@ -97,6 +97,8 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 > Re-Linker auf der Tabelle noch retten kann und welche Optionen es gibt — steht in
 > [`docs/tracking_diagnosis.md`](docs/tracking_diagnosis.md); `analyse_pipeline/diagnose_tracking.py`
 > reproduziert die Zahlen aus einer Combined_Results-Datei.
+> Werkzeuge zum Re-Tracking aus den gespeicherten Masken, zum Segmentierungs-Sweep und fuer
+> Slurm-Array-Jobs: [`imaging/README.md`](imaging/README.md); Plan: [`docs/tracking_plan.md`](docs/tracking_plan.md).
 
 ## Versuchseinheiten: was ist hier ein Replikat?
 

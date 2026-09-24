@@ -66,6 +66,16 @@ OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / "analysis
 # Der Parquet-Cache liegt bewusst NEBEN analysis_output, nicht darin: so
 # überlebt er ein Löschen des Output-Ordners (Neuauswertung ohne Neu-Einlesen).
 CACHE_PATH: Path = OUTPUT_DIR.parent / "combined_results_cache.parquet"
+
+# Welche Ergebnisdateien geladen werden. Standard: die Tabellen der Bild-Pipeline v11
+# (Combined_Results.csv). Nach dem Re-Tracking (imaging/track_labels.py --batch ...) liegt daneben
+# Combined_Results_retracked.csv mit neuen track_id (alte in track_id_v11) - dann:
+#     export AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"
+# Der Cache bekommt dafuer einen eigenen Namen, damit alte und neue Tabellen nicht vermischt werden.
+RESULTS_PATTERN: str = os.environ.get("AUREO_RESULTS_PATTERN", "Combined_Results.*")
+if RESULTS_PATTERN != "Combined_Results.*":
+    _tag = "".join(ch if ch.isalnum() else "_" for ch in RESULTS_PATTERN.replace(".*", ""))
+    CACHE_PATH = CACHE_PATH.with_name(f"combined_results_cache_{_tag}.parquet")
 QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
 OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"

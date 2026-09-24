@@ -138,16 +138,44 @@ interactively with `srun -p cuda --gres=gpu:1 --pty bash` on one movie to measur
 `--time`. At roughly two seconds per frame a 132-frame movie takes about ten minutes including I/O, so
 565 movies on eight GPUs take about twelve hours.
 
-## 6. Open questions
+## 6. Answers so far and what they change
 
-1. Pixel size and objective, or confirmation that the nd2 metadata carries it.
-2. The figure-eight objects that `flow_threshold 0.8` protects: septated swollen cells or mother-and-bud pairs?
-3. Do the `02_processed/masks_*.zarr` stacks still exist for all experiments?
-4. Cluster: GPU model and memory, wall-time limit, whether `/prj/microfluidic` is mounted on the compute nodes,
-   how the Python environment is provided (module or conda), and the installed Cellpose version.
-5. The pH values of feast and famine in the pH series.
+1. **Pixel size:** probably in the nd2 metadata. `imaging/probe_env.py` prints `voxel_size()`; the
+   sweep script prints it per movie. Until confirmed, all areas stay in pixels.
+2. **Figure-eight objects are septated swollen cells.** The segmentation setting (`flow_threshold 0.8`,
+   `niter 500`) is right and stays the base of the sweep; the sweep scores splits of large objects as
+   errors (`large_splits_per_frame`).
+3. **`masks_*.zarr` exist for all experiments.** The tracker runs on them on CPU for every experiment
+   before any GPU time; only border-band objects and objects below 200 px are missing from those stacks.
+4. **Cluster:** miniconda3, Cellpose 4.1.1. GPU type, memory, wall time, mounts are answered by
+   `sbatch imaging/slurm/probe.sbatch <film.nd2> <config.yaml>`.
+5. **pH series: feast pH 3, famine pH 8.** Li et al. 2009 (cited by Rensink): chlamydospores from
+   swollen cells below pH 3, blastoconidia to swollen cells at pH 4.5, stable at pH 6. Feast sits at the
+   chlamydospore edge and famine outside the reported range, so a composition readout per frame is worth
+   having for this series in particular.
+
+## 6a. Built at this checkpoint
+
+- `imaging/track_labels.py`: the tracker of B4 on label stacks (memory, cost instead of IoU gate,
+  sparse-frame unique links, merge/split by overlap, `parent_track_id` by touching), with `--batch` writing
+  `Combined_Results_retracked.csv` next to the old table (old columns kept, `track_id_v11` = old ID).
+- `imaging/synthetic_tracking_test.py`: ground truth with jumps, buds, dropouts, false splits, merged masks,
+  transient cells and an empty frame. Two seeds: links across a 2–3 frame gap recovered 0.90–0.92 versus
+  0.06–0.08 for the v11-like tracker; tracks per object 2.7–2.9 versus 6.4–6.7; bud parent correct in
+  0.95–1.00 versus none; identity switches 1–2 versus 0–1.
+- `imaging/sweep_segmentation.py` and `imaging/slurm/sweep.sbatch`: Phase A, scored by consistency,
+  merge/split, large-object splits, count stability, time per frame, with overlays.
+- `imaging/probe_env.py`, `imaging/slurm/probe.sbatch`, `imaging/slurm/make_manifest.py`,
+  `imaging/slurm/track.sbatch`: cluster probe and array jobs for the re-tracking of all experiments.
+- `analyse_pipeline`: `AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"` switches the analysis to the
+  re-tracked tables (own cache file).
+
+Next checkpoint: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
+`analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
+table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
+setting is chosen.
 
 ## 7. Order and checkpoints
 
-Phase A and the tracker on the existing zarr stacks (B4 on old masks) can run in parallel. B1–B3, B5–B6 after
-checkpoint 1. Phase C after checkpoint 2. The full re-run last.
+Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,
+B5–B6 (pipeline v12) after checkpoint 1. Phase C after checkpoint 2. The full re-run last.

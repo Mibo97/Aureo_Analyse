@@ -1,0 +1,11 @@
+# Umgebung auf dem Cluster (conda, Name z.B. "cellpose"): cellpose 4.1.1 bringt torch mit.
+cellpose>=4.1
+nd2>=0.10
+zarr>=2.16
+scikit-image>=0.22
+scipy>=1.11
+numpy>=1.26
+pandas>=2.1
+tifffile>=2023.7
+pyyaml>=6.0
+pillow>=10.0
