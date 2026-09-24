@@ -14,41 +14,54 @@ arbeiten oder ihre Einstellungen pruefen. Befund und Plan: `../docs/tracking_dia
 | `slurm/make_manifest.py` | Liste aller Experimente/Filme fuer Array-Jobs | ueberall |
 | `slurm/probe.sbatch`, `slurm/sweep.sbatch`, `slurm/track.sbatch` | Jobskripte (Partition `cuda` bzw. `cpu`; Umgebungsname ueber `CONDA_ENV`, Standard `cellpose`) | Cluster |
 
-## Reihenfolge auf dem Cluster
+## Reihenfolge auf dem Cluster, interaktiv (ohne sbatch)
+
+Alles hier laeuft in dem Fenster, das `slterm -p cuda` oeffnet (fuer das Re-Tracking reicht ein
+Fenster ohne GPU, falls es eine CPU-Partition gibt). Vorher wie gewohnt die Umgebung aktivieren
+(miniforge, `conda activate <env>`), dann in den Repo-Ordner wechseln.
 
 ```bash
-# 0. einmalig: Repo auf den Cluster, Umgebung (conda) mit cellpose 4.1.1, nd2, zarr, scikit-image
-cd /pfad/zum/Aureo_Analyse && mkdir -p logs
+# 0. einmalig: Repo auf den Cluster holen (Branch mit den Werkzeugen) und Pakete pruefen
+git clone -b claude/adoring-allen-70cicr https://github.com/Mibo97/Aureo_Analyse.git
+cd Aureo_Analyse
+pip install -r imaging/requirements.txt          # in der aktivierten Umgebung; cellpose ist schon da
+bash imaging/check_cluster.sh                    # Ausgabe schicken: zeigt, was der Cluster kann
 
-# 1. Knoten und Daten pruefen (GPU, Versionen, Pixelgroesse, s/Frame)
-sbatch imaging/slurm/probe.sbatch /prj/.../01_raw_data/<film>.nd2 WT_GLC_0.75config.yaml
-cat logs/probe_*.out
+# 1. Knoten und Daten pruefen (GPU, Versionen, Pixelgroesse, Sekunden je Frame) - ca. 2 Minuten
+bash imaging/run_probe.sh /prj/microfluidic/ma_mimorde/Data/WT/pH/6/01_raw_data/<film>.nd2 WT_GLC_0.75config.yaml
 
-# 2. Re-Tracking aller Experimente aus den vorhandenen Masken (kein Cellpose)
-python imaging/slurm/make_manifest.py /prj/microfluidic/ma_mimorde/Data --out manifests
-N=$(($(wc -l < manifests/experiments.csv) - 1))
-sbatch --array=0-$((N-1))%16 imaging/slurm/track.sbatch manifests/experiments.csv
-#    -> je Experiment 03_results/Combined_Results_retracked.csv und 04_tracking/
+# 2. Re-Tracking des QC-Batches (WT/pH/6) aus den vorhandenen Masken - Minuten, keine GPU
+bash imaging/run_track_one.sh /prj/microfluidic/ma_mimorde/Data/WT/pH/6
+#    -> .../WT/pH/6/03_results/Combined_Results_retracked.csv und .../WT/pH/6/04_tracking/
+python analyse_pipeline/diagnose_tracking.py /prj/.../WT/pH/6/03_results/Combined_Results_retracked.csv --out /prj/.../WT/pH/6/04_tracking
+#    schicken: 04_tracking/tracking_summary.csv, tracking_new_id_categories.csv, tracking_relink_prototype.csv
 
-# 3. Analyse auf den neuen Tabellen
+# 3. Re-Tracking aller Experimente (Stunden; wieder aufrufbar, fertige werden uebersprungen)
+nohup bash imaging/run_track_all.sh /prj/microfluidic/ma_mimorde/Data 4 > logs/track_all.log 2>&1 &
+tail -f logs/track_all.log                        # Strg+C beendet nur die Anzeige, nicht den Lauf
+
+# 4. Analyse auf den neuen Tabellen
 export AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"
 python analyse_pipeline/run_analysis.py
 
-# 4. Segmentierungs-Sweep (Phase A), vier Filme, je 12 aufeinanderfolgende Frames
-sbatch imaging/slurm/sweep.sbatch WT_GLC_0.75config.yaml sweep_out \
+# 5. Segmentierungs-Sweep (Phase A, GPU), erst klein testen, dann das ganze Gitter
+MODELS=cpsam_v2 FLOW=0.8 CELLPROB=0 NITER=0,500 bash imaging/run_sweep.sh WT_GLC_0.75config.yaml sweep_test \
+    /prj/.../WT/pH/6/01_raw_data/260805_Osc6_Rep1_ChamA4.nd2 40-52
+bash imaging/run_sweep.sh WT_GLC_0.75config.yaml sweep_out \
     /prj/.../260805_Osc6_Rep1_ChamA4.nd2 40-52 /prj/.../260805_Osc6_PosCtrl_Rep1_ChamA1.nd2 100-112 \
     /prj/.../260805_Osc6_NegCtrl_Rep2_ChamA14.nd2 20-32 /prj/.../WT/Glc/6/01_raw_data/<film>.nd2 60-72
 #    -> sweep_out/sweep_summary.csv und sweep_out/overlays/
 ```
 
-Ein einzelner Film zum Ausprobieren, ohne Slurm:
+Wichtig bei interaktiven Sitzungen: die Sitzung hat ein Zeitlimit (steht in `squeue -u $USER`, falls
+vorhanden). Schritt 3 deshalb mit `nohup` starten und bei Abbruch einfach erneut aufrufen. Wenn `git` auf
+dem Cluster fehlt: das Repo als ZIP von GitHub laden und den Ordner `imaging/` sowie
+`analyse_pipeline/diagnose_tracking.py` hochladen.
 
-```bash
-python imaging/track_labels.py /prj/.../02_processed/masks_260805_Osc6_Rep1_ChamA4.zarr --out /tmp/tracktest
-```
+## Mit sbatch (optional, wenn `sbatch` vorhanden ist)
 
-Partition `cpu` in `track.sbatch` ggf. an den Cluster anpassen (`sinfo` zeigt die Namen). Fehlgeschlagene
-Array-Indizes werden mit `--array=3,17` einzeln wiederholt.
+`imaging/slurm/*.sbatch` sind dieselben Schritte als Batch-Jobs (Probe, Sweep, Re-Tracking als
+Array-Job ueber `manifests/experiments.csv`). Partition und Umgebungsname (`CONDA_ENV`) ggf. anpassen.
 
 ## Was `track_labels.py` in die Tabelle schreibt
 

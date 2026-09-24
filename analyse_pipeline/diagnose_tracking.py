@@ -209,7 +209,11 @@ def main() -> None:
     args = ap.parse_args()
     df = pd.read_parquet(args.results) if args.results.suffix == ".parquet" else pd.read_csv(args.results)
     key = "filename" if "filename" in df.columns else "exp_id"
-    df = df.dropna(subset=["area", "centroid_x", "centroid_y"]).copy()
+    n0 = len(df)
+    df = df.dropna(subset=["area", "centroid_x", "centroid_y", "track_id"]).copy()
+    if len(df) < n0:
+        print(f"{n0 - len(df)} rows without track_id/geometry dropped")
+    df["track_id"] = df["track_id"].astype(int)
     df["r"] = np.sqrt(df.area / np.pi)
     out = args.out or args.results.parent
     out.mkdir(parents=True, exist_ok=True)

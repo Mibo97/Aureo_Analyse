@@ -9,7 +9,7 @@
 #SBATCH -o logs/probe_%j.out
 set -euo pipefail
 mkdir -p logs
-source "$HOME/miniconda3/etc/profile.d/conda.sh"
+for d in "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/mambaforge"; do [ -f "$d/etc/profile.d/conda.sh" ] && source "$d/etc/profile.d/conda.sh" && break; done
 conda activate "${CONDA_ENV:-cellpose}"     # Name der Umgebung mit cellpose 4.1.1, nd2, zarr
 cd "${REPO_DIR:-$SLURM_SUBMIT_DIR}"
 python imaging/probe_env.py --nd2 "${1:?nd2 file}" --config "${2:?config yaml}" --frames 3

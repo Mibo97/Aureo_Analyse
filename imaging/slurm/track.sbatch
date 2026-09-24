@@ -10,7 +10,7 @@
 #SBATCH -o logs/track_%A_%a.out
 set -euo pipefail
 mkdir -p logs
-source "$HOME/miniconda3/etc/profile.d/conda.sh"
+for d in "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/mambaforge"; do [ -f "$d/etc/profile.d/conda.sh" ] && source "$d/etc/profile.d/conda.sh" && break; done
 conda activate "${CONDA_ENV:-cellpose}"
 cd "${REPO_DIR:-$SLURM_SUBMIT_DIR}"
 MANIFEST="${1:?manifests/experiments.csv}"
