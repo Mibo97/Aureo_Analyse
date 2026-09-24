@@ -121,16 +121,21 @@ Drei Folgen, die in die Arbeit gehören:
    (Bracket-Score, Schritt 13) — das entfernt den Struktur-/Kultur-Effekt,
    ohne dass man ihn kennen müsste. Und die Kontrollen sind der Prüfstein für
    jeden Trend gegen die Periode: sie liegen in konstantem Medium und können
-   auf die Periode nicht reagieren. `13_endpoint_control_trend.csv` und
-   `21_budding_rate_control_trend.csv` stellen dem Spearman der
+   auf die Periode nicht reagieren. `13_endpoint_control_trend.csv`,
+   `12_area_growth_rate_control_trend.csv` und `21_budding_rate_control_trend.csv`
+   stellen dem Spearman der
    Oszillationskammern den der Kontrollen derselben Strukturen gegenüber
    (`rho_ctrl_mean`, `rho_ctrl_strongest`) und den der Differenz
    (`rho_osc_minus_ctrl`). Läuft auch nur eine Kontrollart mit, trägt die
    Struktur den Trend, nicht die Periode. Ein `period effect` verlangt drei
    Dinge zugleich: die Oszillationskammern trenden, keine Kontrollart trendet
    gleichsinnig, und die Differenz trendet ebenfalls. In den echten Daten
-   erfüllt das von 28 Readout-Serien-Kombinationen keine, die über Stämme
-   hinweg wiederkehrt; die Sensor-Ratios (OxPro, pHluorin) laufen in den
+   (`50_control_trend_summary.csv`: 48 Readout-Serien-Kombinationen aus
+   Endzustand, µ_area und Knospungsrate) erfüllen das 7, verstreut über
+   Readouts und Stämme: keine kehrt für einen Stamm in beiden
+   Oszillationstypen gleichsinnig wieder, bei vier läuft die stärkste
+   Kontrolle gegenläufig. 18 tragen den Trend ihrer Kontrollen mit, 19 zeigen
+   keinen Trend; die Sensor-Ratios (OxPro, pHluorin) laufen in den
    NegCtrl-Kammern genauso mit der Periode wie in den Oszillationskammern.
    `*_within_culture.csv` zeigt dasselbe innerhalb einer Kultur (2–3
    Perioden, eine Vorkultur), wo der Kulturvergleich entfällt.

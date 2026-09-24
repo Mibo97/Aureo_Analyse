@@ -223,13 +223,28 @@ Constant-medium chambers cannot respond to the period. On the same structures th
 | `ratio_OxPro` | BSO/pH | +1.00 | +1.00 (NegCtrl) | +0.80 |
 | `ratio_pHluorin` | BSPH/Glc | +0.90 | +0.90 (NegCtrl) | +0.30 |
 | `ratio_GlyRNA` | BSG/Glc | +0.89 | +0.43 | −0.26 |
+| µ_area | BSPH/Glc | −0.71 | −0.83 | +0.26 |
+| µ_area | BSO/Glc | −0.77 | −0.83 | −0.89 |
 
-- `13_endpoint_control_trend.csv`, `21_budding_rate_control_trend.csv`: per readout and series, the Spearman
-  of the oscillation chambers, of PosCtrl, NegCtrl and their mean, of the difference, and a verdict. A
-  `period effect` needs all three: the oscillation chambers trend, no control trends the same way, and the
-  difference trends. Of 28 endpoint combinations, 12 show no oscillation trend, 12 are shared by a control,
-  2 vanish once the controls are subtracted, and 2 survive without recurring in another strain
-  (eccentricity BSG/Glc, area BSG/pH with four points).
+- `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`
+  (collected in `50_control_trend_summary.csv`): per readout and series, the Spearman of the oscillation
+  chambers, of PosCtrl, NegCtrl and their mean, of the difference, and a verdict. A `period effect` needs all
+  three: the oscillation chambers trend, no control trends the same way, and the difference trends. Over the
+  48 readout × series rows of the full run (area, eccentricity, four sensor ratios, µ_area, budding rate):
+
+  | verdict | rows | which |
+  | --- | --- | --- |
+  | no monotone trend of the oscillation chambers | 19 | |
+  | structure effect: a control trends the same way | 18 | 4 of them with a residual difference |
+  | not robust: the trend vanishes after subtracting the controls | 4 | eccentricity BSPH/pH; GlyRNA BSG/Glc; µ_area BSA/Glc; budding rate WT/Glc |
+  | period effect: all three conditions | 7 | area BSG/pH; eccentricity BSG/Glc; µ_area BSG/Glc, BSG/pH, BSO/pH; budding rate BSO/Glc, BSPH/pH |
+
+  The seven are scattered. No readout passes in the same direction for one strain in both oscillation types
+  (µ_area BSG passes in both, rising with the period in Glc and falling in pH), and in four of the seven the
+  strongest control trends the opposite way, which is a structure pattern as well. The one recurrence is
+  µ_area in the pH series: the oscillation chambers fall with the period in all five strains (ρ −0.4 to −0.8)
+  and two pass. With four periods a |ρ| of 0.8 arises by chance in one series of three, and the pH series
+  were run in period order (day blocks, below), so this is a lead for a dedicated experiment, not a result.
 - `13_endpoint_within_culture.csv`, `21_budding_rate_within_culture.csv`: the change from the shortest to the
   longest period inside one culture, where the pre-culture cannot differ. Budding rate: the oscillation
   chambers fall in 9 of 19 cultures, the controls in 6 of 18, the difference in 9 of 19.
@@ -250,6 +265,8 @@ drift in section 4 would have been reported as a dose response.
 one point per readout and strain series, the oscillation Spearman on x, the strongest control Spearman on y,
 coloured by verdict; points along the diagonal are the structure effects. It collects the control-trend tables
 of the endpoint (`13_`), of µ_area (`12_area_growth_rate_control_trend.csv`) and of the budding rate (`21_`).
+On the full run, 18 of the 48 points sit in the red corners on the diagonal and 19 in the grey middle band;
+the 7 blue points scatter over the off-diagonal regions.
 
 ---
 

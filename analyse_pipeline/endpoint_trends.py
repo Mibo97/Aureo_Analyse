@@ -441,7 +441,12 @@ def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong:
     Oszillationskammern gegen die Periode (x) und der der staerksten Kontrolle
     derselben Strukturen (y). Punkte nahe der Diagonale: die Struktur traegt
     beide. Farbe = verdict aus control_trend_check(), Marker = Readout,
-    Beschriftung = Stamm. Eine Facette je Oszillationstyp."""
+    Beschriftung = Stamm. Eine Facette je Oszillationstyp.
+
+    Zonen spiegeln die Verdict-Regel: rot = |rho_osc| >= strong UND die
+    staerkste Kontrolle gleichsinnig >= strong (Struktureffekt); blau = der
+    Rest des Bands |rho_osc| >= strong, also Kontrolle schwach ODER
+    gegenlaeufig (Periodeneffekt oder 'not robust', je nach Differenz)."""
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch, Rectangle
 
@@ -477,7 +482,11 @@ def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong:
             ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), min(sy * strong, sy * 1.05)),
                                    1.05 - strong, 1.05 - strong, color="C3", alpha=0.07, lw=0))
         for sx in (1, -1):
-            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), -strong), 1.05 - strong, 2 * strong,
+            # Band |rho_osc| >= strong ohne die rote Ecke: y von -1.05 bis strong (sx = 1)
+            # bzw. von -strong bis 1.05 (sx = -1) - eine gegenlaeufige Kontrolle zaehlt nicht
+            # als Struktureffekt.
+            y0 = -1.05 if sx > 0 else -strong
+            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), y0), 1.05 - strong, 1.05 + strong,
                                    color="C0", alpha=0.07, lw=0))
         ax.plot([-1.05, 1.05], [-1.05, 1.05], color="0.5", lw=0.8, ls="--")
         ax.axhline(0, color="0.85", lw=0.6)
@@ -499,12 +508,12 @@ def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong:
                for r in readouts]
     handles += [
         Patch(color="C3", alpha=0.35, label=f"structure effect: a control trends the same way (|ρ| ≥ {strong:g})"),
-        Patch(color="C0", alpha=0.35, label="period effect: oscillation chambers trend, controls do not"),
+        Patch(color="C0", alpha=0.35, label="period effect: oscillation chambers trend, no control trends the same way"),
         Line2D([], [], marker="o", mfc="none", mec="C0", ls="", label="not robust: trend vanishes after subtracting the controls"),
         Line2D([], [], marker="o", color="0.65", ls="", label="no trend of the oscillation chambers"),
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=8, frameon=False,
-               bbox_to_anchor=(0.5, -0.02 - 0.05 * ((len(handles) + 1) // 2)))
+    fig.legend(handles=handles, loc="upper center", ncol=2, fontsize=8, frameon=False,
+               bbox_to_anchor=(0.5, 0.0))
     fig.suptitle("Do the constant-medium controls trend with the period like the treated chambers?\n"
                  "one point per readout and strain series; the diagonal is where the structure carries both",
                  fontsize=10)
