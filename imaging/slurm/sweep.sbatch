@@ -3,14 +3,16 @@
 #   sbatch imaging/slurm/sweep.sbatch WT_GLC_0.75config.yaml sweep_out \
 #       /prj/.../260805_Osc6_Rep1_ChamA4.nd2 40-52  /prj/.../260805_Osc6_PosCtrl_Rep1_ChamA1.nd2 100-112
 #SBATCH -p cuda
-#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=03:00:00
 #SBATCH -o logs/sweep_%j.out
 set -euo pipefail
 mkdir -p logs
-for d in "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/mambaforge"; do [ -f "$d/etc/profile.d/conda.sh" ] && source "$d/etc/profile.d/conda.sh" && break; done
+# conda: erst "conda" auf dem PATH, sonst bekannte Installationen (CONDA_BASE setzt den Pfad fest)
+if command -v conda >/dev/null 2>&1; then eval "$(conda shell.bash hook)"; else
+  for d in "${CONDA_BASE:-}" /prj/microfluidic/ma_mimorde/Miniconda3/Miniconda3 "$HOME/miniforge3" "$HOME/miniconda3"; do
+    [ -n "$d" ] && [ -f "$d/etc/profile.d/conda.sh" ] && source "$d/etc/profile.d/conda.sh" && break; done; fi
 conda activate "${CONDA_ENV:-cellpose}"
 cd "${REPO_DIR:-$SLURM_SUBMIT_DIR}"
 CONFIG="$1"; OUT="$2"; shift 2

@@ -61,7 +61,12 @@ dem Cluster fehlt: das Repo als ZIP von GitHub laden und den Ordner `imaging/` s
 ## Mit sbatch (optional, wenn `sbatch` vorhanden ist)
 
 `imaging/slurm/*.sbatch` sind dieselben Schritte als Batch-Jobs (Probe, Sweep, Re-Tracking als
-Array-Job ueber `manifests/experiments.csv`). Partition und Umgebungsname (`CONDA_ENV`) ggf. anpassen.
+Array-Job ueber `manifests/experiments.csv`). Auf diesem Cluster (Slurm 19, Partitionen `cebitec01`,
+`kurs`, `cuda`, `interactive`, alle ohne Zeitlimit) gibt es keine GRES-Definition fuer GPUs: GPU-Jobs
+laufen einfach mit `-p cuda`, `--gres=gpu:1` wuerde abgelehnt. CPU-Jobs gehen an `cebitec01`.
+Umgebungsname ueber `CONDA_ENV` (Standard `cellpose`), conda-Installation ueber `CONDA_BASE`.
+Abschicken vom Login-Knoten aus (nicht aus dem slterm-Fenster): `sbatch imaging/slurm/probe.sbatch ...`;
+Stand mit `squeue -u $USER`, Ausgabe in `logs/`.
 
 ## Was `track_labels.py` in die Tabelle schreibt
 
