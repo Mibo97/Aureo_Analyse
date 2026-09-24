@@ -1,0 +1,72 @@
+config_version: "1.4"
+
+experiment:
+  name: "WT Glc-Oscilation 0.75 min"
+
+io:
+  input_dir: '/prj/microfluidic/ma_mimorde/Data/WT/Glc/0.75/01_raw_data'
+  output_dir: '/prj/microfluidic/ma_mimorde/Data/WT/Glc/0.75/03_results'
+  scratch_dir: '/prj/microfluidic/ma_mimorde/Data/WT/Glc/0.75/02_processed'
+  file_pattern: "*.nd2"
+  export_results_as: "csv"
+
+preprocessing:
+  phase_channel: 2
+  rotation_angle_deg: null
+  chamber_detection:
+    min_area_px: 800000
+    shrink_px: 10
+    max_iterations: 100
+    fallback_to_full_image: true
+
+segmentation:
+  # Optionen: "cpsam" | "cpsam_v2" | "cpdino" | "cpdino-vitb"  <- neue Modelle
+  #           "cyto2" | "cyto3" | "bact_phase_omni"             <- alte Modelle
+  model_type: "cpsam_v2"
+  use_gpu: true          
+  diameter_px: 30.0       # nur relevant fuer alte Modelle (cyto2/3); bei cpsam wird die Groesse automatisch bestimmt
+  # flow_threshold gilt fuer ALLE Modelle, auch cpsam/cpsam_v2 (Flow-Feld-Mechanismus
+  # bleibt bei Cellpose-SAM bestehen). Bei "Acht"-foermigen, eingeschnuerten Zellen,
+  # die faelschlich als 2 getrennte Masken erkannt werden Wert ERHOEHEN, damit
+  # Masken mit groesserem Flow-Error (z.B. an der Einschnuerung) noch akzeptiert
+  # werden, statt verworfen/getrennt zu werden. 
+  flow_threshold: 0.8
+  # gilt fuer alle Modelle. Niedrigerer Wert laesst auch schwaechere Pixel (z.B. an
+  # der Einschnuerung zwischen zwei fast verschmolzenen Zellen) noch als "Zelle" zaehlen.
+  cellprob_threshold: 0.0
+  min_size_px: 200
+  # Anzahl Dynamics-Iterationen (null = automatisch proportional zur ROI-Groesse).
+  # Bei laenglichen/eingeschnuerten Formen koennen mehr Iterationen helfen, dass
+  # alle Pixel zur gleichen Zelle konvergieren statt an der Einschnuerung zu trennen.
+  niter: 500
+
+roi_filter:
+  exclude_boundary_px: 10
+  min_area_px: 200
+  max_area_px: 70000
+  max_eccentricity: 0.99
+  min_solidity: 0.40
+
+tracking:
+  iou_threshold: 0.3
+  max_dist: 50.0
+  # Groessenadaptive Toleranzen: kleine Objekte (z.B. Knospen) duerfen sich
+  # relativ zu ihrer eigenen Groesse staerker bewegen/wachsen als grosse,
+  # stabile Mutterzellen. Verhindert, dass schnell wachsende oder durch
+  # Stroemung leicht driftende Knospen faelschlich neu gezaehlt werden.
+  size_adaptive: true
+  max_dist_frac: 1.5            # erlaubte Bewegung = Vielfaches des aequiv. Radius des kleineren ROI
+  max_area_growth: 7.0          # max. erlaubtes Flaechenverhaeltnis (gross/klein) zw. zwei Frames; gemessen bis 5x bei Knospen, daher mit Puffer auf 7.0
+  small_object_radius_px: 35.0  # Objekte mit Radius <= diesem Wert gelten als "klein" (Knospen)
+  small_object_iou_floor: 0.05  # abgesenkte IoU-Schwelle fuer kleine Objekte (IoU reagiert dort sehr empfindlich)
+
+channels:
+  - name: "phase_contrast"
+    index: 2
+    measure_intensity: false
+    
+
+
+measurements:
+  intensity_stats: ["mean", "std", "min", "max"]
+  rolling_ball_radius_px: 150 # Leicht über den Radius bei A=70000
