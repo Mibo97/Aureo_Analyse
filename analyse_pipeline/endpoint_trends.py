@@ -350,7 +350,11 @@ def control_trend_check(
 
     Eine Zeile je (value_col, biosensor, osc_type): rho gegen die Periode fuer
     die Oszillationskammern, PosCtrl, NegCtrl, das Kontrollmittel und
-    Osc - Kontrollmittel, mit n_periods und verdict.
+    Osc - Kontrollmittel, mit n_periods und verdict. Ein 'period effect'
+    verlangt drei Dinge zugleich: die Oszillationskammern trenden
+    (|rho| >= strong), KEINE Kontrollart trendet gleichsinnig, und die
+    Differenz Osc - Kontrollen trendet ebenfalls (sonst sind die
+    Kontrollschwankungen zwischen den Strukturen so gross wie der Trend).
     """
     if per_chip is None or per_chip.empty or value_col not in per_chip.columns:
         return pd.DataFrame()
@@ -387,31 +391,126 @@ def control_trend_check(
             "rho_ctrl_mean": _rho(period, wide["ctrl_mean"]),
             "rho_osc_minus_ctrl": _rho(period, wide["osc_minus_ctrl"]),
         })
-        r_osc, r_ctrl, r_diff = rec["rho_osc"], rec["rho_ctrl_mean"], rec["rho_osc_minus_ctrl"]
+        r_osc, r_diff = rec["rho_osc"], rec["rho_osc_minus_ctrl"]
+        # Der staerkste Kontrolltrend zaehlt: schon EINE Kontrollart, die mit
+        # der Periode laeuft, belegt einen Struktureffekt - Kontrollen in
+        # konstantem Medium koennen auf die Periode nicht reagieren.
+        ctrl_rhos = [rec["rho_posctrl"], rec["rho_negctrl"], rec["rho_ctrl_mean"]]
+        ctrl_rhos = [r for r in ctrl_rhos if not np.isnan(r)]
+        r_ctrl = max(ctrl_rhos, key=abs) if ctrl_rhos else np.nan
+        rec["rho_ctrl_strongest"] = r_ctrl
+        same_sign_diff = (not np.isnan(r_diff)) and abs(r_diff) >= strong and np.sign(r_diff) == np.sign(r_osc)
         if np.isnan(r_osc) or np.isnan(r_ctrl):
             verdict = "fewer than 3 periods with oscillation and control values"
+        elif abs(r_osc) < strong:
+            verdict = "no monotone trend of the oscillation chambers"
         elif abs(r_ctrl) >= strong and np.sign(r_ctrl) == np.sign(r_osc):
-            verdict = ("structure effect: the constant-medium controls trend with the period like the "
-                       "oscillation chambers" + ("; Osc - controls still trends, period effect on top"
-                                                  if not np.isnan(r_diff) and abs(r_diff) >= strong else
-                                                  "; no period effect beyond the controls"))
-        elif abs(r_osc) >= strong and abs(r_ctrl) < strong:
-            verdict = "period effect: oscillation chambers trend, their controls do not"
+            verdict = ("structure effect: a constant-medium control trends with the period like the "
+                       "oscillation chambers" + ("; Osc - controls still trends, residual period effect on top"
+                                                  if same_sign_diff else "; no period effect beyond the controls"))
+        elif same_sign_diff:
+            verdict = "period effect: oscillation chambers trend, their controls do not, and the difference trends"
         else:
-            verdict = "no monotone trend"
+            verdict = ("not robust: oscillation chambers trend, but not after subtracting their controls "
+                       "(control swings between structures as large as the trend)")
         rec["verdict"] = verdict
         rows.append(rec)
     out = pd.DataFrame(rows)
     if not out.empty:
         n_struct = int(out["verdict"].str.startswith("structure effect").sum())
         n_period = int(out["verdict"].str.startswith("period effect").sum())
+        n_weak = int(out["verdict"].str.startswith("not robust").sum())
         logger.info(
-            "Kontroll-Trend-Check (%s): %d Serien mit Struktureffekt (Kontrollen laufen mit der Periode), "
-            "%d mit Periodeneffekt ohne Kontrolltrend, %d ohne monotonen Trend.",
+            "Kontroll-Trend-Check (%s): %d Serien mit Struktureffekt (eine Kontrolle laeuft mit der Periode), "
+            "%d mit robustem Periodeneffekt (Osc und Osc - Kontrollen trenden, Kontrollen nicht), "
+            "%d nicht robust (Osc trendet, die Differenz nicht), %d ohne Osc-Trend.",
             value_col if "value_col" not in out.columns else ", ".join(sorted(out["value_col"].astype(str).unique())),
-            n_struct, n_period, int((out["verdict"] == "no monotone trend").sum()),
+            n_struct, n_period, n_weak, int(out["verdict"].str.startswith("no monotone").sum()),
         )
     return out
+
+
+_READOUT_LABELS = {
+    "area": "endpoint area", "eccentricity": "endpoint eccentricity",
+    "mu_area": "µ_area", "budding_rate_per_h": "budding rate (sparse window)",
+}
+
+
+def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong: float = 0.6) -> None:
+    """EINE Abbildung fuer den Befund: pro Readout und Serie der Spearman der
+    Oszillationskammern gegen die Periode (x) und der der staerksten Kontrolle
+    derselben Strukturen (y). Punkte nahe der Diagonale: die Struktur traegt
+    beide. Farbe = verdict aus control_trend_check(), Marker = Readout,
+    Beschriftung = Stamm. Eine Facette je Oszillationstyp."""
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch, Rectangle
+
+    if ctrl_trend is None or ctrl_trend.empty:
+        return
+    df = ctrl_trend.dropna(subset=["rho_osc", "rho_ctrl_strongest"]).copy()
+    if df.empty:
+        logger.warning("plot_control_trend_summary(): keine Serie mit >= 3 Perioden - uebersprungen.")
+        return
+    if "osc_type" not in df.columns:
+        df["osc_type"] = "all"
+    osc_types = sorted(df["osc_type"].dropna().astype(str).unique())
+    readouts = list(dict.fromkeys(df["value_col"].astype(str)))
+    marker_cycle = ["o", "s", "^", "D", "v", "P", "X", "*", "<", ">"]
+    markers = {r: marker_cycle[i % len(marker_cycle)] for i, r in enumerate(readouts)}
+
+    def style(verdict: str) -> tuple[str, str]:
+        v = str(verdict)
+        if v.startswith("structure"):
+            return "C3", "C3"
+        if v.startswith("period"):
+            return "C0", "C0"
+        if v.startswith("not robust"):
+            return "none", "C0"
+        return "0.65", "0.65"
+
+    fig, axes = plt.subplots(1, len(osc_types), figsize=(4.9 * len(osc_types), 5.2), squeeze=False, sharey=True)
+    for ax, ot in zip(axes[0], osc_types):
+        sub = df[df["osc_type"].astype(str) == ot]
+        # Zonen: rot = Kontrolle trendet gleichsinnig (Struktureffekt), blau = nur die
+        # Oszillationskammern trenden (Periodeneffekt moeglich).
+        for sx, sy in ((1, 1), (-1, -1)):
+            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), min(sy * strong, sy * 1.05)),
+                                   1.05 - strong, 1.05 - strong, color="C3", alpha=0.07, lw=0))
+        for sx in (1, -1):
+            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), -strong), 1.05 - strong, 2 * strong,
+                                   color="C0", alpha=0.07, lw=0))
+        ax.plot([-1.05, 1.05], [-1.05, 1.05], color="0.5", lw=0.8, ls="--")
+        ax.axhline(0, color="0.85", lw=0.6)
+        ax.axvline(0, color="0.85", lw=0.6)
+        for _, r in sub.iterrows():
+            fc, ec = style(r.get("verdict", ""))
+            ax.scatter(r["rho_osc"], r["rho_ctrl_strongest"], marker=markers[str(r["value_col"])], s=64,
+                       facecolors=fc, edgecolors=ec, linewidths=1.3, zorder=3)
+            ax.annotate(str(r.get("biosensor", "")), (r["rho_osc"], r["rho_ctrl_strongest"]),
+                        xytext=(4, 3), textcoords="offset points", fontsize=7, color="0.3")
+        ax.set_xlim(-1.05, 1.05)
+        ax.set_ylim(-1.05, 1.05)
+        ax.set_aspect("equal")
+        ax.set_title(f"{ot}  (n = {len(sub)} readout × strain series)", fontsize=10)
+        ax.set_xlabel("Spearman ρ vs period: oscillation chambers")
+    axes[0][0].set_ylabel("Spearman ρ vs period: strongest control\nof the same structures")
+
+    handles = [Line2D([], [], marker=markers[r], color="0.3", ls="", label=_READOUT_LABELS.get(r, r))
+               for r in readouts]
+    handles += [
+        Patch(color="C3", alpha=0.35, label=f"structure effect: a control trends the same way (|ρ| ≥ {strong:g})"),
+        Patch(color="C0", alpha=0.35, label="period effect: oscillation chambers trend, controls do not"),
+        Line2D([], [], marker="o", mfc="none", mec="C0", ls="", label="not robust: trend vanishes after subtracting the controls"),
+        Line2D([], [], marker="o", color="0.65", ls="", label="no trend of the oscillation chambers"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=8, frameon=False,
+               bbox_to_anchor=(0.5, -0.02 - 0.05 * ((len(handles) + 1) // 2)))
+    fig.suptitle("Do the constant-medium controls trend with the period like the treated chambers?\n"
+                 "one point per readout and strain series; the diagonal is where the structure carries both",
+                 fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight", dpi=180)
+    plt.close(fig)
 
 
 def within_culture_trend(

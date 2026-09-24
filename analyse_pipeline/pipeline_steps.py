@@ -69,6 +69,7 @@ from endpoint_trends import (
     bracket_normalise,
     control_trend_check,
     within_culture_trend,
+    plot_control_trend_summary,
     detect_saturation_frame,
     static_endpoint_window,
 )
@@ -441,13 +442,29 @@ def step_10_growth(ctx: PipelineContext) -> None:
             logger.info("Tabellen gespeichert: 12_area_growth_rate_per_chip.csv / "
                         "_summary_per_chip.csv")
 
+            if ctx.x_col == "osc_freq":
+                # Laufen die Kontrollen der Strukturen mit der Periode? (wie Schritt 13)
+                ctrl_trend = control_trend_check(area_rep)
+                if not ctrl_trend.empty:
+                    ctrl_trend.to_csv(output_dir / "12_area_growth_rate_control_trend.csv", index=False)
+                    logger.info("Tabelle gespeichert: 12_area_growth_rate_control_trend.csv\n%s",
+                                ctrl_trend[["biosensor", "osc_type", "rho_osc", "rho_ctrl_strongest",
+                                            "rho_osc_minus_ctrl", "verdict"]].round(2).to_string(index=False))
+                within = within_culture_trend(area_rep)
+                if not within.empty:
+                    within.to_csv(output_dir / "12_area_growth_rate_within_culture.csv", index=False)
+
+            # Kontrollen bleiben IM Plot (Marker-Form = Kontrollart): ohne sie
+            # ist ein Periodentrend nicht von einem Struktureffekt zu unterscheiden.
             plot_point_errorbar(
-                exclude_controls(area_rep_summary), value_col="mean", sd_col="sem",
+                area_rep_summary, value_col="mean", sd_col="sem",
                 out_path=output_dir / "12_area_growth_rate_all.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
+                style_col="condition_type" if "condition_type" in area_rep_summary.columns else None,
                 x_order=freq_order,
                 ylabel="µ_area, all cells [h⁻¹]",
-                title="µ_area over all cells — mean ± SEM over biological replicates\n"
+                title="µ_area over all cells, oscillation and control chambers — mean ± SEM "
+                      "(error unit per table: error_unit)\n"
                       "(no mother/bud filter, so independent of the lineage heuristic)",
             )
 
@@ -578,7 +595,8 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                 x_order=ctx.freq_order,
                 ylabel=f"{pretty_label(value_col)} (endpoint)",
                 title=f"{value_col}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]})\n"
-                      "mean ± SEM over chips" if frame_window else f"{value_col}: endpoint, mean ± SEM",
+                      "mean ± SEM; error unit per chip family (error_unit: chips, or chambers of one chip)"
+                      if frame_window else f"{value_col}: endpoint, mean ± SEM (error unit per table)",
             )
 
     if not all_summary:
@@ -674,7 +692,8 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
             out_path=output_dir / f"21_budding_rate_vs_{ctx.x_col}.pdf",
             x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=ctx.freq_order, ylabel="buds per mother-hour (sparse-phase window)",
-            title="Budding rate in the sparse-phase window, mean ± SEM over chips",
+            title="Budding rate in the sparse-phase window, mean ± SEM "
+                  "(error unit per chip family: chips, or chambers of one chip)",
         )
     logger.info("Knospungsrate gespeichert: 21_budding_rate_per_chip.csv / _summary.csv (+ Plots)")
 
@@ -996,6 +1015,27 @@ def step_50_summary(ctx: PipelineContext) -> None:
     summary = summary_statistics(cells, intensity_cols)
     summary.to_csv(output_dir / "50_summary_statistics.csv", index=False)
     logger.info("Tabelle gespeichert: 50_summary_statistics.csv")
+
+    # -- Kontroll-Trend-Zusammenfassung ueber alle Readouts (Schritte 12, 13, 21):
+    #    die eine Abbildung fuer den Befund, dass die Struktur die Trends traegt.
+    if ctx.x_col == "osc_freq":
+        parts = []
+        for name in ("13_endpoint_control_trend.csv", "12_area_growth_rate_control_trend.csv",
+                     "21_budding_rate_control_trend.csv"):
+            path = output_dir / name
+            if path.exists():
+                try:
+                    part = pd.read_csv(path)
+                except pd.errors.EmptyDataError:
+                    continue
+                if not part.empty:
+                    parts.append(part)
+        if parts:
+            all_trends = pd.concat(parts, ignore_index=True)
+            all_trends.to_csv(output_dir / "50_control_trend_summary.csv", index=False)
+            plot_control_trend_summary(all_trends, output_dir / "50_control_trend_summary.pdf")
+            counts = all_trends["verdict"].astype(str).str.split(":").str[0].value_counts().to_dict()
+            logger.info("Kontroll-Trend-Zusammenfassung gespeichert: 50_control_trend_summary.csv/.pdf - %s", counts)
 
 
 

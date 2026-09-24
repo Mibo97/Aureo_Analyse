@@ -89,6 +89,10 @@ Benötigte Spalten in `Combined_Results`: `track_id`, `frame`, `centroid_x`,
 `centroid_y`, `area`, `condition`, `replicate`, `chamber`.
 Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 
+> **Die Argumentation der Arbeit** — welche Abbildung und Tabelle welchen Schritt
+> trägt, von den Versuchseinheiten über die Tracking-Grenze bis zum Befund, dass die
+> Kontrollen die Trends tragen — steht in [`docs/data_story.md`](docs/data_story.md).
+
 ## Versuchseinheiten: was ist hier ein Replikat?
 
 Die Spalten `replicate` und `chamber` kommen aus dem Dateinamen der
@@ -99,7 +103,8 @@ Bildverarbeitung und bedeuten **nicht**, was ihre Namen nahelegen.
 | Zweig | pro (Stamm, osc_type, Periode) | `replicate` ist … | biologische Einheit | n je Bedingung |
 | --- | --- | --- | --- | --- |
 | Oszillation, PKO | **eine Struktur** (im Code und in allen Tabellen `chip`); ~11 Kammern (5 Osc, 3 PosCtrl, 3 NegCtrl) auf mehreren Arrays. Ein **physischer Chip trägt 2–3 Strukturen** = 2–3 Perioden aus **einer Vorkultur an einem Tag** (Spalte `culture`, `00_chip_overview.csv`: `n_structures_in_culture`) | ein Array-Index, der gleiche Positionslabels (`ChamA13` ×3) auseinanderhält | die **Kultur** (physischer Chip); die Struktur ist die Behandlungseinheit | **1** Struktur; 2 Kulturen je Serie (Glc: 3 + 3 Perioden, pH: 2 + 2) |
-| statisch | — | **ein eigener Chip** mit eigener Vorkultur; `chamber` ist immer `ChamA0` | der Chip | 4–5 pro Medium und Chip-Familie |
+| statisch W109 | — | ein Chip je `replicate` **(Annahme — die vier `replicate` eines Mediums tragen dasselbe Datum; ob sie ein Chip waren, ist offen)**; `chamber` ist immer `ChamA0` | der Chip | 4 pro Medium |
+| statisch W65 | — | eine **Kammer** auf dem einen W65-Chip: ein Chip, eine Vorkultur, beide Medien (`STATIC_SINGLE_CHIP_FAMILIES`) | die Kultur (n = 1); Fehlerbalken über Kammern | 5 Kammern pro Medium |
 
 Drei Folgen, die in die Arbeit gehören:
 
@@ -119,8 +124,14 @@ Drei Folgen, die in die Arbeit gehören:
    auf die Periode nicht reagieren. `13_endpoint_control_trend.csv` und
    `21_budding_rate_control_trend.csv` stellen dem Spearman der
    Oszillationskammern den der Kontrollen derselben Strukturen gegenüber
-   (`rho_ctrl_mean`) und den der Differenz (`rho_osc_minus_ctrl`). Laufen die
-   Kontrollen mit, trägt die Struktur den Trend, nicht die Periode.
+   (`rho_ctrl_mean`, `rho_ctrl_strongest`) und den der Differenz
+   (`rho_osc_minus_ctrl`). Läuft auch nur eine Kontrollart mit, trägt die
+   Struktur den Trend, nicht die Periode. Ein `period effect` verlangt drei
+   Dinge zugleich: die Oszillationskammern trenden, keine Kontrollart trendet
+   gleichsinnig, und die Differenz trendet ebenfalls. In den echten Daten
+   erfüllt das von 28 Readout-Serien-Kombinationen keine, die über Stämme
+   hinweg wiederkehrt; die Sensor-Ratios (OxPro, pHluorin) laufen in den
+   NegCtrl-Kammern genauso mit der Periode wie in den Oszillationskammern.
    `*_within_culture.csv` zeigt dasselbe innerhalb einer Kultur (2–3
    Perioden, eine Vorkultur), wo der Kulturvergleich entfällt.
 3. **Kammerposition und Bedingung sind konfundiert**, weil der Chip die
@@ -171,7 +182,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
-| `50_` | Zusammenfassungstabelle |
+| `50_` | Zusammenfassungstabelle; `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`) |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
 | `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |
