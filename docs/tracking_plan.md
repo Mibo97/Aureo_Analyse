@@ -227,7 +227,42 @@ Sweep on PosCtrl_Rep1_ChamA1, frames 100 to 112 (dense), 36 settings:
   (0.4, 0) dominates on all metrics. The sweep is one chamber and 13 frames; two more movies with the
   reduced grid (flow × cellprob, `niter` 500, `cpsam`) come before a decision.
 
-Next checkpoint (3): the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
+## 6d. Checkpoint 3: the analysis on the re-tracked QC batch
+
+Built (analysis side, `analyse_pipeline/`):
+
+- `cell_filter.py`: a track is a cell with at least `CELL_MIN_FRAMES` = 2 frames and a largest area of at
+  least `CELL_MIN_MAX_AREA_PX` = 1,500 px² (8 µm²). On the QC batch it removes 31–33 % of the tracks and
+  3.5–6 % of the object-frames, for v11 and re-tracked tables alike; report `00_cell_filter.csv`.
+- `lineage.classify_mother_bud_measured()`: on re-tracked tables the mother is the track whose mask the
+  bud's first mask touches (`parent_track_id`, `link_type` new_touching or split), with the same rules as
+  the heuristic (mother established, bud persists `bud_min_frames` = 2, size criterion). Hybrid: candidates
+  whose mask touches nothing go through the radius heuristic; `method` says which rule made the event.
+- `qc_exclusions.translate_exclusions_to_retracked()`: the manual QC file is mapped through
+  `track_id_v11` onto the new IDs, frame-exact; 503 rows became 594, 66 merges were already made by the
+  tracker, 13 old tracks were no longer in the data. Written to `qc_exclusions_retracked.csv`.
+- No gap closing in the analysis on re-tracked tables; `AUREO_RESULTS_PATTERN` selects the tables.
+
+Results on the QC batch, sparse window, after manual QC:
+
+| | v11 tables, radius heuristic | re-tracked tables, hybrid |
+| --- | --- | --- |
+| median track length after QC (frames) | 6 | 12 |
+| new tracks per object-frame | 0.093 | 0.055 |
+| candidates (new tracks in the window) | 250 | 252 |
+| events | 102 | 116 (70 measured, 46 radius) |
+| the same bud in both sets | 77 | 77 |
+| bud growth over 3 frames, median | ×4.8 | ×3.2 |
+| contact ratio, median | 1.08 | 1.08 |
+| measured mother = nearest established cell | | 75 % |
+
+The two methods agree on three quarters of the events and on the bud signatures. They do not agree on
+the chambers: per chamber the counts are 2–16 events, mean 10.5, and their spread (CV 0.29–0.40) is the
+Poisson noise of such counts (CV 0.31). Spearman between the methods' chamber rates is −0.08. A budding
+rate per chamber in the window is therefore a noise-limited number; it becomes a readout only pooled
+over the chambers of a structure, and the story's chip-level treatment already does that.
+
+Earlier note, now done: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
 setting is chosen.

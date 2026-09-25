@@ -584,3 +584,91 @@ def find_qc_conflicts(exclusions: pd.DataFrame) -> pd.DataFrame:
             ", ".join(f"{k}: {v}" for k, v in serious.items()) or "keine",
         )
     return out
+
+
+def translate_exclusions_to_retracked(
+    exclusions: pd.DataFrame,
+    cells: pd.DataFrame,
+    out_path: "str | Path | None" = None,
+) -> pd.DataFrame:
+    """QC-Tabelle von den Track-IDs der Pipeline v11 auf die IDs einer re-getrackten Tabelle uebersetzen.
+
+    Die cell_uid in qc_exclusions.csv nennt die alten IDs (Pipeline v11). Eine re-getrackte Tabelle
+    (imaging/track_labels.py) traegt die alten IDs in track_id_v11 und die neuen in track_id. Jede
+    QC-Zeile wird auf die neuen Spuren abgebildet, die die Zeilen des alten Tracks (im angegebenen
+    Frame-Bereich) tragen:
+
+      * Ausschluss: eine Zeile je neuer Spur, mit frame_from/frame_to auf genau die Frames begrenzt, die
+        der alte Track dort hatte (der Mensch hat nur diese Frames gesehen); umfasst die neue Spur nichts
+        anderes, faellt die Begrenzung weg.
+      * Merge: Quelle und Ziel werden abgebildet; ist die neue ID beider gleich, hat der Tracker den
+        Merge schon gemacht und die Zeile entfaellt ('already merged').
+      * Alter Track nicht in den Daten (z.B. schon vorher gefiltert): Zeile entfaellt, gezaehlt.
+
+    Ohne track_id_v11 in `cells` kommt die Tabelle unveraendert zurueck. Die uebersetzte Tabelle
+    (Spalte translated_from = alte cell_uid) wird nach out_path geschrieben, wenn angegeben.
+    """
+    if exclusions is None or exclusions.empty or "track_id_v11" not in cells.columns:
+        return exclusions
+    need = {"exp_id", "track_id", "track_id_v11", "frame", "cell_uid"}
+    if not need.issubset(cells.columns):
+        raise ValueError(f"translate_exclusions_to_retracked() fehlen Spalten: {need - set(cells.columns)}")
+    ex = exclusions.copy()
+    ex["_exp"] = ex["cell_uid"].astype(str).str.replace(r"__track\d+$", "", regex=True)
+    ex["_old"] = pd.to_numeric(ex["cell_uid"].astype(str).str.extract(r"__track(\d+)$")[0], errors="coerce")
+    key = cells[["exp_id", "track_id_v11", "frame", "track_id"]].copy()
+    key["track_id_v11"] = pd.to_numeric(key["track_id_v11"], errors="coerce")
+    grouped = {k: g for k, g in key.groupby(["exp_id", "track_id_v11"])}
+    span = cells.groupby(["exp_id", "track_id"])["frame"].agg(["min", "max"])
+    rows = []
+    n_missing = n_already = n_split = 0
+    for r in ex.to_dict("records"):
+        if pd.isna(r["_old"]):
+            n_missing += 1
+            continue
+        g = grouped.get((r["_exp"], int(r["_old"])))
+        if g is None:
+            n_missing += 1
+            continue
+        lo = r["frame_from"] if pd.notna(r["frame_from"]) else -np.inf
+        hi = r["frame_to"] if pd.notna(r["frame_to"]) else np.inf
+        g = g[(g["frame"] >= lo) & (g["frame"] <= hi)]
+        if g.empty:
+            n_missing += 1
+            continue
+        target_new = None
+        if pd.notna(r["merge_into_track_id"]):
+            gt = grouped.get((r["_exp"], int(r["merge_into_track_id"])))
+            if gt is None:
+                n_missing += 1
+                continue
+            target_new = int(gt["track_id"].mode().iloc[0])
+        new_ids = sorted(g["track_id"].unique())
+        if len(new_ids) > 1:
+            n_split += 1
+        for nid in new_ids:
+            nid = int(nid)
+            if target_new is not None and nid == target_new:
+                n_already += 1
+                continue
+            sub = g[g["track_id"] == nid]
+            f0, f1 = int(sub["frame"].min()), int(sub["frame"].max())
+            whole = span.loc[(r["_exp"], nid)]
+            covers_all = (f0 == int(whole["min"])) and (f1 == int(whole["max"]))
+            row = {c: r[c] for c in exclusions.columns}
+            row["cell_uid"] = f"{r['_exp']}__track{nid}"
+            row["frame_from"] = np.nan if covers_all else f0
+            row["frame_to"] = np.nan if covers_all else f1
+            row["merge_into_track_id"] = target_new if target_new is not None else np.nan
+            row["translated_from"] = r["cell_uid"]
+            rows.append(row)
+    out = pd.DataFrame(rows, columns=list(exclusions.columns) + ["translated_from"])
+    logger.info(
+        "QC-Uebersetzung auf die re-getrackten IDs: %d Zeilen -> %d; %d alte Tracks nicht in den Daten, "
+        "%d Merges schon vom Tracker gemacht, %d alte Tracks auf mehrere neue Spuren verteilt.",
+        len(exclusions), len(out), n_missing, n_already, n_split,
+    )
+    if out_path is not None:
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        out.to_csv(out_path, index=False)
+    return out

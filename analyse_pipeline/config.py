@@ -223,7 +223,18 @@ LINEAGE_PARAMS = LineageParams(
     bud_max_frames=7,
     established_min_frames=3,
     tolerance_px=30.0,
+    bud_min_frames=2,          # Persistenz: Knospenspur >= 2 Frames (Flackern von einem Frame zaehlt nicht)
+    use_measured_parent=True,  # re-getrackte Tabellen: Mutter aus der Maskenberuehrung (lineage.classify_mother_bud_measured)
+    fallback_heuristic=True,   # Hybrid: Kandidaten ohne beruehrende Maske zusaetzlich durch die Radius-Heuristik (Spalte method)
 )
+
+# Was zaehlt als Zelle (cell_filter.py)? Spur-Ebene, nach dem manuellen QC, fuer alle Tabellen:
+# mindestens CELL_MIN_FRAMES Frames und groesste Flaeche >= CELL_MIN_MAX_AREA_PX. Im re-getrackten
+# QC-Batch (0.0733 um/px) trennt 1,500 px2 (8 um2) Schmutz/Halo-Stuecke/Flackern (Median 580 px2,
+# ein Frame) von Zellen (Spuren ab 5 Frames: 95 % > 2,100 px2; Blastokonidie >= 3,700 px2) und
+# entfernt 33 % der Spuren, aber nur 4 % der Objekt-Frames. Bericht: 00_cell_filter.csv.
+CELL_MIN_FRAMES = 2
+CELL_MIN_MAX_AREA_PX = 1500.0
 
 # Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): eine neu
 # auftauchende Zelle zaehlt nur als Knospe, wenn ihre Flaeche beim ersten
@@ -347,6 +358,13 @@ METHOD_CAVEATS: list[str] = [
     "(20_lineage_window.csv). Im vollen Feld vergibt der Tracker ~12 %% neue IDs pro Objekt und "
     "Frame, und die Events sind Fragment-Statistik (00_track_fragmentation.csv). Vorher werden "
     "eindeutige Tracking-Luecken automatisch geschlossen (00_track_relinks.csv).",
+    "ZELLFILTER: eine Spur zaehlt nur als Zelle mit >= CELL_MIN_FRAMES Frames und groesster Flaeche "
+    ">= CELL_MIN_MAX_AREA_PX (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
+    "fallen so aus allen Readouts, nach dem manuellen QC.",
+    "GEMESSENE ELTERNSCHAFT: auf re-getrackten Tabellen (AUREO_RESULTS_PATTERN=Combined_Results_retracked.*, "
+    "imaging/track_labels.py) kommt die Mutter einer Knospe aus der Maskenberuehrung beim ersten Auftauchen "
+    "(parent_track_id), nicht aus dem raeumlichen Radius; Knospen muessen >= bud_min_frames Frames dauern. "
+    "Die manuelle QC-Tabelle wird auf die neuen IDs uebersetzt (qc_exclusions_retracked.csv).",
     "KNOSPEN-GROESSENKRITERIUM: eine neu auftauchende Zelle zaehlt nur als Knospe, wenn ihre "
     "Flaeche beim ersten Auftreten hoechstens Schwelle x Mutterflaeche ist. EINE Schwelle fuer "
     "alle Zweige, aus den Daten (Antimodus); ist die Verteilung nicht zweigipflig, greift KEIN "
@@ -374,6 +392,10 @@ def log_active_configuration() -> None:
     logger.info("  OUTPUT_DIR:       %s", OUTPUT_DIR)
     logger.info("  CACHE_PATH:       %s", CACHE_PATH)
     logger.info("  MIN_PER_FRAME:    %.1f min", MIN_PER_FRAME)
+    logger.info("  RESULTS_PATTERN:  %s", RESULTS_PATTERN)
+    logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+    logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
+                LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
     if OSC_FREQ_IS_PERIOD_IN_MINUTES:
         nyquist_min = 2 * MIN_PER_FRAME
         periods = [p for p in (float(f) for f in FREQ_ORDER if _is_number(f))]
