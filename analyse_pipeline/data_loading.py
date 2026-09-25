@@ -65,6 +65,7 @@ def _parse_hierarchy(rel_path: Path) -> DiscoveredFile:
 def discover_result_files(
     data_root: str | Path,
     filename_pattern: str = "Combined_Results.*",
+    results_subdir: str = "",
 ) -> list[DiscoveredFile]:
     """
     Findet rekursiv alle Ergebnisdateien unterhalb von data_root und
@@ -92,6 +93,15 @@ def discover_result_files(
         DiscoveredFile(abs_p, d.biosensor, d.osc_type, d.osc_freq, d.results_subdir, d.path_ok)
         for abs_p, d in zip(all_files, discovered)
     ]
+    if results_subdir:
+        n_all = len(discovered)
+        discovered = [d for d in discovered if d.results_subdir == results_subdir]
+        logger.info("Ergebnisordner '%s': %d von %d Dateien.", results_subdir, len(discovered), n_all)
+        if not discovered:
+            raise FileNotFoundError(
+                f"Keine '{filename_pattern}' in einem Ordner '{results_subdir}' unter '{data_root}' "
+                f"(AUREO_RESULTS_SUBDIR)."
+            )
 
     bad = [d for d in discovered if not d.path_ok]
     if bad:
@@ -117,6 +127,7 @@ def load_all_results(
     cache_path: Optional[str | Path] = None,
     force_reload: bool = False,
     filename_pattern: str = "Combined_Results.*",
+    results_subdir: str = "",
 ) -> pd.DataFrame:
     """
     Lädt und kombiniert ALLE Combined_Results unter data_root zu einem
@@ -144,7 +155,7 @@ def load_all_results(
         logger.info("Lade aus Cache: %s", cache_path)
         return pd.read_parquet(cache_path)
 
-    discovered = discover_result_files(data_root, filename_pattern)
+    discovered = discover_result_files(data_root, filename_pattern, results_subdir=results_subdir)
 
     logger.info("Gefundene Ergebnisdateien: %d", len(discovered))
     logger.info("  Biosensoren:            %s", sorted({d.biosensor for d in discovered if d.biosensor}))

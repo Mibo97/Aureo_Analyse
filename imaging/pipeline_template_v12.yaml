@@ -1,0 +1,38 @@
+# Globale Einstellungen fuer cellpose_pipeline_v12.py (--settings). Ueberschreibt die Abschnitte
+# segmentation / roi_filter / tracking / measurements der Experiment-YAML; Kanaele und Kammererkennung
+# kommen weiter aus der Experiment-YAML (--config).
+# Entscheidung aus dem Sweep (docs/tracking_plan.md, 6e): flow 0.4 schlaegt 0.8 auf allen Metriken,
+# cellprob 0 bleibt; cpsam_v2 ist in Cellpose 4.1.1 dasselbe Modell wie cpsam; niter ohne Wirkung.
+segmentation:
+  model_type: "cpsam"
+  use_gpu: true
+  flow_threshold: 0.4
+  cellprob_threshold: 0.0
+  min_size_px: 200
+  niter: 500
+
+# Werden zu Spalten (at_border, below_min_area, above_max_area, low_solidity, high_eccentricity) - kein
+# Objekt wird vor dem Tracking verworfen. Die Analyse (analyse_pipeline/config.py, FLAG_EXCLUDE_ROWS)
+# entscheidet, welche Zeilen sie ausschliesst.
+roi_filter:
+  exclude_boundary_px: 10
+  min_area_px: 200
+  max_area_px: 70000
+  max_eccentricity: 0.99
+  min_solidity: 0.40
+
+# track_labels.py (Begruendung: docs/tracking_diagnosis.md)
+tracking:
+  memory: 3
+  memory_merged: 15
+  dist_frac: 1.5
+  dist_add: 10.0
+  max_ratio: 2.5
+  sparse_n: 20
+  sparse_frac: 6.0
+  sparse_add: 20.0
+  touch_px: 2
+
+measurements:
+  intensity_stats: ["mean", "std", "min", "max"]
+  rolling_ball_radius_px: 150

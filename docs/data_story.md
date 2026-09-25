@@ -25,11 +25,11 @@ replicates are four cultures or one is still open, and W65, one chip and one cul
 
 ---
 
-> **Status (tracking rebuilt):** the tables were re-tracked from the saved masks (`imaging/track_labels.py`,
-> `docs/tracking_plan.md` 6b–6e). Of the 48 control-trend verdicts 44 are unchanged (21 no trend, 19 structure
-> effect, 5 period effect, 3 not robust) and the chip-level budding rates correlate at 0.95 with the earlier run,
-> so the argument below stands; the numbers quoted in sections 2 and 4 are from the earlier tables and will be
-> refreshed with the final run.
+> **Status (tracking rebuilt):** the tracker was rebuilt on the saved masks (`imaging/track_labels.py`,
+> `docs/tracking_plan.md` 6b–6e) and the analysis gained a cell filter and a persistence rule. Under the new
+> analysis rules 44 of the 48 control-trend verdicts are unchanged (21 no trend, 19 structure effect, 5 period
+> effect, 3 not robust) and the chip-level budding rates correlate at 0.95 with the earlier run. The full run on
+> re-tracked and re-segmented tables is pending; the numbers quoted below are from the earlier tables.
 
 ## 1. What was measured, and what the units are
 

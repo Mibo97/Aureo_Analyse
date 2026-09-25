@@ -262,20 +262,25 @@ Poisson noise of such counts (CV 0.31). Spearman between the methods' chamber ra
 rate per chamber in the window is therefore a noise-limited number; it becomes a readout only pooled
 over the chambers of a structure, and the story's chip-level treatment already does that.
 
-## 6e. Checkpoint 4: all experiments re-tracked and analysed; the sweep decided
+## 6e. Checkpoint 4: full run with the new analysis, the sweep decided
 
-Full run on the re-tracked tables (565 chambers, `AUREO_RESULTS_PATTERN=Combined_Results_retracked.*`):
+Correction: the per-chamber track counts in `00_cell_filter.csv` (9,063 tracks for WT/pH/6) show that this
+full run used the **v11 tables** with the new analysis (cell filter, persistence), not the re-tracked tables.
+The re-tracking of all experiments was still running. The comparison below therefore isolates the effect of
+the analysis changes; the run on the re-tracked tables follows.
+
+Full run, v11 tables, new analysis (565 chambers):
 
 - Cell filter: median 38 % of the tracks removed per chamber (IQR 31–46 %) but only 7 % of the
   object-frames (`00_cell_filter.csv`). A handful of nearly empty chambers lose most of their
   object-frames because they held little besides debris.
 - Chip-level budding rates: 146 condition means, Spearman 0.95 against the v11-based run, mean
-  0.36 → 0.30 per mother-hour (persistence, cell filter and the measured parent remove events). The
-  chip level is robust to the tracking method; the chamber level is not (6d). That is the unit to report.
+  0.36 → 0.30 per mother-hour (persistence and the cell filter remove events). The chip level is robust to
+  these analysis changes; whether it is also robust to the tracking is checked on the re-tracked run.
 - Control-trend summary: 21 no trend, 19 structure effect, 5 period effect, 3 not robust; 44 of the 48
   verdicts unchanged, ρ_osc between the runs 0.94. The five period-effect rows are area BSG/pH, µ_area
   BSG/Glc and BSG/pH (opposite signs), budding rate BSO/Glc and BSPH/pH, each with the strongest control
-  trending the other way or flat. The story of `docs/data_story.md` stands on the new tables.
+  trending the other way or flat. The story of `docs/data_story.md` stands under the new analysis rules.
 
 Sweep on two more movies (about 20 objects per frame, reduced grid), together with the dense chamber:
 
@@ -291,6 +296,21 @@ the consistency metrics on top of what the re-tracking already gave; the thesis 
 re-tracked tables while pipeline v12 (tracking before filtering, raw label stacks, single-file command
 line, rotation fix, µm per pixel, cell-type features) is built for the re-run and for future
 experiments.
+
+## 6f. Pipeline v12 built
+
+`imaging/cellpose_pipeline_v12.py` (segmentation env): one movie per call, ROI filters become the columns
+`at_border`, `below_min_area`, `above_max_area`, `low_solidity`, `high_eccentricity`; raw Cellpose labels
+saved as `labels_<stem>.zarr`; tracking with `track_labels.py` right after segmentation (`tracks_<stem>.zarr`,
+events, summary); rotation on the full frame before chamber detection and on every channel; `um_per_px`,
+Cellpose version and settings in every row; perimeter, circularity, axes, phase-contrast mean and std inside
+the mask. Output goes to `02_processed_v12/` and `03_results_v12/` next to the v11 folders, which stay
+untouched. `pipeline_template_v12.yaml` carries the decided setting; the experiment YAMLs of v11 keep
+providing channels and chamber detection. `segment_all.py` runs all movies, resumable, workers spread over
+the GPUs; `merge_results.py` builds `Combined_Results.csv`. The analysis selects the folder with
+`AUREO_RESULTS_SUBDIR=03_results_v12`, drops flagged rows (`FLAG_EXCLUDE_ROWS`) and uses the measured
+parent; the manual QC file, which names v11 IDs, is not applied to v12 tables. Tested end to end here with a
+stubbed Cellpose on a synthetic movie.
 
 Earlier note, now done: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep

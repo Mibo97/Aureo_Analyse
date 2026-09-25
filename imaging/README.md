@@ -11,6 +11,10 @@ arbeiten oder ihre Einstellungen pruefen. Befund und Plan: `../docs/tracking_dia
 | `synthetic_tracking_test.py` | Ground-Truth-Test des Trackers gegen einen v11-artigen Tracker auf einem synthetischen Film | ueberall |
 | `sweep_segmentation.py` | Gitter ueber Cellpose-Einstellungen auf wenigen aufeinanderfolgenden Frames; Bewertung ohne Hand-Labels (Konsistenz, Merge/Split, Aufspaltung grosser Objekte) plus Overlays | GPU |
 | `probe_env.py` | Was kann der Knoten: GPU, Versionen, Mount, nd2-Metadaten (Pixelgroesse), Sekunden je Frame | GPU |
+| `cellpose_pipeline_v12.py` | **Pipeline v12**: Segmentierung + Tracking je Film, Tracking VOR dem Filtern (Filter = Spalten), rohe Label-Stacks, Rotation vor dem Crop, um/px, Formmerkmale, Phasenkontrast in der Maske. Ausgabe nach `02_processed_v12/` und `03_results_v12/` neben den v11-Ordnern | GPU |
+| `pipeline_template_v12.yaml` | globale Einstellungen fuer v12 (`--settings`): flow 0.4, cellprob 0, cpsam, Tracking-Parameter; Kanaele und Kammer kommen aus der Experiment-YAML (`--config`) | |
+| `segment_all.py`, `run_segment_one.sh`, `run_segment_all.sh` | alle Filme durch v12, wieder aufrufbar, Worker reihum auf die GPUs; Experiment-YAML je Experiment ueber ein Namensmuster | GPU |
+| `merge_results.py` | `Single-Cell-Results_*.csv` -> `Combined_Results.csv` je Experiment | ueberall |
 | `slurm/make_manifest.py` | Liste aller Experimente/Filme fuer Array-Jobs | ueberall |
 | `slurm/probe.sbatch`, `slurm/sweep.sbatch`, `slurm/track.sbatch` | Jobskripte (Partition `cuda` bzw. `cpu`; Umgebungsname ueber `CONDA_ENV`, Standard `cellpose`) | Cluster |
 
@@ -58,10 +62,33 @@ vorhanden). Schritt 3 deshalb mit `nohup` starten und bei Abbruch einfach erneut
 dem Cluster fehlt: das Repo als ZIP von GitHub laden und den Ordner `imaging/` sowie
 `analyse_pipeline/diagnose_tracking.py` hochladen.
 
+## Pipeline v12: Re-Segmentierung (Umgebung: cellpose)
+
+```bash
+# 1. ein Film zur Probe (13 Frames), im slterm -p cuda Fenster; die Experiment-YAML ist die von v11
+bash imaging/run_segment_one.sh /prj/microfluidic/ma_mimorde/Data/WT/pH/6/01_raw_data/260805_Osc6_Rep1_ChamA4.nd2 /pfad/WT_PH_6config.yaml --frames 0-12
+#    -> Data/WT/pH/6/02_processed_v12/labels_*.zarr, tracks_*.zarr, *_events.csv, *_tracking_summary.json
+#    -> Data/WT/pH/6/03_results_v12/Single-Cell-Results_*.csv und QC/*_QC_overlay.tif
+
+# 2. alle Filme, drei Worker auf den drei GPUs des Knotens (wieder aufrufbar; fertige Filme werden uebersprungen)
+nohup bash imaging/run_segment_all.sh /prj/microfluidic/ma_mimorde/Data /pfad/zu/den/yamls 3 0,1,2 > logs/segment_all.log 2>&1 &
+tail -f logs/segment_all.log
+#    Namensmuster der Experiment-YAML: {strain}_{OSC}_{period}config.yaml (z.B. WT_GLC_0.75config.yaml); anderes Muster:
+#    SEGMENT_ARGS='--config-pattern "{strain}_{osc}_{period}.yaml"' bash imaging/run_segment_all.sh ...
+
+# 3. Analyse (Umgebung: Analyse) auf den v12-Tabellen
+export AUREO_RESULTS_SUBDIR=03_results_v12
+python analyse_pipeline/run_analysis.py
+```
+
+Die v11-Ordner (`02_processed`, `03_results`) bleiben unangetastet. Die manuelle QC-Tabelle bezieht sich
+auf v11-IDs und wird auf v12-Tabellen nicht angewendet (die Analyse meldet das); die Zeilen mit
+`at_border`, `below_min_area`, `above_max_area` werden in der Analyse entfernt, die Spuren bleiben.
+
 ## Mit sbatch (optional, wenn `sbatch` vorhanden ist)
 
 `imaging/slurm/*.sbatch` sind dieselben Schritte als Batch-Jobs (Probe, Sweep, Re-Tracking als
-Array-Job ueber `manifests/experiments.csv`). Auf diesem Cluster (Slurm 19, Partitionen `cebitec01`,
+Array-Job ueber `manifests/experiments.csv`; `segment.sbatch` = v12 je Film ueber `manifests/movies.csv`, `CONFIG_DIR` setzen). Auf diesem Cluster (Slurm 19, Partitionen `cebitec01`,
 `kurs`, `cuda`, `interactive`, alle ohne Zeitlimit) gibt es keine GRES-Definition fuer GPUs: GPU-Jobs
 laufen einfach mit `-p cuda`, `--gres=gpu:1` wuerde abgelehnt. CPU-Jobs gehen an `cebitec01`.
 Umgebungsname ueber `CONDA_ENV` (Standard `cellpose`), conda-Installation ueber `CONDA_BASE`.

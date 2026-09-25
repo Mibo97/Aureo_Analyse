@@ -58,6 +58,8 @@ import pandas as pd
 # Kalibrierung, Validierung und Auswertung mit denselben Schwellen laufen.
 from config import (
     RESULTS_PATTERN,
+    RESULTS_SUBDIR,
+    FLAG_EXCLUDE_ROWS,
     CELL_MIN_FRAMES,
     CELL_MIN_MAX_AREA_PX,
     DATA_ROOT,
@@ -315,14 +317,25 @@ def main(argv: list[str] | None = None) -> int:
     # 1. Daten laden
     # ------------------------------------------------------------------
     cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD,
-                             filename_pattern=RESULTS_PATTERN)
+                             filename_pattern=RESULTS_PATTERN, results_subdir=RESULTS_SUBDIR)
     # Urspruengliche Track-ID festhalten: manuelle Merges benennen track_id um, parent_track_id einer
     # re-getrackten Tabelle zeigt aber weiter auf die urspruengliche ID (lineage.classify_mother_bud_measured).
     cells["track_id_orig"] = cells["track_id"]
-    is_retracked = "track_id_v11" in cells.columns
+    has_parent = "parent_track_id" in cells.columns          # track_labels.py hat getrackt (re-getrackt ODER v12)
+    is_retracked = "track_id_v11" in cells.columns           # re-getrackte v11-Tabelle (alte IDs vorhanden)
+    is_v12 = has_parent and not is_retracked
     if is_retracked:
         logger.info("Re-getrackte Tabellen (track_id_v11 vorhanden): gemessene Elternschaft, QC-Uebersetzung, "
                     "kein Gap Closing in der Analyse.")
+    if is_v12:
+        flags = [c for c in FLAG_EXCLUDE_ROWS if c in cells.columns]
+        if flags:
+            drop = cells[flags].fillna(False).astype(bool).any(axis=1)
+            logger.info("Pipeline-v12-Tabellen: %d von %d Zeilen mit %s entfernt (Spuren bleiben, das Tracking lief "
+                        "vor dem Filtern).", int(drop.sum()), len(cells), "/".join(flags))
+            cells = cells[~drop].copy()
+        logger.warning("Pipeline-v12-Tabellen: die manuelle QC-Tabelle bezieht sich auf v11-Track-IDs und wird auf "
+                       "diese Tabellen NICHT angewendet (Merges/Ausschluesse muessten neu erhoben werden).")
 
     # ------------------------------------------------------------------
     # 1b. Ratiometrische Biosensoren: Verhältnis-Spalten berechnen
@@ -351,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
     exclusions = read_qc_exclusions(QC_EXCLUSIONS_PATH)
     if is_retracked:
         exclusions = translate_exclusions_to_retracked(exclusions, cells, OUTPUT_DIR / "qc_exclusions_retracked.csv")
+    elif is_v12 and not exclusions.empty:
+        exclusions = exclusions.iloc[0:0]
 
     # Rohdaten VOR jedem QC festhalten - fuer den Vergleich mit/ohne QC. Die
     # Ratio-Spalten sind schon da (nicht-destruktiv), die Zeitspalte und die
@@ -417,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     cells = _flag_sparse_window_and_report(cells, OUTPUT_DIR, plot=True)
     cells, relinks, relink_stats = _gap_close_and_report(cells, OUTPUT_DIR, stage_before="after manual QC",
-                                                          skip=is_retracked)
+                                                          skip=has_parent)
 
     # ------------------------------------------------------------------
     # 2c. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
@@ -638,7 +653,7 @@ def main(argv: list[str] | None = None) -> int:
             raw_filter_report.to_csv(OUTPUT_DIR / "no_qc" / "00_cell_filter.csv", index=False)
         raw = raw[raw["is_cell"]].drop(columns="is_cell")
         raw = _flag_sparse_window_and_report(raw, OUTPUT_DIR / "no_qc", plot=False)
-        raw, _, _ = _gap_close_and_report(raw, OUTPUT_DIR / "no_qc", stage_before="raw", skip=is_retracked)
+        raw, _, _ = _gap_close_and_report(raw, OUTPUT_DIR / "no_qc", stage_before="raw", skip=has_parent)
         in_batches = pd.Series(
             list(map(tuple, raw[["biosensor", "osc_type", "osc_freq"]].astype(str).values)),
             index=raw.index,

@@ -73,9 +73,16 @@ CACHE_PATH: Path = OUTPUT_DIR.parent / "combined_results_cache.parquet"
 #     export AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"
 # Der Cache bekommt dafuer einen eigenen Namen, damit alte und neue Tabellen nicht vermischt werden.
 RESULTS_PATTERN: str = os.environ.get("AUREO_RESULTS_PATTERN", "Combined_Results.*")
-if RESULTS_PATTERN != "Combined_Results.*":
-    _tag = "".join(ch if ch.isalnum() else "_" for ch in RESULTS_PATTERN.replace(".*", ""))
+# Ergebnisordner je Experiment: "03_results" (v11) oder "03_results_v12" (imaging/cellpose_pipeline_v12.py).
+# Leer = jeder Ordner; dann liegen v11 und v12 nebeneinander und wuerden doppelt geladen, deshalb Standard v11.
+RESULTS_SUBDIR: str = os.environ.get("AUREO_RESULTS_SUBDIR", "03_results")
+if RESULTS_PATTERN != "Combined_Results.*" or RESULTS_SUBDIR != "03_results":
+    _tag = "".join(ch if ch.isalnum() else "_" for ch in (RESULTS_SUBDIR + "_" + RESULTS_PATTERN.replace(".*", "")))
     CACHE_PATH = CACHE_PATH.with_name(f"combined_results_cache_{_tag}.parquet")
+# Tabellen der Pipeline v12 tragen die roi_filter-Regeln als Spalten. Zeilen mit einer dieser Flags werden in
+# der Analyse entfernt (die Spur selbst bleibt - das Tracking lief vor dem Filtern); die Formflags
+# (low_solidity, high_eccentricity) bleiben drin, sie markieren verschmolzene Masken, keine Nicht-Zellen.
+FLAG_EXCLUDE_ROWS: tuple[str, ...] = ("at_border", "below_min_area", "above_max_area")
 QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
 OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
@@ -392,7 +399,8 @@ def log_active_configuration() -> None:
     logger.info("  OUTPUT_DIR:       %s", OUTPUT_DIR)
     logger.info("  CACHE_PATH:       %s", CACHE_PATH)
     logger.info("  MIN_PER_FRAME:    %.1f min", MIN_PER_FRAME)
-    logger.info("  RESULTS_PATTERN:  %s", RESULTS_PATTERN)
+    logger.info("  RESULTS_PATTERN:  %s  (Ordner: %s)", RESULTS_PATTERN, RESULTS_SUBDIR or "alle")
+    logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
     logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
     logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
                 LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
