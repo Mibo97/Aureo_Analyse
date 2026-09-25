@@ -57,6 +57,11 @@ import pandas as pd
 # inspect_lineage.py und validate_lineage.py lesen dieselbe Datei, damit
 # Kalibrierung, Validierung und Auswertung mit denselben Schwellen laufen.
 from config import (
+    RESULTS_PATTERN,
+    RESULTS_SUBDIR,
+    FLAG_EXCLUDE_ROWS,
+    CELL_MIN_FRAMES,
+    CELL_MIN_MAX_AREA_PX,
     DATA_ROOT,
     OUTPUT_DIR,
     OUTPUT_DIR_STATIC,
@@ -88,6 +93,7 @@ from data_loading import load_all_results
 from qc_exclusions import (
     init_qc_exclusions,
     read_qc_exclusions,
+    translate_exclusions_to_retracked,
     summarise_qc_exclusions,
     summarise_track_merges,
     apply_track_merges,
@@ -102,6 +108,7 @@ from pipeline_steps import STEPS, PipelineContext
 from pko_comparison import run_pko_comparison
 from experiment_units import add_experiment_units, chip_overview, run_order_check
 from bud_size import run_bud_size_threshold
+from cell_filter import flag_cells
 from relink import (
     gap_close_tracks,
     track_fragmentation,
@@ -114,10 +121,25 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def _gap_close_and_report(cells: pd.DataFrame, out_dir: Path, stage_before: str):
-    """Gap Closing (relink.py) plus die Kennzahlen davor/danach als Tabellen."""
+def _gap_close_and_report(cells: pd.DataFrame, out_dir: Path, stage_before: str, skip: bool = False):
+    """Gap Closing (relink.py) plus die Kennzahlen davor/danach als Tabellen.
+
+    skip=True (re-getrackte Tabellen, track_id_v11 vorhanden): imaging/track_labels.py hat Luecken,
+    Merges und Splits schon auf den Masken behandelt - hier nur noch die Kennzahlen, keine zweite
+    Verknuepfungsrunde auf Centroiden."""
     out_dir.mkdir(parents=True, exist_ok=True)
     frag_before = track_fragmentation(cells, stage=stage_before)
+    if skip:
+        frag_before.to_csv(out_dir / "00_track_fragmentation.csv", index=False)
+        empty = pd.DataFrame()
+        empty.to_csv(out_dir / "00_track_relinks.csv", index=False)
+        empty.to_csv(out_dir / "00_track_relinks_per_chamber.csv", index=False)
+        logger.info(
+            "Re-getrackte Tabelle: kein Gap Closing in der Analyse (imaging/track_labels.py hat es auf den "
+            "Masken gemacht). Median-Tracklaenge %.0f Frames, neue Tracks je Objekt und Frame %.3f.",
+            frag_before["median_track_frames"].median(), frag_before["new_tracks_per_object_frame"].median(),
+        )
+        return cells, empty, empty
     cells, relinks, relink_stats = gap_close_tracks(
         cells, max_gap=RELINK_MAX_GAP_FRAMES, max_distance_px=RELINK_MAX_DISTANCE_PX,
         max_area_ratio=RELINK_MAX_AREA_RATIO, window_col="in_lineage_window",
@@ -294,7 +316,26 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     # 1. Daten laden
     # ------------------------------------------------------------------
-    cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD)
+    cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD,
+                             filename_pattern=RESULTS_PATTERN, results_subdir=RESULTS_SUBDIR)
+    # Urspruengliche Track-ID festhalten: manuelle Merges benennen track_id um, parent_track_id einer
+    # re-getrackten Tabelle zeigt aber weiter auf die urspruengliche ID (lineage.classify_mother_bud_measured).
+    cells["track_id_orig"] = cells["track_id"]
+    has_parent = "parent_track_id" in cells.columns          # track_labels.py hat getrackt (re-getrackt ODER v12)
+    is_retracked = "track_id_v11" in cells.columns           # re-getrackte v11-Tabelle (alte IDs vorhanden)
+    is_v12 = has_parent and not is_retracked
+    if is_retracked:
+        logger.info("Re-getrackte Tabellen (track_id_v11 vorhanden): gemessene Elternschaft, QC-Uebersetzung, "
+                    "kein Gap Closing in der Analyse.")
+    if is_v12:
+        flags = [c for c in FLAG_EXCLUDE_ROWS if c in cells.columns]
+        if flags:
+            drop = cells[flags].fillna(False).astype(bool).any(axis=1)
+            logger.info("Pipeline-v12-Tabellen: %d von %d Zeilen mit %s entfernt (Spuren bleiben, das Tracking lief "
+                        "vor dem Filtern).", int(drop.sum()), len(cells), "/".join(flags))
+            cells = cells[~drop].copy()
+        logger.warning("Pipeline-v12-Tabellen: die manuelle QC-Tabelle bezieht sich auf v11-Track-IDs und wird auf "
+                       "diese Tabellen NICHT angewendet (Merges/Ausschluesse muessten neu erhoben werden).")
 
     # ------------------------------------------------------------------
     # 1b. Ratiometrische Biosensoren: Verhältnis-Spalten berechnen
@@ -321,6 +362,10 @@ def main(argv: list[str] | None = None) -> int:
     # Zellbewegung) wird fälschlich als neuer Bud interpretiert.
     init_qc_exclusions(QC_EXCLUSIONS_PATH)  # legt leere Datei an, falls noch keine existiert
     exclusions = read_qc_exclusions(QC_EXCLUSIONS_PATH)
+    if is_retracked:
+        exclusions = translate_exclusions_to_retracked(exclusions, cells, OUTPUT_DIR / "qc_exclusions_retracked.csv")
+    elif is_v12 and not exclusions.empty:
+        exclusions = exclusions.iloc[0:0]
 
     # Rohdaten VOR jedem QC festhalten - fuer den Vergleich mit/ohne QC. Die
     # Ratio-Spalten sind schon da (nicht-destruktiv), die Zeitspalte und die
@@ -349,6 +394,11 @@ def main(argv: list[str] | None = None) -> int:
     cells = apply_track_merges(cells, exclusions)
 
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
+    # Zellfilter (cell_filter.py): Schmutz, Halo-Stuecke, Flackern von einem Frame - nach dem manuellen QC.
+    cells, cell_filter_report = flag_cells(cells, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+    if not cell_filter_report.empty:
+        cell_filter_report.to_csv(OUTPUT_DIR / "00_cell_filter.csv", index=False)
+    cells = cells[cells["is_cell"]].drop(columns="is_cell")
     cells = add_time_column(cells, MIN_PER_FRAME)
 
     # Versuchseinheiten: chip / chip_family / medium / date. Erst hier, nach
@@ -381,7 +431,8 @@ def main(argv: list[str] | None = None) -> int:
     #     im duenn besetzten Feld, wo eindeutig auch richtig heisst.
     # ------------------------------------------------------------------
     cells = _flag_sparse_window_and_report(cells, OUTPUT_DIR, plot=True)
-    cells, relinks, relink_stats = _gap_close_and_report(cells, OUTPUT_DIR, stage_before="after manual QC")
+    cells, relinks, relink_stats = _gap_close_and_report(cells, OUTPUT_DIR, stage_before="after manual QC",
+                                                          skip=has_parent)
 
     # ------------------------------------------------------------------
     # 2c. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
@@ -596,8 +647,13 @@ def main(argv: list[str] | None = None) -> int:
         raw = add_time_column(cells_raw, MIN_PER_FRAME)
         raw = add_experiment_units(raw, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX,
                                    static_single_chip_families=STATIC_SINGLE_CHIP_FAMILIES)
+        raw, raw_filter_report = flag_cells(raw, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+        if not raw_filter_report.empty:
+            (OUTPUT_DIR / "no_qc").mkdir(parents=True, exist_ok=True)
+            raw_filter_report.to_csv(OUTPUT_DIR / "no_qc" / "00_cell_filter.csv", index=False)
+        raw = raw[raw["is_cell"]].drop(columns="is_cell")
         raw = _flag_sparse_window_and_report(raw, OUTPUT_DIR / "no_qc", plot=False)
-        raw, _, _ = _gap_close_and_report(raw, OUTPUT_DIR / "no_qc", stage_before="raw")
+        raw, _, _ = _gap_close_and_report(raw, OUTPUT_DIR / "no_qc", stage_before="raw", skip=has_parent)
         in_batches = pd.Series(
             list(map(tuple, raw[["biosensor", "osc_type", "osc_freq"]].astype(str).values)),
             index=raw.index,

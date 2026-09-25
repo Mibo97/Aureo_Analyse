@@ -173,6 +173,7 @@ def compute_candidate_diagnostics(
                 "required_tolerance_px": np.nan,
                 "bud_area": bud_area,
                 "reference_mother_area": np.nan,
+                "reference_mother_uid": pd.NA,
                 "bud_area_fraction": np.nan,
             }
 
@@ -208,10 +209,15 @@ def compute_candidate_diagnostics(
                         reference = nearest
                     mother_area = float(established["area"].to_numpy(dtype=float)[reference])
                     record["reference_mother_area"] = mother_area
+                    record["reference_mother_uid"] = str(established["cell_uid"].to_numpy()[reference])
                     record["bud_area_fraction"] = bud_area / mother_area if mother_area > 0 else np.nan
 
             ev = assigned_lookup.get((str(exp_id), str(bud_uid)))
             record["assigned"] = ev is not None
+            # Stimmt die Mutter des Events mit der naechsten etablierten Zelle des Spiegels ueberein?
+            # Bei gemessener Elternschaft (Maskenberuehrung) ist das der Abgleich zweier unabhaengiger Wege.
+            record["mother_agrees"] = bool(ev is not None and pd.notna(record["reference_mother_uid"])
+                                           and str(ev.get("mother_cell_uid")) == str(record["reference_mother_uid"]))
             if ev is not None:
                 record["mother_cell_uid"] = ev.get("mother_cell_uid")
                 record["distance_px"] = ev.get("distance_px")
@@ -243,6 +249,13 @@ def compute_candidate_diagnostics(
         len(out), n_assigned, 100 * n_assigned / len(out),
         int((out["n_competing_mothers"] > 1).sum()),
     )
+    if not lineage_events.empty and "method" in lineage_events.columns and n_assigned:
+        agree = out.loc[out["assigned"], "mother_agrees"].mean()
+        logger.info(
+            "Events aus gemessener Elternschaft (%s): bei %.1f%% der zugeordneten Kandidaten ist die "
+            "gemessene Mutter auch die naechste etablierte Zelle des Spiegels (mother_agrees).",
+            lineage_events["method"].iloc[0], 100 * agree,
+        )
     return out
 
 

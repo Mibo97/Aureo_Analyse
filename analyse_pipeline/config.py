@@ -66,6 +66,23 @@ OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / "analysis
 # Der Parquet-Cache liegt bewusst NEBEN analysis_output, nicht darin: so
 # überlebt er ein Löschen des Output-Ordners (Neuauswertung ohne Neu-Einlesen).
 CACHE_PATH: Path = OUTPUT_DIR.parent / "combined_results_cache.parquet"
+
+# Welche Ergebnisdateien geladen werden. Standard: die Tabellen der Bild-Pipeline v11
+# (Combined_Results.csv). Nach dem Re-Tracking (imaging/track_labels.py --batch ...) liegt daneben
+# Combined_Results_retracked.csv mit neuen track_id (alte in track_id_v11) - dann:
+#     export AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"
+# Der Cache bekommt dafuer einen eigenen Namen, damit alte und neue Tabellen nicht vermischt werden.
+RESULTS_PATTERN: str = os.environ.get("AUREO_RESULTS_PATTERN", "Combined_Results.*")
+# Ergebnisordner je Experiment: "03_results" (v11) oder "03_results_v12" (imaging/cellpose_pipeline_v12.py).
+# Leer = jeder Ordner; dann liegen v11 und v12 nebeneinander und wuerden doppelt geladen, deshalb Standard v11.
+RESULTS_SUBDIR: str = os.environ.get("AUREO_RESULTS_SUBDIR", "03_results")
+if RESULTS_PATTERN != "Combined_Results.*" or RESULTS_SUBDIR != "03_results":
+    _tag = "".join(ch if ch.isalnum() else "_" for ch in (RESULTS_SUBDIR + "_" + RESULTS_PATTERN.replace(".*", "")))
+    CACHE_PATH = CACHE_PATH.with_name(f"combined_results_cache_{_tag}.parquet")
+# Tabellen der Pipeline v12 tragen die roi_filter-Regeln als Spalten. Zeilen mit einer dieser Flags werden in
+# der Analyse entfernt (die Spur selbst bleibt - das Tracking lief vor dem Filtern); die Formflags
+# (low_solidity, high_eccentricity) bleiben drin, sie markieren verschmolzene Masken, keine Nicht-Zellen.
+FLAG_EXCLUDE_ROWS: tuple[str, ...] = ("at_border", "below_min_area", "above_max_area")
 QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
 OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
@@ -213,7 +230,18 @@ LINEAGE_PARAMS = LineageParams(
     bud_max_frames=7,
     established_min_frames=3,
     tolerance_px=30.0,
+    bud_min_frames=2,          # Persistenz: Knospenspur >= 2 Frames (Flackern von einem Frame zaehlt nicht)
+    use_measured_parent=True,  # re-getrackte Tabellen: Mutter aus der Maskenberuehrung (lineage.classify_mother_bud_measured)
+    fallback_heuristic=True,   # Hybrid: Kandidaten ohne beruehrende Maske zusaetzlich durch die Radius-Heuristik (Spalte method)
 )
+
+# Was zaehlt als Zelle (cell_filter.py)? Spur-Ebene, nach dem manuellen QC, fuer alle Tabellen:
+# mindestens CELL_MIN_FRAMES Frames und groesste Flaeche >= CELL_MIN_MAX_AREA_PX. Im re-getrackten
+# QC-Batch (0.0733 um/px) trennt 1,500 px2 (8 um2) Schmutz/Halo-Stuecke/Flackern (Median 580 px2,
+# ein Frame) von Zellen (Spuren ab 5 Frames: 95 % > 2,100 px2; Blastokonidie >= 3,700 px2) und
+# entfernt 33 % der Spuren, aber nur 4 % der Objekt-Frames. Bericht: 00_cell_filter.csv.
+CELL_MIN_FRAMES = 2
+CELL_MIN_MAX_AREA_PX = 1500.0
 
 # Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): eine neu
 # auftauchende Zelle zaehlt nur als Knospe, wenn ihre Flaeche beim ersten
@@ -337,6 +365,13 @@ METHOD_CAVEATS: list[str] = [
     "(20_lineage_window.csv). Im vollen Feld vergibt der Tracker ~12 %% neue IDs pro Objekt und "
     "Frame, und die Events sind Fragment-Statistik (00_track_fragmentation.csv). Vorher werden "
     "eindeutige Tracking-Luecken automatisch geschlossen (00_track_relinks.csv).",
+    "ZELLFILTER: eine Spur zaehlt nur als Zelle mit >= CELL_MIN_FRAMES Frames und groesster Flaeche "
+    ">= CELL_MIN_MAX_AREA_PX (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
+    "fallen so aus allen Readouts, nach dem manuellen QC.",
+    "GEMESSENE ELTERNSCHAFT: auf re-getrackten Tabellen (AUREO_RESULTS_PATTERN=Combined_Results_retracked.*, "
+    "imaging/track_labels.py) kommt die Mutter einer Knospe aus der Maskenberuehrung beim ersten Auftauchen "
+    "(parent_track_id), nicht aus dem raeumlichen Radius; Knospen muessen >= bud_min_frames Frames dauern. "
+    "Die manuelle QC-Tabelle wird auf die neuen IDs uebersetzt (qc_exclusions_retracked.csv).",
     "KNOSPEN-GROESSENKRITERIUM: eine neu auftauchende Zelle zaehlt nur als Knospe, wenn ihre "
     "Flaeche beim ersten Auftreten hoechstens Schwelle x Mutterflaeche ist. EINE Schwelle fuer "
     "alle Zweige, aus den Daten (Antimodus); ist die Verteilung nicht zweigipflig, greift KEIN "
@@ -364,6 +399,11 @@ def log_active_configuration() -> None:
     logger.info("  OUTPUT_DIR:       %s", OUTPUT_DIR)
     logger.info("  CACHE_PATH:       %s", CACHE_PATH)
     logger.info("  MIN_PER_FRAME:    %.1f min", MIN_PER_FRAME)
+    logger.info("  RESULTS_PATTERN:  %s  (Ordner: %s)", RESULTS_PATTERN, RESULTS_SUBDIR or "alle")
+    logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
+    logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+    logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
+                LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
     if OSC_FREQ_IS_PERIOD_IN_MINUTES:
         nyquist_min = 2 * MIN_PER_FRAME
         periods = [p for p in (float(f) for f in FREQ_ORDER if _is_number(f))]

@@ -47,6 +47,14 @@ WICHTIG - das ist eine HEURISTIK, kein Ground-Truth-Lineage-Tracking:
   echten QC-Overlays kalibrieren (siehe `inspect_classification()` unten),
   bevor die Ergebnisse für eine Publikation verwendet werden.
 
+GEMESSENE ELTERNSCHAFT (re-getrackte Tabellen):
+Traegt die Tabelle parent_track_id und link_type (imaging/track_labels.py auf den
+gespeicherten Masken), kommt die Mutter aus der Maskenberuehrung beim ersten
+Auftauchen und nicht aus dem raeumlichen Radius - classify_mother_bud() leitet
+dann an classify_mother_bud_measured() weiter (LineageParams.use_measured_parent).
+Etabliertheit der Mutter, Persistenz der Knospe (bud_min_frames) und das
+Groessenkriterium gelten dort genauso.
+
 FIX (Entkopplung von Erkennung und Qualitätsfilter):
 Frühere Version filterte Bud-KANDIDATEN bereits über `bud_max_frames`
 (finale, GESAMTE Tracklänge über die ganze Beobachtungsdauer). Das führte
@@ -106,7 +114,7 @@ kein Kriterium).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 import numpy as np
@@ -129,6 +137,9 @@ class LineageParams:
     bud_max_frames: int = 5          # NUR NOCH Report-Schwelle: kennzeichnet im Ergebnis, ob der Bud vermutlich weggespuelt wurde (bud_was_washed_out). Filtert NICHT mehr, ob ein Event erkannt wird - siehe Modul-Docstring "FIX".
     established_min_frames: int = 3  # NEU, kausal: wie viele Frames muss eine Zelle VOR einem moeglichen Bud-Auftauchen schon sichtbar gewesen sein, um als Mutter-KANDIDAT fuer das raeumliche Matching zu gelten. Bewusst klein gehalten (nicht mother_min_frames!), sonst waere das exakt derselbe Bug nur mit anderem Namen. Sollte gross genug sein, um Tracking-Rauschen im allerersten Frame einer Zelle abzufangen, aber klein genug, um schnelle Folge-Ereignisse nicht zu verpassen.
     tolerance_px: float = 30.0       # Zusätzlicher Puffer zum adaptiven Mutter-Radius (in Pixeln)
+    bud_min_frames: int = 1          # Persistenz: ein Kandidat zaehlt nur, wenn seine Spur mindestens so viele Frames dauert. 1 = kein Filter. Auf re-getrackten Tabellen dauern 26 % der Spuren einen Frame (Schmutz, Halo-Stuecke, Flackern) - config.py setzt 2. Kein Widerspruch zum "FIX" unten: der betraf eine OBERGRENZE der Bud-Laenge.
+    use_measured_parent: bool = True # Traegt die Tabelle parent_track_id/link_type (imaging/track_labels.py), kommt die Mutter aus der Maskenberuehrung statt aus dem raeumlichen Radius - classify_mother_bud_measured(). False = immer die Heuristik.
+    fallback_heuristic: bool = True  # Hybrid: Kandidaten OHNE gemessenes Elternteil (link_type 'new', Maske beruehrt nichts im 2-px-Ring) gehen zusaetzlich durch die Radius-Heuristik; Spalte method unterscheidet 'measured_parent' und 'heuristic_radius'. Cellpose laesst zwischen beruehrenden Zellen oft 1-3 px Luecke, die der Ring nicht immer schliesst.
     bud_max_area_fraction: Optional[float] = None  # Groessenkriterium: ein Kandidat zaehlt nur als Knospe, wenn bud_area / mother_area beim ersten Auftreten <= dieser Wert ist. None = kein Filter, solange classify_mother_bud() keine Schwelle uebergeben bekommt (run_analysis.py leitet sie aus den Daten ab, siehe bud_size.py). Ein fester Wert hier ist der Weg fuer inspect_lineage.py, wenn keine abgeleitete Schwelle vorliegt.
 
 
@@ -223,6 +234,30 @@ def classify_mother_bud(
     if params is None:
         params = LineageParams()
 
+    if params.use_measured_parent and {"parent_track_id", "link_type"}.issubset(df.columns):
+        measured = classify_mother_bud_measured(df, params, flux_config=flux_config, bud_size_threshold=bud_size_threshold)
+        if not params.fallback_heuristic:
+            return measured
+        # Hybrid: dieselbe Heuristik wie ohne Elternspalten, aber nur fuer Kandidaten, die kein
+        # gemessenes Event bekommen haben. Die Heuristik selbst laeuft auf der ganzen Tabelle.
+        heuristic_params = replace(params, use_measured_parent=False)
+        heur = classify_mother_bud(df, heuristic_params, flux_config=flux_config, bud_size_threshold=bud_size_threshold)
+        if heur.empty:
+            return measured
+        heur["method"] = "heuristic_radius"
+        if "link_type" not in heur.columns:
+            first_lt = df.sort_values("frame").groupby("cell_uid")["link_type"].first()
+            heur["link_type"] = heur["bud_cell_uid"].map(first_lt)
+        taken = set(measured["bud_cell_uid"]) if not measured.empty else set()
+        extra = heur[~heur["bud_cell_uid"].isin(taken)]
+        out = pd.concat([measured, extra], ignore_index=True) if not measured.empty else extra.reset_index(drop=True)
+        logger.info(
+            "Hybrid: %d Events aus gemessener Elternschaft + %d Events der Radius-Heuristik fuer Kandidaten ohne "
+            "beruehrende Maske (davon %d mit link_type 'new') = %d.",
+            len(measured), len(extra), int((extra["link_type"] == "new").sum()) if len(extra) else 0, len(out),
+        )
+        return out
+
     threshold = bud_size_threshold if bud_size_threshold is not None else params.bud_max_area_fraction
     apply_size = threshold is not None and np.isfinite(threshold)
     if apply_size:
@@ -248,6 +283,7 @@ def classify_mother_bud(
     n_unassigned_buds = 0
     n_total_bud_candidates = 0
     n_rejected_by_size = 0
+    n_too_short = 0
 
     for exp_id, group in df.groupby("exp_id"):
         group = group.sort_values("frame")
@@ -302,6 +338,9 @@ def classify_mother_bud(
             bud_frame = bud_group["frame"].iloc[0]
             bud_x = bud_group["centroid_x"].iloc[0]
             bud_y = bud_group["centroid_y"].iloc[0]
+            if int(track_lengths[bud_tid]) < params.bud_min_frames:
+                n_too_short += 1
+                continue
 
             # Kandidaten fuer die Mutterrolle: alle ANDEREN Zellen im selben
             # Frame, die zum Zeitpunkt bud_frame bereits KAUSAL etabliert
@@ -439,6 +478,9 @@ def classify_mother_bud(
             "Auftreten > %.2f x Mutterflaeche) - mutmasslich angespuelte Zellen, keine Knospen.",
             n_rejected_by_size, n_total_bud_candidates, threshold,
         )
+    if n_too_short:
+        logger.info("Persistenz: %d von %d Bud-Kandidaten verworfen (Spur kuerzer als bud_min_frames=%d).",
+                    n_too_short, n_total_bud_candidates, params.bud_min_frames)
 
     if n_total_bud_candidates > 0 and n_unassigned_buds > 0:
         logger.warning(
@@ -466,6 +508,163 @@ def classify_mother_bud(
             len(out), n_total_bud_candidates,
         )
 
+    return out
+
+
+def classify_mother_bud_measured(
+    df: pd.DataFrame,
+    params: Optional[LineageParams] = None,
+    flux_config: Optional[FluxChannelConfig] = None,
+    bud_size_threshold: Optional[float] = None,
+) -> pd.DataFrame:
+    """Budding-Events aus der GEMESSENEN Elternschaft einer re-getrackten Tabelle.
+
+    imaging/track_labels.py vergibt jedem neuen Objekt, dessen Maske (um 2 px erweitert) eine getrackte
+    Maske beruehrt, parent_track_id = diese Spur (link_type 'new_touching'), und jedem Stueck, das aus
+    einer Wirtsmaske herausfaellt, parent_track_id = Wirt (link_type 'split'). Hier wird daraus ein
+    Event, wenn
+      1. die Mutter zum Zeitpunkt des Auftauchens kausal etabliert ist (>= established_min_frames
+         Frames VOR budding_frame gesehen) - wie in der Heuristik,
+      2. die Knospenspur mindestens bud_min_frames Frames dauert (Persistenz; Flackern von einem Frame
+         zaehlt nicht),
+      3. bud_area_fraction = Knospenflaeche / Mutterflaeche im selben Frame die Groessenschwelle nicht
+         ueberschreitet (bud_size.py, dieselbe Regel wie in der Heuristik).
+    Kandidaten ohne Elternteil (link_type 'new': isoliert aufgetaucht) bleiben Kandidaten im Nenner der
+    Erkennungsrate, werden aber keiner Mutter zugeordnet - genau die angespuelten Zellen.
+
+    Die Ausgabe hat dieselben Spalten wie classify_mother_bud(); adaptive_radius_px und die
+    ended_track_*-Diagnose sind NaN (kein Radius, kein Tracking-Bruch), dazu link_type und
+    method = 'measured_parent'. Nach manuellen Merges (qc_exclusions.apply_track_merges) zeigt
+    parent_track_id noch auf die urspruengliche ID - die Zuordnung laeuft deshalb ueber track_id_orig,
+    das run_analysis.py vor den Merges anlegt.
+    """
+    if params is None:
+        params = LineageParams()
+    threshold = bud_size_threshold if bud_size_threshold is not None else params.bud_max_area_fraction
+    apply_size = threshold is not None and np.isfinite(threshold)
+    if apply_size:
+        threshold = float(threshold)
+    required_cols = {"exp_id", "cell_uid", "frame", "centroid_x", "centroid_y", "area", "track_id",
+                     "parent_track_id", "link_type"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(f"classify_mother_bud_measured() fehlen Spalten: {missing}")
+    if flux_config is not None:
+        for col in (flux_config.channel_a, flux_config.channel_b):
+            if col not in df.columns:
+                raise ValueError(f"flux_config referenziert Spalte '{col}', die nicht in den Daten vorkommt.")
+    id_col = "track_id_orig" if "track_id_orig" in df.columns else "track_id"
+    has_eccentricity = "eccentricity" in df.columns
+    has_ratio = "parent_area_ratio" in df.columns
+
+    results = []
+    n_total = n_no_parent = n_parent_missing = n_not_established = n_too_short = n_rejected_by_size = 0
+    for exp_id, group in df.groupby("exp_id"):
+        group = group.sort_values("frame")
+        n_total_frames = group["frame"].nunique()
+        if n_total_frames < params.mother_min_frames:
+            logger.warning("exp_id '%s' hat nur %d Frames (< mother_min_frames=%d) - wird übersprungen.",
+                           exp_id, n_total_frames, params.mother_min_frames)
+            continue
+        track_lengths = group.groupby("cell_uid")["frame"].nunique()
+        frames_by_track = group.groupby("cell_uid")["frame"].apply(lambda s: np.sort(s.unique()))
+        area_lookup = dict(zip(zip(group["cell_uid"], group["frame"]), group["area"]))
+        pos_lookup = dict(zip(zip(group["cell_uid"], group["frame"]), zip(group["centroid_x"], group["centroid_y"])))
+        row_lookup = dict(zip(zip(group["cell_uid"], group["frame"]), range(len(group))))
+        uid_by_id = group.drop_duplicates(id_col).set_index(id_col)["cell_uid"].to_dict()
+        first = group.groupby("cell_uid").head(1)
+        first = first[first["frame"] > group["frame"].min()]
+        n_total += len(first)
+        for row in first.itertuples(index=False):
+            pid = row.parent_track_id
+            if row.link_type not in ("new_touching", "split") or pd.isna(pid) or pid <= 0:
+                n_no_parent += 1
+                continue
+            mom_uid = uid_by_id.get(int(pid))
+            if mom_uid is None or mom_uid == row.cell_uid:
+                n_parent_missing += 1
+                continue
+            bud_frame = int(row.frame)
+            mom_frames = frames_by_track[mom_uid]
+            k = int(np.searchsorted(mom_frames, bud_frame))          # Frames der Mutter VOR bud_frame
+            if k < params.established_min_frames:
+                n_not_established += 1
+                continue
+            if int(track_lengths[row.cell_uid]) < params.bud_min_frames:
+                n_too_short += 1
+                continue
+            mom_frame = bud_frame if (mom_uid, bud_frame) in area_lookup else int(mom_frames[k - 1])
+            mother_area = float(area_lookup[(mom_uid, mom_frame)])
+            bud_area = float(row.area)
+            ratio = float(row.parent_area_ratio) if has_ratio and np.isfinite(row.parent_area_ratio) else np.nan
+            bud_area_fraction = ratio if np.isfinite(ratio) else (bud_area / mother_area if mother_area > 0 else np.nan)
+            if apply_size and bud_area_fraction > threshold:
+                n_rejected_by_size += 1
+                continue
+            mom_row = group.iloc[row_lookup[(mom_uid, mom_frame)]]
+            mx, my = pos_lookup[(mom_uid, mom_frame)]
+            dist = float(np.hypot(mx - row.centroid_x, my - row.centroid_y))
+            bud_final_length = int(track_lengths[row.cell_uid])
+            mother_final_length = int(track_lengths[mom_uid])
+            mother_area_prev = float(area_lookup.get((mom_uid, mom_frames[k - 1]), np.nan)) if k >= 1 else np.nan
+            mother_area_drop = mother_area_prev - mother_area if np.isfinite(mother_area_prev) else np.nan
+            contact = np.sqrt(mother_area / np.pi) + np.sqrt(bud_area / np.pi) if mother_area > 0 and bud_area > 0 else np.nan
+            b_next = pos_lookup.get((row.cell_uid, bud_frame + 1))
+            m_next = pos_lookup.get((mom_uid, bud_frame + 1))
+            record = {
+                "exp_id": exp_id,
+                "mother_track_id": mom_row["track_id"],
+                "bud_track_id": row.cell_uid,
+                "budding_frame": bud_frame,
+                "mother_area": mother_area,
+                "distance_px": dist,
+                "adaptive_radius_px": np.nan,
+                "bud_area": bud_area,
+                "bud_area_fraction": bud_area_fraction,
+                "bud_final_track_length": bud_final_length,
+                "bud_was_washed_out": bud_final_length <= params.bud_max_frames,
+                "mother_is_canonical_mother": mother_final_length >= params.mother_min_frames,
+                "ended_track_cell_uid": pd.NA,
+                "ended_track_gap_frames": np.nan,
+                "ended_track_distance_px": np.nan,
+                "ended_track_area_ratio": np.nan,
+                "bud_area_plus1": float(area_lookup.get((row.cell_uid, bud_frame + 1), np.nan)),
+                "bud_area_plus3": float(area_lookup.get((row.cell_uid, bud_frame + 3), np.nan)),
+                "contact_ratio": dist / contact if np.isfinite(contact) and contact > 0 else np.nan,
+                "bud_move_plus1_px": float(np.hypot(b_next[0] - row.centroid_x, b_next[1] - row.centroid_y)) if b_next else np.nan,
+                "mother_move_plus1_px": float(np.hypot(m_next[0] - mx, m_next[1] - my)) if m_next else np.nan,
+                "rel_move_plus1_px": (float(abs(np.hypot(b_next[0] - m_next[0], b_next[1] - m_next[1]) - dist))
+                                      if (b_next and m_next) else np.nan),
+                "mother_area_prev": mother_area_prev,
+                "mother_area_next": float(area_lookup.get((mom_uid, bud_frame + 1), np.nan)),
+                "mother_area_drop": mother_area_drop,
+                "mother_area_drop_over_bud": (mother_area_drop / bud_area
+                                              if np.isfinite(mother_area_drop) and bud_area > 0 else np.nan),
+                "mother_age_frames": k,
+                "mother_cell_uid": mom_uid,
+                "bud_cell_uid": row.cell_uid,
+                "link_type": row.link_type,
+                "method": "measured_parent",
+            }
+            if has_eccentricity:
+                record["mother_eccentricity"] = mom_row["eccentricity"]
+                record["bud_eccentricity"] = row.eccentricity
+            if flux_config is not None:
+                denom = mom_row[flux_config.channel_b]
+                record["pre_budding_flux"] = (np.nan if abs(denom) < flux_config.min_denominator
+                                              else mom_row[flux_config.channel_a] / denom)
+            results.append(record)
+
+    out = pd.DataFrame(results)
+    if not out.empty:
+        out["bud_size_threshold"] = threshold if apply_size else np.nan
+    logger.info(
+        "Mutter/Bud aus gemessener Elternschaft: %d Events aus %d neu auftauchenden Spuren; ohne Elternteil "
+        "(isoliert aufgetaucht) %d, Elternspur nicht auffindbar %d, Mutter nicht etabliert %d, Knospenspur "
+        "kuerzer als %d Frames %d, Groessenkriterium %d.",
+        len(out), n_total, n_no_parent, n_parent_missing, n_not_established, params.bud_min_frames,
+        n_too_short, n_rejected_by_size,
+    )
     return out
 
 
