@@ -194,7 +194,40 @@ interactively with `srun -p cuda --gres=gpu:1 --pty bash` on one movie to measur
 - Mini sweep (two settings on a movie with 2–3 cells): identical results, `niter` makes no difference
   there. The sweep needs a chamber with tens of cells to say anything.
 
-Next checkpoint: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
+## 6c. Checkpoint 2: the QC batch re-tracked, the full sweep on one dense chamber
+
+Re-tracking of WT/pH/6 from the existing masks (11 chambers, means):
+
+| | v11 tracker | `track_labels.py` |
+| --- | --- | --- |
+| new IDs per object-frame | 0.137 | 0.079 |
+| median track length (frames) | 3 | 7 |
+| tracks of at least 10 frames | 21 % | 43 % |
+| tracks per chamber | 824 | 461 |
+| manual merges reproduced, all 244 | | 22 % |
+| manual merges reproduced, gap 1 to 3 frames (116) | | 34 % |
+
+Gap links 2,846, merges 1,340, splits 1,417, new objects touching a tracked mask 1,612. The manual
+merges that stay unreproduced are the large jumps (median 2.2 radii across one frame) and the long
+absences (92 of 244 links span more than five frames); a linker without the images cannot make those
+safely, and the centroid-only prototype reached the same 23 %. Whether that matters for the result is
+decided at checkpoint 3 by `validate_lineage.py` on the re-tracked table, not by the link count.
+
+Sweep on PosCtrl_Rep1_ChamA1, frames 100 to 112 (dense), 36 settings:
+
+- `cpsam_v2` and `cpsam` give identical masks: Cellpose 4.1.1 resolves both names to the same default
+  model (the probe log says so). `niter` 0 versus 500 changes nothing measurable.
+- `flow_threshold` 0.4 beats 0.8 on every metric at the same `cellprob`: new IDs −27 %, merges −13 %,
+  splits −10 %, large-object splits −12 %. The setting chosen to protect the septated swollen cells does
+  not protect them better.
+- `cellprob_threshold` is a trade-off: −1 gives the fewest new IDs (0.044) but the most merges (7.6 per
+  frame); +1 the fewest merges and splits (5.3 and 24.6 per frame, large splits −22 %) but more new IDs
+  (0.058). 0 sits between (0.051, 7.3, 30.2).
+- Candidates for the by-eye check: (0.4, −1), (0.4, 0), (0.4, +1) against the current (0.8, 0), which
+  (0.4, 0) dominates on all metrics. The sweep is one chamber and 13 frames; two more movies with the
+  reduced grid (flow × cellprob, `niter` 500, `cpsam`) come before a decision.
+
+Next checkpoint (3): the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
 setting is chosen.

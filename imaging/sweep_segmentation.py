@@ -146,7 +146,8 @@ def main():
         pd.DataFrame(rows).to_csv(a.out / "sweep_results.csv", index=False)
     df = pd.DataFrame(rows)
     summary = df.groupby(["model", "flow", "cellprob", "niter"])[["new_ids_per_object_frame", "gap_links_share", "merges_per_frame",
-                                                                 "splits_per_frame", "large_splits_per_frame", "n_obj_cv", "area_cv", "s_per_frame"]].mean()
+                                                                 "splits_per_frame", "large_splits_per_frame", "n_obj_mean", "n_obj_cv",
+                                                                 "area_cv", "median_area", "s_per_frame"]].mean()
     summary.to_csv(a.out / "sweep_summary.csv"); print(summary.round(3).to_string())
 
 

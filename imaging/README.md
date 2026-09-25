@@ -86,3 +86,7 @@ Ereignisse (merge, split, gap, long_range) stehen je Film in `04_tracking/<stem>
 | Identitaetswechsel (Spur auf zwei Objekten) | 0–1 | 1–3 |
 | Knospen mit richtigem Elternteil | 0 | 0.95–1.00 |
 | dito mit 12 % verschmolzenen Masken je Objekt-Frame (`--p-merge 0.12`): Spuren je Objekt | 8.2–8.6 | 2.6–2.7 |
+
+Auf den echten Masken des QC-Batches (WT/pH/6, 11 Kammern): neue IDs je Objekt-Frame 0.137 → 0.079,
+Median-Spurlaenge 3 → 7 Frames, Spuren >= 10 Frames 21 % → 43 %, 244 manuelle Merges zu 22 % dieselbe Spur
+(innerhalb des Gedaechtnisses von 3 Frames 34 %). Details: `../docs/tracking_plan.md`, Abschnitt 6c.
