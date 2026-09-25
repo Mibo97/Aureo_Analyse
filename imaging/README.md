@@ -70,13 +70,15 @@ bash imaging/run_segment_one.sh /prj/microfluidic/ma_mimorde/Data/WT/pH/6/01_raw
 #    -> Data/WT/pH/6/02_processed_v12/labels_*.zarr, tracks_*.zarr, *_events.csv, *_tracking_summary.json
 #    -> Data/WT/pH/6/03_results_v12/Single-Cell-Results_*.csv und QC/*_QC_overlay.tif
 
-# 2. alle Filme, drei Worker auf den drei GPUs des Knotens (wieder aufrufbar; fertige Filme werden uebersprungen)
-nohup bash imaging/run_segment_all.sh /prj/microfluidic/ma_mimorde/Data /pfad/zu/den/yamls 3 0,1,2 > logs/segment_all.log 2>&1 &
+# 2. Probelauf: findet jedes Experiment seine YAML? (nichts wird gerechnet)
+python imaging/segment_all.py /prj/microfluidic/ma_mimorde/Data --config-dir /prj/microfluidic/ma_mimorde/01_Processing/config-yamls --dry-run
+# 3. alle Filme, drei Worker auf den drei GPUs des Knotens (wieder aufrufbar; fertige Filme werden uebersprungen)
+nohup bash imaging/run_segment_all.sh /prj/microfluidic/ma_mimorde/Data /prj/microfluidic/ma_mimorde/01_Processing/config-yamls 3 0,1,2 > logs/segment_all.log 2>&1 &
 tail -f logs/segment_all.log
 #    Namensmuster der Experiment-YAML: {strain}_{OSC}_{period}config.yaml (z.B. WT_GLC_0.75config.yaml); anderes Muster:
 #    SEGMENT_ARGS='--config-pattern "{strain}_{osc}_{period}.yaml"' bash imaging/run_segment_all.sh ...
 
-# 3. Analyse (Umgebung: Analyse) auf den v12-Tabellen
+# 4. Analyse (Umgebung: Analyse) auf den v12-Tabellen
 export AUREO_RESULTS_SUBDIR=03_results_v12
 python analyse_pipeline/run_analysis.py
 ```

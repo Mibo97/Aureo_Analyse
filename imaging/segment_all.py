@@ -44,7 +44,7 @@ def run_one(m: dict, args) -> tuple[str, int]:
            "--file", str(m["nd2"]), "--exp-dir", str(m["exp_dir"]), "--processed-subdir", args.processed_subdir,
            "--results-subdir", args.results_subdir] + (["--no-overlay"] if args.no_overlay else []) + (["--skeleton"] if args.skeleton else [])
     if args.dry_run:
-        return (" ".join(cmd), 0)
+        return (f"{m['nd2'].name}: bereit ({cfg.name})", 0)
     env = dict(os.environ)
     if args.gpus:
         gpus = args.gpus.split(","); env["CUDA_VISIBLE_DEVICES"] = gpus[m["slot"] % len(gpus)]
@@ -76,6 +76,14 @@ def main():
         m["slot"] = i
     print(f"{len(movies)} Filme, {args.workers} Worker, GPUs {args.gpus or 'wie Umgebung'}", flush=True)
     n_err = 0
+    if args.dry_run:   # nur pruefen: findet jedes Experiment seine YAML, was ist schon fertig?
+        msgs = [run_one(m, args) for m in movies]
+        missing = sorted({m for m, rc in msgs if rc == 2}); done = sum(1 for m, rc in msgs if "schon fertig" in m)
+        for m in missing:
+            print(m)
+        print(f"Probelauf: {len(movies)} Filme, {done} schon fertig, {len(missing)} ohne Experiment-YAML, "
+              f"{len(movies) - done - len(missing)} wuerden laufen", flush=True)
+        return
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         for msg, rc in ex.map(lambda m: run_one(m, args), movies):
             n_err += int(rc != 0); print(msg, flush=True)
