@@ -8,5 +8,5 @@ CONFIG="${1:?config yaml}"; OUT="${2:?output dir}"; shift 2
 ARGS=(); while [ $# -ge 2 ]; do ARGS+=(--nd2 "$1" --frames "$2"); shift 2; done
 mkdir -p logs
 python imaging/sweep_segmentation.py --config "$CONFIG" --out "$OUT" "${ARGS[@]}" \
-    --models "${MODELS:-cpsam,cpsam_v2}" --flow "${FLOW:-0.4,0.6,0.8}" --cellprob "${CELLPROB:--1,0,1}" --niter "${NITER:-0,500}" \
+    --models="${MODELS:-cpsam,cpsam_v2}" --flow="${FLOW:-0.4,0.6,0.8}" --cellprob="${CELLPROB:--1,0,1}" --niter="${NITER:-0,500}" \
     2>&1 | tee "logs/sweep_$(date +%Y%m%d_%H%M).log"
