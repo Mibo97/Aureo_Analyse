@@ -262,6 +262,36 @@ Poisson noise of such counts (CV 0.31). Spearman between the methods' chamber ra
 rate per chamber in the window is therefore a noise-limited number; it becomes a readout only pooled
 over the chambers of a structure, and the story's chip-level treatment already does that.
 
+## 6e. Checkpoint 4: all experiments re-tracked and analysed; the sweep decided
+
+Full run on the re-tracked tables (565 chambers, `AUREO_RESULTS_PATTERN=Combined_Results_retracked.*`):
+
+- Cell filter: median 38 % of the tracks removed per chamber (IQR 31–46 %) but only 7 % of the
+  object-frames (`00_cell_filter.csv`). A handful of nearly empty chambers lose most of their
+  object-frames because they held little besides debris.
+- Chip-level budding rates: 146 condition means, Spearman 0.95 against the v11-based run, mean
+  0.36 → 0.30 per mother-hour (persistence, cell filter and the measured parent remove events). The
+  chip level is robust to the tracking method; the chamber level is not (6d). That is the unit to report.
+- Control-trend summary: 21 no trend, 19 structure effect, 5 period effect, 3 not robust; 44 of the 48
+  verdicts unchanged, ρ_osc between the runs 0.94. The five period-effect rows are area BSG/pH, µ_area
+  BSG/Glc and BSG/pH (opposite signs), budding rate BSO/Glc and BSPH/pH, each with the strongest control
+  trending the other way or flat. The story of `docs/data_story.md` stands on the new tables.
+
+Sweep on two more movies (about 20 objects per frame, reduced grid), together with the dense chamber:
+
+- Flow threshold 0.4 beats 0.8 on every metric on all three movies.
+- Cell probability +1 gives the fewest merges and splits (large-object splits −20 % against 0) and −1
+  the fewest new IDs in dense frames (−12 % against 0); 0 sits between and is what the config has.
+- Overlays at flow 0.4: clusters segmented cleanly, septated swollen cells one mask each, attached
+  daughters separate.
+
+Decision proposed: `flow_threshold 0.4`, `cellprob_threshold 0.0`, `model_type cpsam` (cpsam_v2 is the
+same model), `niter 500` or null (no effect). Re-segmenting the existing data with it buys 10–20 % on
+the consistency metrics on top of what the re-tracking already gave; the thesis can proceed on the
+re-tracked tables while pipeline v12 (tracking before filtering, raw label stacks, single-file command
+line, rotation fix, µm per pixel, cell-type features) is built for the re-run and for future
+experiments.
+
 Earlier note, now done: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
