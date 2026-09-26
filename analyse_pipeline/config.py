@@ -52,7 +52,7 @@ DATA_ROOT_PRESETS: dict[str, Path] = {
 }
 
 # Welcher Preset gilt, wenn AUREO_DATA_ROOT nicht gesetzt ist.
-ACTIVE_PRESET = "local"
+ACTIVE_PRESET = "cluster"
 
 
 def _from_env_or(var: str, fallback: Path) -> Path:
@@ -85,7 +85,7 @@ if RESULTS_VERSION not in _RESULTS_VERSIONS:
     raise ValueError(f"RESULTS_VERSION muss eines von {sorted(_RESULTS_VERSIONS)} sein, nicht '{RESULTS_VERSION}'")
 _subdir, _pattern, _outname = _RESULTS_VERSIONS[RESULTS_VERSION]
 
-OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / _outname)
+OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / "02_Analysing" / "v12" / _outname)
 # Ergebnisordner je Experiment und Dateimuster - folgen RESULTS_VERSION.
 RESULTS_SUBDIR: str = _subdir
 RESULTS_PATTERN: str = _pattern
@@ -108,7 +108,7 @@ OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
 # seit dem letzten Lauf Tabellen dazugekommen oder neu geschrieben wurden (z.B. Segmentierung war noch nicht fertig).
 # Normalerweise unnoetig: der Loader prueft selbst, ob die Quelldateien seit dem Cache dazugekommen oder
 # neu geschrieben wurden (data_loading._fingerprint), und liest dann neu. True erzwingt das Neu-Einlesen.
-FORCE_RELOAD = False
+FORCE_RELOAD = True
 if os.environ.get("AUREO_FORCE_RELOAD", "").strip().lower() in ("1", "true", "yes"):
     FORCE_RELOAD = True
 
