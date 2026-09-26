@@ -61,24 +61,37 @@ def _from_env_or(var: str, fallback: Path) -> Path:
 
 
 DATA_ROOT: Path = _from_env_or("AUREO_DATA_ROOT", DATA_ROOT_PRESETS[ACTIVE_PRESET])
-OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / "analysis_output")
 
-# Der Parquet-Cache liegt bewusst NEBEN analysis_output, nicht darin: so
-# überlebt er ein Löschen des Output-Ordners (Neuauswertung ohne Neu-Einlesen).
-CACHE_PATH: Path = OUTPUT_DIR.parent / "combined_results_cache.parquet"
+# Welche Tabellen der Bild-Pipeline ausgewertet werden - EIN Schalter, keine Umgebungsvariablen noetig:
+#   "v12": <exp>/03_results_v12/Combined_Results.csv (imaging/cellpose_pipeline_v12.py: Tracking vor dem
+#          Filtern, gemessene Elternschaft, Flag-Spalten), Ausgabe nach <Data>/../analysis_output_v12
+#   "v11": <exp>/03_results/Combined_Results.csv (cellpose_pipeline_v11.py), Ausgabe nach analysis_output
+#   "v11_retracked": <exp>/03_results/Combined_Results_retracked.csv (imaging/track_labels.py --batch),
+#          Ausgabe nach analysis_output_retracked
+# Die Umgebungsvariablen AUREO_RESULTS_SUBDIR / AUREO_RESULTS_PATTERN / AUREO_OUTPUT_DIR ueberschreiben das,
+# wenn gesetzt; normalerweise reicht dieser Schalter.
+RESULTS_VERSION = "v12"
 
-# Welche Ergebnisdateien geladen werden. Standard: die Tabellen der Bild-Pipeline v11
-# (Combined_Results.csv). Nach dem Re-Tracking (imaging/track_labels.py --batch ...) liegt daneben
-# Combined_Results_retracked.csv mit neuen track_id (alte in track_id_v11) - dann:
-#     export AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"
-# Der Cache bekommt dafuer einen eigenen Namen, damit alte und neue Tabellen nicht vermischt werden.
-RESULTS_PATTERN: str = os.environ.get("AUREO_RESULTS_PATTERN", "Combined_Results.*")
-# Ergebnisordner je Experiment: "03_results" (v11) oder "03_results_v12" (imaging/cellpose_pipeline_v12.py).
-# Leer = jeder Ordner; dann liegen v11 und v12 nebeneinander und wuerden doppelt geladen, deshalb Standard v11.
-RESULTS_SUBDIR: str = os.environ.get("AUREO_RESULTS_SUBDIR", "03_results")
-if RESULTS_PATTERN != "Combined_Results.*" or RESULTS_SUBDIR != "03_results":
-    _tag = "".join(ch if ch.isalnum() else "_" for ch in (RESULTS_SUBDIR + "_" + RESULTS_PATTERN.replace(".*", "")))
-    CACHE_PATH = CACHE_PATH.with_name(f"combined_results_cache_{_tag}.parquet")
+_RESULTS_VERSIONS = {
+    "v12": ("03_results_v12", "Combined_Results.*", "analysis_output_v12"),
+    "v11": ("03_results", "Combined_Results.*", "analysis_output"),
+    "v11_retracked": ("03_results", "Combined_Results_retracked.*", "analysis_output_retracked"),
+}
+if RESULTS_VERSION not in _RESULTS_VERSIONS:
+    raise ValueError(f"RESULTS_VERSION muss eines von {sorted(_RESULTS_VERSIONS)} sein, nicht '{RESULTS_VERSION}'")
+_subdir, _pattern, _outname = _RESULTS_VERSIONS[RESULTS_VERSION]
+
+OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / _outname)
+# Ergebnisordner je Experiment und Dateimuster (siehe RESULTS_VERSION); leerer Ordnername = jeder Ordner.
+RESULTS_SUBDIR: str = os.environ.get("AUREO_RESULTS_SUBDIR", _subdir)
+RESULTS_PATTERN: str = os.environ.get("AUREO_RESULTS_PATTERN", _pattern)
+
+# Der Parquet-Cache liegt bewusst NEBEN dem Output-Ordner, nicht darin: so ueberlebt er ein Loeschen des
+# Output-Ordners. Er traegt Ordner und Muster im Namen, damit v11-, re-getrackte und v12-Tabellen nie vermischt werden.
+_tag = "".join(ch if ch.isalnum() else "_" for ch in ((RESULTS_SUBDIR or "any") + "_" + RESULTS_PATTERN.replace(".*", "")))
+CACHE_PATH: Path = OUTPUT_DIR.parent / (
+    "combined_results_cache.parquet" if (RESULTS_SUBDIR, RESULTS_PATTERN) == ("03_results", "Combined_Results.*")
+    else f"combined_results_cache_{_tag}.parquet")
 # Tabellen der Pipeline v12 tragen die roi_filter-Regeln als Spalten. Zeilen mit einer dieser Flags werden in
 # der Analyse entfernt (die Spur selbst bleibt - das Tracking lief vor dem Filtern); die Formflags
 # (low_solidity, high_eccentricity) bleiben drin, sie markieren verschmolzene Masken, keine Nicht-Zellen.
@@ -87,7 +100,9 @@ QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
 OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
 
-FORCE_RELOAD = False  # auf True setzen, wenn neue Rohdaten dazugekommen sind
+# Cache ignorieren und die Ergebnisdateien neu einlesen: AUREO_FORCE_RELOAD=1 (oder hier True). Noetig, wenn
+# seit dem letzten Lauf Tabellen dazugekommen oder neu geschrieben wurden (z.B. Segmentierung war noch nicht fertig).
+FORCE_RELOAD = os.environ.get("AUREO_FORCE_RELOAD", "0").strip().lower() in ("1", "true", "yes")
 
 
 # ==============================================================================
@@ -399,7 +414,7 @@ def log_active_configuration() -> None:
     logger.info("  OUTPUT_DIR:       %s", OUTPUT_DIR)
     logger.info("  CACHE_PATH:       %s", CACHE_PATH)
     logger.info("  MIN_PER_FRAME:    %.1f min", MIN_PER_FRAME)
-    logger.info("  RESULTS_PATTERN:  %s  (Ordner: %s)", RESULTS_PATTERN, RESULTS_SUBDIR or "alle")
+    logger.info("  RESULTS_VERSION:  %s -> Ordner %s, Muster %s", RESULTS_VERSION, RESULTS_SUBDIR or "alle", RESULTS_PATTERN)
     logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
     logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
     logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",

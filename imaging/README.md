@@ -70,15 +70,23 @@ bash imaging/run_segment_one.sh /prj/microfluidic/ma_mimorde/Data/WT/pH/6/01_raw
 #    -> Data/WT/pH/6/02_processed_v12/labels_*.zarr, tracks_*.zarr, *_events.csv, *_tracking_summary.json
 #    -> Data/WT/pH/6/03_results_v12/Single-Cell-Results_*.csv und QC/*_QC_overlay.tif
 
-# 2. alle Filme, drei Worker auf den drei GPUs des Knotens (wieder aufrufbar; fertige Filme werden uebersprungen)
-nohup bash imaging/run_segment_all.sh /prj/microfluidic/ma_mimorde/Data /pfad/zu/den/yamls 3 0,1,2 > logs/segment_all.log 2>&1 &
+# 2. Probelauf: findet jedes Experiment seine YAML? (nichts wird gerechnet)
+python imaging/segment_all.py /prj/microfluidic/ma_mimorde/Data --config-dir /prj/microfluidic/ma_mimorde/01_Processing/config-yamls --dry-run
+# 3. alle Filme, drei Worker auf den drei GPUs des Knotens (wieder aufrufbar; fertige Filme werden uebersprungen)
+nohup bash imaging/run_segment_all.sh /prj/microfluidic/ma_mimorde/Data /prj/microfluidic/ma_mimorde/01_Processing/config-yamls 3 0,1,2 > logs/segment_all.log 2>&1 &
 tail -f logs/segment_all.log
 #    Namensmuster der Experiment-YAML: {strain}_{OSC}_{period}config.yaml (z.B. WT_GLC_0.75config.yaml); anderes Muster:
 #    SEGMENT_ARGS='--config-pattern "{strain}_{osc}_{period}.yaml"' bash imaging/run_segment_all.sh ...
 
-# 3. Analyse (Umgebung: Analyse) auf den v12-Tabellen
-export AUREO_RESULTS_SUBDIR=03_results_v12
-python analyse_pipeline/run_analysis.py
+# 4. Analyse (Umgebung: Analyse) auf den v12-Tabellen - erst wenn alle Experimente ihre Combined_Results.csv haben:
+find /prj/microfluidic/ma_mimorde/Data -path '*03_results_v12/Combined_Results.csv' | wc -l
+#    In analyse_pipeline/config.py: ACTIVE_PRESET wie gewohnt ("cluster" oder "local") und RESULTS_VERSION = "v12"
+#    (Standard). Dann ganz normal, ohne Umgebungsvariablen; die Ausgabe geht nach <Data>/../analysis_output_v12,
+#    die v11-Auswertung in analysis_output bleibt. RESULTS_VERSION = "v11" stellt das alte Verhalten wieder her.
+cd analyse_pipeline
+python run_analysis.py
+#    Der Cache liegt je Version getrennt (combined_results_cache_03_results_v12_*.parquet). Steht im Log
+#    'Lade aus Cache', obwohl neue Tabellen da sind: die Cache-Datei loeschen (oder AUREO_FORCE_RELOAD=1).
 ```
 
 Die v11-Ordner (`02_processed`, `03_results`) bleiben unangetastet. Die manuelle QC-Tabelle bezieht sich
