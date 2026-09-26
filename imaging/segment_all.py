@@ -29,7 +29,10 @@ def find_config(config_dir: Path, pattern: str, strain: str, osc: str, period: s
     def has(p, *parts):
         n = p.name.lower(); return all(x.lower() in n for x in parts)
     tail = period.split("_")[-1]
-    for parts in ((strain, period, osc), (strain, period), (strain, tail, osc), (strain, tail)):
+    passes = [(strain, period, osc), (strain, tail, osc)]
+    if osc.lower() == "static":   # nur hier darf der Oszillationstyp im Namen fehlen - sonst wuerde z.B.
+        passes += [(strain, period), (strain, tail)]   # eine fehlende pH-YAML durch die Glc-YAML ersetzt
+    for parts in passes:
         hits = [p for p in files if has(p, *parts)]
         if len(hits) == 1:
             return hits[0]
