@@ -312,6 +312,31 @@ the GPUs; `merge_results.py` builds `Combined_Results.csv`. The analysis selects
 parent; the manual QC file, which names v11 IDs, is not applied to v12 tables. Tested end to end here with a
 stubbed Cellpose on a synthetic movie.
 
+## 6g. Checkpoint 5: the full run on the v12 tables
+
+547 of 565 chambers came through v12 (18 movies still to segment or merge). Compared with the v11 tables:
+
+| | v11 original | v11, new analysis | v12 |
+| --- | --- | --- | --- |
+| new tracks per object-frame, median chamber | | 0.093 (QC batch) | 0.070 (Glc 0.080, pH 0.057) |
+| tracks per chamber, median | | 178 | 125 |
+| object-frames per chamber, median | | 1,235 | 1,168 |
+| cell filter: tracks removed / object-frames removed | | 38 % / 7.2 % | 33 % / 5.3 % |
+| control-trend verdicts: no trend / structure / period / not robust | 19 / 18 / 7 / 4 | 21 / 19 / 5 / 3 | 23 / 20 / 3 / 2 |
+| chip-level budding rate, Spearman against v11 original (146 conditions) | | 0.95 | 0.77 (Glc 0.66, pH 0.79) |
+| mean budding rate per mother-hour | 0.36 | 0.30 | 0.31 |
+
+- The three remaining period-effect rows are area BSG/pH, µ_area BSO/Glc and budding rate WT/Glc, each
+  a different readout and strain, none recurring. The count fell with every improvement of the tracking,
+  7 → 5 → 3.
+- The per-series Spearman of the budding rate against the period does not survive the change of tracking:
+  across the ten series it correlates at 0.05 between v11 and v12, while the chip-level rates themselves
+  correlate at 0.77–0.82. Which series looked like a period trend was decided by the tracker, not by the
+  cells. That is the methods argument for treating the budding rate per structure as the readout and its
+  trend against the period as noise.
+- BSG pH 6 min keeps losing 60–80 % of its object-frames to the cell filter under both segmentations; the
+  small objects there are dead-cell debris (confirmed by eye), so the filter does what it should.
+
 Earlier note, now done: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
