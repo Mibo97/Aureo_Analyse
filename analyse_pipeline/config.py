@@ -87,7 +87,9 @@ QC_EXCLUSIONS_PATH: Path = OUTPUT_DIR / "qc_exclusions.csv"
 OUTPUT_DIR_STATIC: Path = OUTPUT_DIR / "static"
 OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
 
-FORCE_RELOAD = False  # auf True setzen, wenn neue Rohdaten dazugekommen sind
+# Cache ignorieren und die Ergebnisdateien neu einlesen: AUREO_FORCE_RELOAD=1 (oder hier True). Noetig, wenn
+# seit dem letzten Lauf Tabellen dazugekommen oder neu geschrieben wurden (z.B. Segmentierung war noch nicht fertig).
+FORCE_RELOAD = os.environ.get("AUREO_FORCE_RELOAD", "0").strip().lower() in ("1", "true", "yes")
 
 
 # ==============================================================================

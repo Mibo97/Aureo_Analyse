@@ -78,9 +78,13 @@ tail -f logs/segment_all.log
 #    Namensmuster der Experiment-YAML: {strain}_{OSC}_{period}config.yaml (z.B. WT_GLC_0.75config.yaml); anderes Muster:
 #    SEGMENT_ARGS='--config-pattern "{strain}_{osc}_{period}.yaml"' bash imaging/run_segment_all.sh ...
 
-# 4. Analyse (Umgebung: Analyse) auf den v12-Tabellen
+# 4. Analyse (Umgebung: Analyse) auf den v12-Tabellen - erst wenn alle Experimente ihre Combined_Results.csv haben:
+find /prj/microfluidic/ma_mimorde/Data -path '*03_results_v12/Combined_Results.csv' | wc -l
 export AUREO_RESULTS_SUBDIR=03_results_v12
-python analyse_pipeline/run_analysis.py
+export AUREO_OUTPUT_DIR=/prj/microfluidic/ma_mimorde/analysis_output_v12   # eigener Ordner, die v11-Auswertung bleibt
+python analyse_pipeline/run_analysis.py 2>&1 | tee logs/analysis_v12.log
+#    Der Cache liegt je Ergebnisordner getrennt (combined_results_cache_03_results_v12_*.parquet). Steht im Log
+#    'Lade aus Cache', obwohl neue Tabellen da sind: AUREO_FORCE_RELOAD=1 davorsetzen oder die Cache-Datei loeschen.
 ```
 
 Die v11-Ordner (`02_processed`, `03_results`) bleiben unangetastet. Die manuelle QC-Tabelle bezieht sich
