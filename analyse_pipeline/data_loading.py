@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -78,10 +79,23 @@ def discover_result_files(
     if not data_root.exists():
         raise FileNotFoundError(f"data_root existiert nicht: {data_root}")
 
-    all_files = sorted(
-        p for p in data_root.rglob(filename_pattern)
-        if p.suffix.lower() in (".csv", ".parquet")
-    )
+    t0 = time.perf_counter()
+    if results_subdir:
+        # Gezielt: <root>/<biosensor>/<osc_type>/<osc_freq>/<results_subdir>/<Datei>. Ein rglob ueber den
+        # ganzen Baum muesste durch alle 01_raw_data-, 02_processed*- (zarr: eine Datei je Frame) und
+        # QC-Ordner laufen - auf dem Netzlaufwerk Minuten ohne Ausgabe.
+        logger.info("Suche %s in */*/*/%s unter %s ...", filename_pattern, results_subdir, data_root)
+        all_files = sorted(
+            p for p in data_root.glob(f"*/*/*/{results_subdir}/{filename_pattern}")
+            if p.suffix.lower() in (".csv", ".parquet")
+        )
+    else:
+        logger.info("Suche %s im ganzen Baum unter %s (rglob, kann bei grossen Baeumen dauern) ...", filename_pattern, data_root)
+        all_files = sorted(
+            p for p in data_root.rglob(filename_pattern)
+            if p.suffix.lower() in (".csv", ".parquet")
+        )
+    logger.info("Suche fertig: %d Dateien in %.1f s.", len(all_files), time.perf_counter() - t0)
 
     if not all_files:
         raise FileNotFoundError(
@@ -190,8 +204,12 @@ def load_all_results(
     logger.info("  Oszillationsfrequenzen: %s", sorted({d.osc_freq for d in discovered if d.osc_freq}))
 
     frames = []
-    for d in discovered:
+    t0 = time.perf_counter()
+    for i, d in enumerate(discovered, 1):
         df = _read_one(d.path)
+        if i == 1 or i % 10 == 0 or i == len(discovered):
+            logger.info("  gelesen %d/%d (%s, %d Zeilen, %.0f s)", i, len(discovered), Path(d.path).parent.parent.name
+                        if Path(d.path).parent.parent.name else d.path, len(df), time.perf_counter() - t0)
         df["biosensor"] = d.biosensor
         df["osc_type"] = d.osc_type
         df["osc_freq"] = d.osc_freq
