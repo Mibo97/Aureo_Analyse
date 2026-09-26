@@ -68,9 +68,13 @@ DATA_ROOT: Path = _from_env_or("AUREO_DATA_ROOT", DATA_ROOT_PRESETS[ACTIVE_PRESE
 #   "v11": <exp>/03_results/Combined_Results.csv (cellpose_pipeline_v11.py), Ausgabe nach analysis_output
 #   "v11_retracked": <exp>/03_results/Combined_Results_retracked.csv (imaging/track_labels.py --batch),
 #          Ausgabe nach analysis_output_retracked
-# Die Umgebungsvariablen AUREO_RESULTS_SUBDIR / AUREO_RESULTS_PATTERN / AUREO_OUTPUT_DIR ueberschreiben das,
-# wenn gesetzt; normalerweise reicht dieser Schalter.
+# Nur dieser Schalter bestimmt Ordner und Dateimuster. (Eine Umgebungsvariable AUREO_RESULTS_VERSION kann ihn
+# fuer einen einzelnen Aufruf ersetzen und wird dann im Log gemeldet; AUREO_RESULTS_SUBDIR / AUREO_RESULTS_PATTERN
+# aus frueheren Versionen werden NICHT mehr gelesen - ein vergessenes 'export' kann so nichts mehr verstellen.)
 RESULTS_VERSION = "v12"
+_env_version = os.environ.get("AUREO_RESULTS_VERSION", "").strip()
+if _env_version:
+    RESULTS_VERSION = _env_version
 
 _RESULTS_VERSIONS = {
     "v12": ("03_results_v12", "Combined_Results.*", "analysis_output_v12"),
@@ -82,9 +86,9 @@ if RESULTS_VERSION not in _RESULTS_VERSIONS:
 _subdir, _pattern, _outname = _RESULTS_VERSIONS[RESULTS_VERSION]
 
 OUTPUT_DIR: Path = _from_env_or("AUREO_OUTPUT_DIR", DATA_ROOT.parent / _outname)
-# Ergebnisordner je Experiment und Dateimuster (siehe RESULTS_VERSION); leerer Ordnername = jeder Ordner.
-RESULTS_SUBDIR: str = os.environ.get("AUREO_RESULTS_SUBDIR", _subdir)
-RESULTS_PATTERN: str = os.environ.get("AUREO_RESULTS_PATTERN", _pattern)
+# Ergebnisordner je Experiment und Dateimuster - folgen RESULTS_VERSION.
+RESULTS_SUBDIR: str = _subdir
+RESULTS_PATTERN: str = _pattern
 
 # Der Parquet-Cache liegt bewusst NEBEN dem Output-Ordner, nicht darin: so ueberlebt er ein Loeschen des
 # Output-Ordners. Er traegt Ordner und Muster im Namen, damit v11-, re-getrackte und v12-Tabellen nie vermischt werden.
@@ -415,6 +419,13 @@ def log_active_configuration() -> None:
     logger.info("  CACHE_PATH:       %s", CACHE_PATH)
     logger.info("  MIN_PER_FRAME:    %.1f min", MIN_PER_FRAME)
     logger.info("  RESULTS_VERSION:  %s -> Ordner %s, Muster %s", RESULTS_VERSION, RESULTS_SUBDIR or "alle", RESULTS_PATTERN)
+    for var in ("AUREO_DATA_ROOT", "AUREO_OUTPUT_DIR", "AUREO_RESULTS_VERSION", "AUREO_FORCE_RELOAD"):
+        if os.environ.get(var):
+            logger.warning("  Umgebungsvariable %s=%s ueberschreibt config.py (unset %s, falls nicht gewollt)",
+                           var, os.environ[var], var)
+    for var in ("AUREO_RESULTS_SUBDIR", "AUREO_RESULTS_PATTERN"):
+        if os.environ.get(var):
+            logger.warning("  Umgebungsvariable %s ist gesetzt, wird aber nicht mehr gelesen (RESULTS_VERSION entscheidet).", var)
     logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
     logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
     logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
