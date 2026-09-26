@@ -106,7 +106,11 @@ OUTPUT_DIR_PKO: Path = OUTPUT_DIR / "pko"
 
 # Cache ignorieren und die Ergebnisdateien neu einlesen: AUREO_FORCE_RELOAD=1 (oder hier True). Noetig, wenn
 # seit dem letzten Lauf Tabellen dazugekommen oder neu geschrieben wurden (z.B. Segmentierung war noch nicht fertig).
-FORCE_RELOAD = os.environ.get("AUREO_FORCE_RELOAD", "0").strip().lower() in ("1", "true", "yes")
+# Normalerweise unnoetig: der Loader prueft selbst, ob die Quelldateien seit dem Cache dazugekommen oder
+# neu geschrieben wurden (data_loading._fingerprint), und liest dann neu. True erzwingt das Neu-Einlesen.
+FORCE_RELOAD = False
+if os.environ.get("AUREO_FORCE_RELOAD", "").strip().lower() in ("1", "true", "yes"):
+    FORCE_RELOAD = True
 
 
 # ==============================================================================

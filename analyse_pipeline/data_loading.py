@@ -25,6 +25,8 @@ unbemerkt verloren geht.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -116,6 +118,18 @@ def discover_result_files(
     return discovered
 
 
+def _fingerprint(discovered: list[DiscoveredFile]) -> str:
+    """Kennung der Quelldateien: Pfad, Groesse, Aenderungszeit - aendert sich, sobald eine Datei dazukommt,
+    fehlt oder neu geschrieben wurde."""
+    parts = []
+    for d in sorted(discovered, key=lambda d: str(d.path)):
+        try:
+            st = Path(d.path).stat(); parts.append(f"{d.path}|{st.st_size}|{int(st.st_mtime)}")
+        except OSError:
+            parts.append(f"{d.path}|missing")
+    return hashlib.sha1("\n".join(parts).encode()).hexdigest()
+
+
 def _read_one(path: Path) -> pd.DataFrame:
     if path.suffix.lower() == ".parquet":
         return pd.read_parquet(path)
@@ -151,11 +165,24 @@ def load_all_results(
     """
     cache_path = Path(cache_path) if cache_path else None
 
-    if cache_path and cache_path.exists() and not force_reload:
-        logger.info("Lade aus Cache: %s", cache_path)
-        return pd.read_parquet(cache_path)
-
     discovered = discover_result_files(data_root, filename_pattern, results_subdir=results_subdir)
+    # Der Cache gilt nur fuer genau diese Dateien in genau diesem Zustand: Pfade, Groessen und
+    # Aenderungszeiten stehen in <cache>.meta.json. Kommt eine Tabelle dazu oder wird eine neu
+    # geschrieben, liest der Loader von selbst neu - FORCE_RELOAD ist dann nicht noetig.
+    fingerprint = _fingerprint(discovered)
+    if cache_path and cache_path.exists() and not force_reload:
+        meta_path = cache_path.with_suffix(cache_path.suffix + ".meta.json")
+        stored = None
+        if meta_path.exists():
+            try:
+                stored = json.loads(meta_path.read_text()).get("fingerprint")
+            except Exception:  # noqa: BLE001
+                stored = None
+        if stored == fingerprint:
+            logger.info("Lade aus Cache (Quelldateien unveraendert): %s", cache_path)
+            return pd.read_parquet(cache_path)
+        logger.info("Cache %s passt nicht zu den %d gefundenen Dateien (neu, geaendert oder ohne Kennung) - "
+                    "Tabellen werden neu eingelesen.", cache_path.name, len(discovered))
 
     logger.info("Gefundene Ergebnisdateien: %d", len(discovered))
     logger.info("  Biosensoren:            %s", sorted({d.biosensor for d in discovered if d.biosensor}))
@@ -199,7 +226,10 @@ def load_all_results(
     if cache_path:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         combined.to_parquet(cache_path, index=False)
-        logger.info("Cache geschrieben: %s", cache_path)
+        meta_path = cache_path.with_suffix(cache_path.suffix + ".meta.json")
+        meta_path.write_text(json.dumps({"fingerprint": fingerprint, "n_files": len(discovered),
+                                         "files": [str(d.path) for d in discovered]}, indent=1))
+        logger.info("Cache geschrieben: %s (%d Quelldateien, Kennung in %s)", cache_path, len(discovered), meta_path.name)
 
     return combined
 
