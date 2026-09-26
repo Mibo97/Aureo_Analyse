@@ -97,7 +97,9 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 > Re-Linker auf der Tabelle noch retten kann und welche Optionen es gibt — steht in
 > [`docs/tracking_diagnosis.md`](docs/tracking_diagnosis.md); `analyse_pipeline/diagnose_tracking.py`
 > reproduziert die Zahlen aus einer Combined_Results-Datei.
-> Auf re-getrackten Tabellen (`AUREO_RESULTS_PATTERN="Combined_Results_retracked.*"`) kommt die Mutter einer
+> Welche Tabellen die Analyse liest, steht in `analyse_pipeline/config.py`: `RESULTS_VERSION = "v12"` (Standard,
+> `03_results_v12`, Ausgabe `analysis_output_v12`), `"v11"` oder `"v11_retracked"`.
+> Auf re-getrackten Tabellen (`v11_retracked`) kommt die Mutter einer
 > Knospe aus der Maskenberuehrung (`lineage.classify_mother_bud_measured`, Spalte `method`), die manuelle
 > QC-Tabelle wird auf die neuen IDs uebersetzt (`qc_exclusions_retracked.csv`), und `cell_filter.py`
 > entfernt Spuren, die keine Zellen sind (`00_cell_filter.csv`). Ergebnisse: `docs/tracking_plan.md`, 6d.

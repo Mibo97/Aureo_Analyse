@@ -80,11 +80,13 @@ tail -f logs/segment_all.log
 
 # 4. Analyse (Umgebung: Analyse) auf den v12-Tabellen - erst wenn alle Experimente ihre Combined_Results.csv haben:
 find /prj/microfluidic/ma_mimorde/Data -path '*03_results_v12/Combined_Results.csv' | wc -l
-export AUREO_RESULTS_SUBDIR=03_results_v12
-export AUREO_OUTPUT_DIR=/prj/microfluidic/ma_mimorde/analysis_output_v12   # eigener Ordner, die v11-Auswertung bleibt
-python analyse_pipeline/run_analysis.py 2>&1 | tee logs/analysis_v12.log
-#    Der Cache liegt je Ergebnisordner getrennt (combined_results_cache_03_results_v12_*.parquet). Steht im Log
-#    'Lade aus Cache', obwohl neue Tabellen da sind: AUREO_FORCE_RELOAD=1 davorsetzen oder die Cache-Datei loeschen.
+#    In analyse_pipeline/config.py: ACTIVE_PRESET wie gewohnt ("cluster" oder "local") und RESULTS_VERSION = "v12"
+#    (Standard). Dann ganz normal, ohne Umgebungsvariablen; die Ausgabe geht nach <Data>/../analysis_output_v12,
+#    die v11-Auswertung in analysis_output bleibt. RESULTS_VERSION = "v11" stellt das alte Verhalten wieder her.
+cd analyse_pipeline
+python run_analysis.py
+#    Der Cache liegt je Version getrennt (combined_results_cache_03_results_v12_*.parquet). Steht im Log
+#    'Lade aus Cache', obwohl neue Tabellen da sind: die Cache-Datei loeschen (oder AUREO_FORCE_RELOAD=1).
 ```
 
 Die v11-Ordner (`02_processed`, `03_results`) bleiben unangetastet. Die manuelle QC-Tabelle bezieht sich
