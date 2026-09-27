@@ -93,6 +93,24 @@ Die v11-Ordner (`02_processed`, `03_results`) bleiben unangetastet. Die manuelle
 auf v11-IDs und wird auf v12-Tabellen nicht angewendet (die Analyse meldet das); die Zeilen mit
 `at_border`, `below_min_area`, `above_max_area` werden in der Analyse entfernt, die Spuren bleiben.
 
+## Git auf dem Cluster: aktuellen Stand holen, Konflikte loswerden
+
+Der Stand auf GitHub (Branch `claude/adoring-allen-70cicr`, nach dem Merge auch `main`) ist immer die Wahrheit;
+lokale Aenderungen an verfolgten Dateien fuehren beim naechsten `git pull` zu Konflikten. Wenn `git pull` mit
+"nicht zusammengefuehrte Dateien" oder "unaufgeloester Konflikt" abbricht:
+
+```bash
+cd /prj/microfluidic/ma_mimorde/01_Processing/Aureo_Analyse
+git merge --abort 2>/dev/null; git rebase --abort 2>/dev/null   # eines davon meldet "nichts abzubrechen" - egal
+git fetch origin
+git checkout -f -B claude/adoring-allen-70cicr origin/claude/adoring-allen-70cicr
+git log --oneline -1                                            # muss den letzten Commit von GitHub zeigen
+```
+
+Das setzt alle verfolgten Dateien auf den GitHub-Stand; eigene Ordner wie `logs/`, `manifests/`, `sweep_out/`
+bleiben stehen. Eigene Aenderungen an `analyse_pipeline/config.py` vorher sichern (`cp` an einen anderen Ort)
+oder besser direkt auf GitHub hochladen, dann kommen sie beim naechsten Pull ohne Konflikt zurueck.
+
 ## Mit sbatch (optional, wenn `sbatch` vorhanden ist)
 
 `imaging/slurm/*.sbatch` sind dieselben Schritte als Batch-Jobs (Probe, Sweep, Re-Tracking als
