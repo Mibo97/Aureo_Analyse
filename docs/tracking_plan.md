@@ -342,6 +342,47 @@ Earlier note, now done: the QC batch re-tracked on the cluster (`track.sbatch` o
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
 setting is chosen.
 
+## 6h. Checkpoint 6: the complete v12 run (565 chambers) and the dead-cell rule
+
+All 565 chambers, the 18 static ones included, are through pipeline v12 and the analysis
+(`analysis_output_v12`, `RESULTS_VERSION = "v12"`, no environment variables). The numbers of checkpoint 5
+barely moved with the last 18 movies: new tracks per object-frame 0.070 in the median chamber (q10 0.048,
+q90 0.111; Glc 0.080, pH 0.057), median track 5 frames, 78 % of the object-frames in tracks of 10 frames or
+more; the cell filter removes 34 % of the tracks and 6.2 % of the object-frames (median chamber 5.3 %,
+BSG/pH/6 52 %); 11,351 budding events in 530 chambers, 74 % of them with the mother from the mask contact;
+control-trend verdicts 23 no trend / 20 structure effect / 3 period effect / 2 not robust. `docs/data_story.md`
+is rewritten on these tables; the earlier numbers stay only where they are marked as v11.
+
+Two things changed on the analysis side with the measured parent:
+
+- **The size criterion is active.** In the v11 tables the ratio of bud area to mother area at first detection
+  had one broad mode and the criterion was switched off. With the parent from the mask contact the
+  distribution is bimodal (modes 0.07 and 0.45, antimode 0.32, valley depth 0.25) and `bud_size.py` applies
+  the global threshold: 2,160 of 13,938 candidates (15.5 %) are rejected as mother-sized objects that appear
+  next to a mother, washed-in cells and masks split in two. Per strain and oscillation type the valley is too
+  shallow in 11 of 12 groups, so the one global threshold stays (`20_bud_size_threshold.csv`).
+- **Dead cells and debris lose their phase contrast.** On the two v12 tables uploaded for this purpose,
+  BSG/pH/6 (debris-rich by eye) and WT/pH/6, the track median of `phase_std / phase_mean` is bimodal in
+  BSG/pH/6 (modes 0.05 and 0.28, valley 0.11–0.16, 71 % of the tracks in the low mode) and unimodal at
+  0.2–0.3 in WT/pH/6; objects with a median area of 3,000 px² or more never fall below 0.18 (5 % quantile) in
+  either table, although the illumination differs by a factor of 1.8 between the two experiments (the ratio
+  cancels it). Most low-contrast objects are already removed by the size rule; what the contrast rule adds
+  is the persistent debris that passes it: on BSG/pH/6 44 tracks with 1,432 object-frames, 20 % of the
+  object-frames that survive the size rule, round (circularity 0.91), shrinking (area ratio last/first 0.74),
+  1,300–1,700 px², tracked for a median of 31 frames, 70 % of them with a touching "bud" that the lineage
+  would have counted; concentrated in three chambers (NegCtrl Rep1/Rep2, Osc Rep3 with 27 % of its frames).
+  On WT/pH/6 it removes 4 tracks and 30 object-frames (0.1 %). Implemented as a third rule of
+  `cell_filter.py`: `CELL_MIN_PHASE_CV = 0.12`, applied only when the phase columns exist, reported per
+  chamber in `00_cell_filter.csv` (`n_tracks_removed_by_contrast`, `n_object_frames_removed_by_contrast`).
+  A chamber whose objects all sit below the threshold (all dead, or focus lost) drops out entirely, which the
+  report makes visible. The v12 outputs quoted in the data story predate the rule; the next analysis run
+  applies it. Physically the rule reads the loss of the refractive-index difference of a lysed cell; a dying
+  cell that keeps its contrast is not caught, and nothing in these tables distinguishes dead from dormant
+  cells that still have contrast.
+
+Not yet re-run on v12: `validate_lineage.py` (the detection-rate and ambiguity figures of the data story are
+from the v11 run and marked so).
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

@@ -102,7 +102,9 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 > Auf re-getrackten Tabellen (`v11_retracked`) kommt die Mutter einer
 > Knospe aus der Maskenberuehrung (`lineage.classify_mother_bud_measured`, Spalte `method`), die manuelle
 > QC-Tabelle wird auf die neuen IDs uebersetzt (`qc_exclusions_retracked.csv`), und `cell_filter.py`
-> entfernt Spuren, die keine Zellen sind (`00_cell_filter.csv`). Ergebnisse: `docs/tracking_plan.md`, 6d.
+> entfernt Spuren, die keine Zellen sind (`00_cell_filter.csv`): zu kurz, zu klein, und auf v12-Tabellen
+> ohne Phasenkontrast (tote Zellen und Truemmer, `CELL_MIN_PHASE_CV`). Ergebnisse: `docs/tracking_plan.md`,
+> 6d-6h; die Zahlen des vollen v12-Laufs stehen in `docs/data_story.md`.
 > Werkzeuge zum Re-Tracking aus den gespeicherten Masken, zum Segmentierungs-Sweep und fuer
 > Slurm-Array-Jobs: [`imaging/README.md`](imaging/README.md); Plan: [`docs/tracking_plan.md`](docs/tracking_plan.md).
 

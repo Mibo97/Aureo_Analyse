@@ -266,6 +266,18 @@ LINEAGE_PARAMS = LineageParams(
 CELL_MIN_FRAMES = 2
 CELL_MIN_MAX_AREA_PX = 1500.0
 
+# Kontrastregel (nur Tabellen der Pipeline v12 mit phase_mean/phase_std): tote Zellen und
+# Zelltruemmer verlieren im Phasenkontrast ihren Kontrast. Je Spur der Median von
+# phase_std / phase_mean. Auf dem truemmerreichen Chip BSG/pH/6 ist er zweigipflig (Moden 0.05
+# und 0.28, Tal 0.11-0.16), auf WT/pH/6 eingipflig bei 0.2-0.3; Zellen ab 3,000 px2 liegen in
+# beiden nie unter 0.18 (5 %-Quantil). Schwelle 0.12: entfernt auf BSG/pH/6 ZUSAETZLICH zur
+# Groessenregel 44 Spuren mit 20 % der Objekt-Frames (runde, schrumpfende Objekte von
+# 1,300-1,700 px2 ueber ~30 Frames), auf WT/pH/6 4 Spuren (0.1 %). None = aus. Bericht:
+# 00_cell_filter.csv, Spalten n_tracks_removed_by_contrast / n_object_frames_removed_by_contrast.
+# Eine Kammer, deren Zellen ALLE unter der Schwelle liegen (alles tot oder Fokus verloren), faellt
+# damit ganz aus - am Bericht sichtbar.
+CELL_MIN_PHASE_CV: float | None = 0.12
+
 # Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): eine neu
 # auftauchende Zelle zaehlt nur als Knospe, wenn ihre Flaeche beim ersten
 # Auftreten hoechstens diesen Anteil der Mutterflaeche hat; alles darueber
@@ -389,7 +401,8 @@ METHOD_CAVEATS: list[str] = [
     "Frame, und die Events sind Fragment-Statistik (00_track_fragmentation.csv). Vorher werden "
     "eindeutige Tracking-Luecken automatisch geschlossen (00_track_relinks.csv).",
     "ZELLFILTER: eine Spur zaehlt nur als Zelle mit >= CELL_MIN_FRAMES Frames und groesster Flaeche "
-    ">= CELL_MIN_MAX_AREA_PX (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
+    ">= CELL_MIN_MAX_AREA_PX sowie (Pipeline v12) Median phase_std/phase_mean >= CELL_MIN_PHASE_CV, "
+    "tote Zellen und Truemmer haben keinen Phasenkontrast (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
     "fallen so aus allen Readouts, nach dem manuellen QC.",
     "GEMESSENE ELTERNSCHAFT: auf re-getrackten Tabellen (AUREO_RESULTS_PATTERN=Combined_Results_retracked.*, "
     "imaging/track_labels.py) kommt die Mutter einer Knospe aus der Maskenberuehrung beim ersten Auftauchen "
@@ -431,7 +444,9 @@ def log_active_configuration() -> None:
         if os.environ.get(var):
             logger.warning("  Umgebungsvariable %s ist gesetzt, wird aber nicht mehr gelesen (RESULTS_VERSION entscheidet).", var)
     logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
-    logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+    logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2, Kontrast (phase_std/phase_mean) >= %s",
+                CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX,
+                "aus" if CELL_MIN_PHASE_CV is None else f"{CELL_MIN_PHASE_CV:.2f} (nur v12-Tabellen)")
     logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
                 LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
     if OSC_FREQ_IS_PERIOD_IN_MINUTES:
