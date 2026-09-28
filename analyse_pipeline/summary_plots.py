@@ -243,8 +243,12 @@ def plot_point_errorbar(
     dodge_span = 0.5
     dodge_step = dodge_span / n_series if n_series > 0 else 0.0
 
+    x_values_all = x_values
     for ax, facet in zip(axes, facets):
         sub = df[df[facet_col] == facet] if facet_col and facet_col in df.columns else df
+        # x-Kategorien je Facette: nur die, die in DIESER Facette vorkommen (keine leeren Ticks).
+        present_f = set(sub[x_col].dropna().unique())
+        x_values = [v for v in x_values_all if v in present_f] or x_values_all
         series_idx = 0
         for c in colors:
             color_df = sub[sub[color_col] == c] if has_color else sub

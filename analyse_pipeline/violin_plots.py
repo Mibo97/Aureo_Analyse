@@ -196,7 +196,15 @@ def plot_panel_a(
 
     facets = sorted(cells[facet_col].dropna().unique())
     groups = group_order if group_order is not None else sorted(cells[group_col].dropna().unique())
-    pairs = list(itertools.combinations(groups, 2))
+    if group_col == "biosensor":
+        from plot_style import ordered_strains
+        groups = ordered_strains(groups)
+    # Nur die Paare gegen den Wildtyp (bzw. Nachbarn, wenn es keinen WT gibt): zehn Klammern ueber fuenf
+    # Violinen drueckten die Verteilungen ins untere Drittel der Abbildung.
+    if "WT" in groups and len(groups) > 2:
+        pairs = [(g, "WT") for g in groups if g != "WT"]
+    else:
+        pairs = list(zip(groups[:-1], groups[1:])) if len(groups) > 2 else list(itertools.combinations(groups, 2))
 
     fig, axes = plt.subplots(n_panels, len(facets), figsize=(2.8 * len(facets) + 0.4, 3.0 * n_panels), squeeze=False)
 

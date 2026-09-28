@@ -442,6 +442,13 @@ only 83, 28, 77 and 19 frames after the contrast rule, two without any event: th
 stands); W65 0.11 and 0.14. PKO famine controls 0.32 to 0.44, feast controls 0.05 to 0.17.
 `docs/data_story.md` carries these numbers (2.8, 4, 5, 7).
 
+The restyled figures were checked on the real data (172 PDFs of this run). Fixed after that check: a bracket
+score beyond the axis is drawn as a triangle at the panel edge with its value printed instead of a line leaving
+the panel; the Spearman text sits in the panel title, not on the data; the violin figure compares each strain
+against WT only (four brackets instead of ten); the point figures and the validation figure show only the
+periods present in each facet; the size-criterion figure keeps its group legend below the panels; the sensor
+time course keeps its "2 h" mark inside the axes; the sparse-window figure carries a strain legend.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

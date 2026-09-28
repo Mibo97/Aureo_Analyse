@@ -59,6 +59,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Sequence
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
@@ -692,15 +693,28 @@ def plot_endpoint_vs_period(
             bad = sc[sc["bracket_degenerate"]]
             ax2.axhline(0, color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES["NegCtrl"], zorder=1)
             ax2.axhline(1, color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES["PosCtrl"], zorder=1)
+            y_lo, y_hi = -0.3, 1.3
             if not good.empty:
-                ax2.plot(good["_period"], good["value"], marker="o", markersize=5.5, linewidth=1.4, color=color,
+                # Werte jenseits der Achse (Oszillation ausserhalb des Kontroll-Brackets) an den Rand
+                # geklemmt und als Pfeilspitze gezeichnet, statt die Linie aus dem Panel laufen zu lassen.
+                inside = good[(good["value"] >= y_lo) & (good["value"] <= y_hi)]
+                above = good[good["value"] > y_hi]
+                below = good[good["value"] < y_lo]
+                ax2.plot(inside["_period"], inside["value"], marker="o", markersize=5.5, linewidth=1.4, color=color,
                          markerfacecolor=color, markeredgecolor=edge_color(color), markeredgewidth=0.8, zorder=3)
+                for part, y, mk in ((above, y_hi - 0.05, "^"), (below, y_lo + 0.05, "v")):
+                    if not part.empty:
+                        ax2.scatter(part["_period"], np.full(len(part), y), marker=mk, s=40, facecolor=color,
+                                    edgecolor=edge_color(color), linewidth=0.8, zorder=3)
+                        for _, row in part.iterrows():
+                            ax2.annotate(f"{row['value']:.1f}", (row["_period"], y), xytext=(0, -9 if mk == "^" else 9),
+                                         textcoords="offset points", ha="center", va="center", fontsize=6.5, color=INK_SOFT)
             if not bad.empty:
                 any_degenerate = True
                 ax2.scatter(bad["_period"], np.full(len(bad), 0.5), marker="o", s=34, facecolor=SURFACE,
                             edgecolor=edge_color(color), linewidth=0.9, zorder=3)
             _log_period_axis(ax2, periods_all)
-            ax2.set_ylim(-0.3, 1.3)
+            ax2.set_ylim(y_lo, y_hi)
             ax2.set_xlabel("feast/famine cycle period [min]")
             if j == 0:
                 ax2.set_ylabel("bracket score\n0 = famine control, 1 = feast control")
@@ -717,7 +731,9 @@ def plot_endpoint_vs_period(
     if any_degenerate:
         handles.append(Line2D([], [], marker="o", linestyle="", markersize=6, markerfacecolor=SURFACE,
                               markeredgecolor=INK_SOFT, label="bracket undefined (controls do not separate)"))
-    legend_below(fig, handles, ncol=3, y=0.0)
+        handles.append(Line2D([], [], marker="^", linestyle="", markersize=6, markerfacecolor=INK_SOFT,
+                              markeredgecolor=INK_SOFT, label="score beyond the axis (value printed)"))
+    legend_below(fig, handles, ncol=3 if len(strains) >= 3 else 2, y=0.0)
     if title:
         fig.suptitle(title, fontsize=9.5, y=1.0)
     finish(fig, out_path, logger)
@@ -734,6 +750,7 @@ def _log_period_axis(ax, periods) -> None:
 
 
 def _annotate_trend(ax, trend, strain, value_col) -> None:
+    """Spearman der Facette in die Titelzeile schreiben (nicht ueber die Daten)."""
     if trend is None or trend.empty:
         return
     mask = pd.Series(True, index=trend.index)
@@ -743,8 +760,10 @@ def _annotate_trend(ax, trend, strain, value_col) -> None:
     hit = trend[mask]
     if len(hit) == 1 and pd.notna(hit.iloc[0]["spearman_rho"]):
         rho, p, n = hit.iloc[0]["spearman_rho"], hit.iloc[0]["p_value"], int(hit.iloc[0].get("n_chips", 0))
-        ax.text(0.03, 0.97, f"ρ = {rho:+.2f}, p = {p:.2f}, n = {n}", transform=ax.transAxes,
-                va="top", ha="left", fontsize=7.5, color=INK_SOFT, zorder=6,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor=SURFACE, edgecolor="none", alpha=0.85))
+        text = f"ρ = {rho:+.2f}, p = {p:.2f}, n = {n}"
+        title = ax.get_title(loc="left")
+        ax.set_title((title + "\n" if title else "") + text, loc="left",
+                     fontsize=mpl.rcParams["axes.titlesize"] - 1 if not title else mpl.rcParams["axes.titlesize"],
+                     color=INK_SOFT if not title else INK)
 
 

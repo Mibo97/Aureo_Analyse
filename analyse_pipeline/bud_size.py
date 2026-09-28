@@ -311,7 +311,7 @@ def plot_bud_size_distribution(
         ax.plot([], [], " ", label="no size filter applied (not bimodal)")
     ax.set_title("all branches pooled", loc="left")
     _format_axis(ax, result)
-    ax.legend(fontsize=8, loc="upper left")
+    ax.legend(fontsize=7.5, loc="upper right")
 
     cols = [c for c in group_cols if c in candidates.columns]
     n_lines = 0
@@ -333,7 +333,9 @@ def plot_bud_size_distribution(
     ax2.set_title("per " + "/".join(cols) if cols else "per group", loc="left")
     _format_axis(ax2, result)
     if n_lines:
-        ax2.legend(fontsize=8, loc="upper left")
+        from plot_style import legend_below
+        h, l = ax2.get_legend_handles_labels()
+        legend_below(fig, h, l, ncol=min(4, max(1, (n_lines + 2) // 3)), y=0.0)
     else:
         ax2.text(0.5, 0.5, "no group with >= 20 candidates", ha="center", va="center",
                  transform=ax2.transAxes, fontsize=9, color="0.4")

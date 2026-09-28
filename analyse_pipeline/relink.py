@@ -303,4 +303,7 @@ def plot_lineage_window(cells: pd.DataFrame, window: pd.DataFrame, out_path, max
         panel_title(ax2, f"window length, {n_ok} of {len(window)} chambers usable")
         ax2.legend()
     ax2.set_xlabel("frames in the sparse window"); ax2.set_ylabel("chambers")
+    if strain_of:
+        from plot_style import legend_below, strain_handles
+        legend_below(fig, strain_handles(set(strain_of.values())), ncol=6, y=0.0)
     finish(fig, out_path)

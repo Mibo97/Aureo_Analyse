@@ -133,8 +133,8 @@ def plot_sensor_control_timeseries(
     if preconditioning_end_min is not None:
         end_h = _minutes_to_hours(preconditioning_end_min)
         ax.axvline(end_h, color=INK_SOFT, linestyle="--", linewidth=0.8)
-        ax.text(end_h, 1.01, f"{end_h:.0f} h", transform=ax.get_xaxis_transform(),
-                ha="center", va="bottom", fontsize=7.5, color=INK_SOFT)
+        ax.text(end_h, 0.97, f" {end_h:.0f} h", transform=ax.get_xaxis_transform(),
+                ha="left", va="top", fontsize=7.5, color=INK_SOFT)
     ax.set_xlabel("time [h]")
     ax.set_ylabel(f"{sensor_label} ratio (median per chamber)")
     panel_title(ax, f"{sensor_label}: control time course (thin = chambers, thick = median, band = IQR)")

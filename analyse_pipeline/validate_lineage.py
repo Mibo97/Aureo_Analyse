@@ -522,7 +522,9 @@ def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
     has_strain = "biosensor" in per_chamber.columns
     for ax, facet in zip(axes, facets):
         sub = per_chamber[per_chamber[facet_col] == facet] if facet_col else per_chamber
-        for x, freq in enumerate(order):
+        present_f = set(sub["osc_freq"].dropna().unique())
+        order_f = [v for v in order if v in present_f]   # keine leeren Ticks fremder Zweige (statisch in Glc/pH)
+        for x, freq in enumerate(order_f):
             part = sub[sub["osc_freq"] == freq].dropna(subset=["assignment_rate"])
             if part.empty:
                 continue
@@ -530,10 +532,10 @@ def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
             ax.scatter(np.full(len(part), x) + rng.uniform(-.14, .14, len(part)), part["assignment_rate"],
                        s=22, alpha=.8, c=colors, edgecolor="white", linewidth=.4, zorder=3)
             ax.plot([x - .2, x + .2], [part["assignment_rate"].median()] * 2, color=INK, linewidth=1.6, zorder=4)
-        ax.set_xticks(range(len(order)))
-        ax.set_xticklabels([str(o) for o in order], rotation=30 if len(order) > 4 else 0)
+        ax.set_xticks(range(len(order_f)))
+        ax.set_xticklabels([str(o) for o in order_f], rotation=30 if len(order_f) > 4 else 0)
         ax.set_ylim(0, 1.02)
-        ax.set_xlabel("cycle period [min]")
+        ax.set_xlabel("cycle period [min]" if str(facet).lower() != "static" else "chip family / medium")
         if ax is axes[0]:
             ax.set_ylabel("assigned bud candidates (fraction)")
         panel_title(ax, str(facet) if facet else "all data")
