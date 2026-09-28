@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-sns.set_theme(style="whitegrid", context="notebook")
+from plot_style import (CONTROL_LABELS, CONTROL_LINESTYLES, INK, INK_MUTED, INK_SOFT, SURFACE, edge_color, finish,
+                        legend_below, ordered_strains, panel_title, strain_color, strain_ramp, tint)
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 
 # Anzeigenamen für Spalten, die in generischen Plots direkt als Achsen-/
@@ -142,7 +145,8 @@ def plot_n_tracks_overview(
         x="osc_freq", y="n_tracks", hue="replicate",
         row="osc_type", col="biosensor",
         kind="bar", order=order, errorbar=None,
-        height=3.5, aspect=1.3, palette="Set2",
+        height=3.0, aspect=1.2,
+        palette=dict(zip(sorted(ov["replicate"].dropna().unique()), strain_ramp("_", ov["replicate"].nunique()))),
     )
     g.set_axis_labels("Oscillation frequency", "Number of tracks")
     g.set_titles("{row_name} | {col_name}")
@@ -204,19 +208,27 @@ def plot_n_tracks_overview(
         logger.info("Keine NegCtrl/PosCtrl in 'condition' gefunden - nur Experiment-Balken.")
         plot_df = exp_agg
 
-    # Farb- & Schraffur-Schema
+    # Farbe = Stamm; Kontrollart ueber die Fuellung: Oszillation voll, Feast-Kontrolle heller Ton,
+    # Famine-Kontrolle hohl (weiss mit Rand in der Stammfarbe).
     ctrl_types  = ["Experiment"] + sorted(plot_df["ctrl_type"].unique().tolist())
     ctrl_types  = list(dict.fromkeys(ctrl_types))  # Reihenfolge: Exp zuerst, dedup
     n_types     = len(ctrl_types)
-    palette     = dict(zip(ctrl_types, sns.color_palette("Set2", n_colors=n_types)))
-    hatch_map   = {ct: ("" if ct == "Experiment" else "///") for ct in ctrl_types}
+    ctrl_labels = {"Experiment": "oscillation chambers", "PosCtrl": CONTROL_LABELS["PosCtrl"],
+                   "NegCtrl": CONTROL_LABELS["NegCtrl"]}
 
-    biosensors = sorted(plot_df["biosensor"].dropna().unique())
+    def _fill(ct: str, color: str) -> dict:
+        if ct == "PosCtrl":
+            return dict(color=tint(color, 0.5), edgecolor=edge_color(color), linewidth=0.5)
+        if ct == "NegCtrl":
+            return dict(color=SURFACE, edgecolor=edge_color(color), linewidth=0.8)
+        return dict(color=color, edgecolor=edge_color(color), linewidth=0.5)
+
+    biosensors = ordered_strains(plot_df["biosensor"].dropna().unique())
     osc_types  = sorted(plot_df["osc_type"].dropna().unique())
 
     fig, axes = plt.subplots(
         len(osc_types), len(biosensors),
-        figsize=(4.5 * len(biosensors), 3.5 * len(osc_types)),
+        figsize=(3.0 * len(biosensors) + 0.4, 2.6 * len(osc_types) + 0.4),
         squeeze=False,
     )
 
@@ -247,40 +259,21 @@ def plot_n_tracks_overview(
                 ys    = ct_sub.loc[ct_sub["osc_freq"].isin(x_positions), "mean"].tolist()
                 yerrs = ct_sub.loc[ct_sub["osc_freq"].isin(x_positions), "std"].tolist()
 
-                bars = ax.bar(
-                    xs, ys, width=bar_width * 0.9,
-                    color=palette[ct], hatch=hatch_map[ct],
-                    label=ct, edgecolor="white", linewidth=0.5,
-                )
-                ax.errorbar(
-                    xs, ys, yerr=yerrs,
-                    fmt="none", color="black", capsize=3, linewidth=1,
-                )
+                ax.bar(xs, ys, width=bar_width * 0.9, **_fill(ct, strain_color(biosensor)))
+                ax.errorbar(xs, ys, yerr=yerrs, fmt="none", color=INK_SOFT, capsize=2, linewidth=0.8)
 
             ax.set_xticks(range(len(order)))
             ax.set_xticklabels(order, rotation=45, ha="right")
-            ax.set_title(f"{osc_type} | {biosensor}", fontsize=10)
+            panel_title(ax, f"{osc_type} | {biosensor}")
             if j == 0:
-                ax.set_ylabel("Number of tracks")
+                ax.set_ylabel("number of tracks")
             if i == len(osc_types) - 1:
-                ax.set_xlabel("Oscillation frequency")
+                ax.set_xlabel("cycle period [min]")
 
-            # Legende nur einmal pro Axes, Duplikate entfernen
-            handles, labels = ax.get_legend_handles_labels()
-            seen = {}
-            for h, l in zip(handles, labels):
-                seen.setdefault(l, h)
-            ax.legend(seen.values(), seen.keys(), fontsize=7, title="Group")
-
-    fig.suptitle(
-        "Number of tracks per frequency – aggregated over replicates\n"
-        "(bars = mean over replicates; error bars = ± SD; hatching = controls)",
-        y=1.02,
-    )
-    fig.tight_layout()
-    fig.savefig(out_summary, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_summary.name)
+    handles = [Patch(label=ctrl_labels.get(ct, ct), **_fill(ct, INK_SOFT)) for ct in ctrl_types]
+    legend_below(fig, handles, ncol=len(handles), y=0.0)
+    fig.suptitle("tracks per chamber, mean ± SD over the chambers of each structure", fontsize=9.5, y=1.0)
+    finish(fig, out_summary, logger)
 
 
 def _aggregate_over_replicates(
@@ -304,9 +297,10 @@ def _aggregate_over_replicates(
     return agg
 
 
+# Kontrollen als Referenzkurven in Tintengrau: Feast gestrichelt, Famine gepunktet (plot_style).
 CONTROL_REFERENCE_STYLE = {
-    "NegCtrl": {"color": "#4C78A8", "linestyle": (0, (5, 2))},
-    "PosCtrl": {"color": "#E45756", "linestyle": (0, (3, 1, 1, 1))},
+    "NegCtrl": {"color": INK_SOFT, "linestyle": CONTROL_LINESTYLES["NegCtrl"]},
+    "PosCtrl": {"color": INK_SOFT, "linestyle": CONTROL_LINESTYLES["PosCtrl"]},
 }
 
 
@@ -382,20 +376,26 @@ def plot_metric_over_time_by_frequency(
         logger.warning("plot_metric_over_time_by_frequency(): keine gültigen Werte für '%s' - Plot übersprungen.", value_col)
         return
 
-    biosensors = sorted(has_data["biosensor"].unique())
+    biosensors = ordered_strains(has_data["biosensor"].unique())
     osc_types = sorted(has_data[facet_col].dropna().unique())
     freqs = freq_order if freq_order is not None else natural_freq_sort(agg[x_col].dropna().unique())
-    palette = dict(zip(freqs, sns.color_palette("viridis", n_colors=len(freqs))))
+    # Periode = Hell-Dunkel-Rampe der Stammfarbe (kurz hell, lang dunkel); kategoriale x
+    # (statisch: Medium) = Linienstil in der Stammfarbe.
+    by_period = x_col == "osc_freq"
+    linestyles = ["-", "--", ":", "-."]
 
     fig, axes = plt.subplots(
         len(osc_types), len(biosensors),
-        figsize=(4.5 * len(biosensors), 3.5 * len(osc_types)),
+        figsize=(2.9 * len(biosensors) + 0.4, 2.6 * len(osc_types) + 0.4),
         squeeze=False, sharex=True,
     )
 
     for i, osc_type in enumerate(osc_types):
         for j, biosensor in enumerate(biosensors):
             ax = axes[i][j]
+            ramp = strain_ramp(biosensor, len(freqs)) if by_period else [strain_color(biosensor)] * len(freqs)
+            palette = dict(zip(freqs, ramp))
+            styles = dict(zip(freqs, ["-"] * len(freqs) if by_period else [linestyles[k % 4] for k in range(len(freqs))]))
 
             # Kontrollen zuerst und im Hintergrund (zorder), damit die
             # Oszillationskurven darüber liegen und lesbar bleiben.
@@ -406,11 +406,10 @@ def plot_metric_over_time_by_frequency(
                     rline = rsub[rsub["condition_type"] == ctype].sort_values("time_h")
                     if rline.empty:
                         continue
-                    ax.plot(rline["time_h"], rline["mean"], label=ctype, linewidth=1.9,
-                            zorder=1, **style)
+                    ax.plot(rline["time_h"], rline["mean"], linewidth=1.3, zorder=1, **style)
                     ax.fill_between(
                         rline["time_h"], rline["mean"] - rline["sem"], rline["mean"] + rline["sem"],
-                        color=style["color"], alpha=0.10, zorder=0,
+                        color=style["color"], alpha=0.08, lw=0, zorder=0,
                     )
 
             sub = agg[(agg[facet_col] == osc_type) & (agg["biosensor"] == biosensor)]
@@ -418,39 +417,30 @@ def plot_metric_over_time_by_frequency(
                 line = sub[sub[x_col] == freq].sort_values("time_h")
                 if line.empty:
                     continue
-                ax.plot(line["time_h"], line["mean"], label=str(freq), color=palette[freq], linewidth=1.6)
+                ax.plot(line["time_h"], line["mean"], color=palette[freq], linestyle=styles[freq], linewidth=1.4)
                 ax.fill_between(
                     line["time_h"], line["mean"] - line["sem"], line["mean"] + line["sem"],
-                    color=palette[freq], alpha=0.15,
+                    color=palette[freq], alpha=0.12, lw=0,
                 )
-            ax.set_title(f"{osc_type} | {biosensor}", fontsize=10)
+            panel_title(ax, f"{osc_type} | {biosensor}")
             if i == len(osc_types) - 1:
-                ax.set_xlabel("Time [h]")
+                ax.set_xlabel("time [h]")
             if j == 0:
                 ax.set_ylabel(ylabel or value_col)
 
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    # Perioden zuerst, Kontrollen hinten - die Kontrollen sind der Bezugsrahmen,
-    # nicht eine weitere Stufe der Dosis.
-    order = ([k for k in range(len(labels)) if labels[k] not in CONTROL_REFERENCE_STYLE]
-             + [k for k in range(len(labels)) if labels[k] in CONTROL_REFERENCE_STYLE])
-    handles = [handles[k] for k in order]
-    labels = [labels[k] for k in order]
-    legend_title = ("Cycle period [min]" if x_col == "osc_freq" else x_col) + \
-        ("  /  controls" if ref_agg is not None else "")
-    # -0.12 statt -0.05: mit den Kontrollen sind es bis zu 8 Legendeneinträge,
-    # und bei -0.05 lag die Legende auf den "Time [h]"-Achsenbeschriftungen.
-    if handles:
-        fig.legend(handles, labels, title=legend_title, loc="lower center",
-                   ncol=max(1, min(len(labels), 8)), bbox_to_anchor=(0.5, -0.12))
-    subtitle = f"(line = mean; band = ± SEM over {band_unit}"
-    subtitle += "; dashed = constant-medium controls)" if ref_agg is not None else ")"
-    by = "feast/famine cycle period" if x_col == "osc_freq" else x_col
-    fig.suptitle(f"{value_col} over time, by {by}\n{subtitle}", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    if by_period:
+        grey = dict(zip(freqs, strain_ramp("_", len(freqs))))
+        handles = [Line2D([], [], color=grey[f], linewidth=2, label=f"{f} min") for f in freqs]
+    else:
+        handles = [Line2D([], [], color=INK_SOFT, linewidth=1.6, linestyle=linestyles[k % 4], label=str(f))
+                   for k, f in enumerate(freqs)]
+    if ref_agg is not None:
+        handles += [Line2D([], [], color=INK_SOFT, linewidth=1.3, linestyle=CONTROL_LINESTYLES[ct],
+                           label=CONTROL_LABELS[ct]) for ct in ("PosCtrl", "NegCtrl")]
+    title = ("cycle period [min] (light = short, dark = long; hue = strain)" if by_period else x_col.replace("_", " "))
+    legend_below(fig, handles, ncol=min(len(handles), 8), y=0.0, title=title)
+    fig.suptitle(f"{ylabel or value_col} over time; band = ± SEM over {band_unit}", fontsize=9.5, y=1.0)
+    finish(fig, out_path, logger)
 
 
 def plot_morphology_scatter(
@@ -472,8 +462,9 @@ def plot_morphology_scatter(
         data=sample, x="area", y="eccentricity", hue="osc_freq",
         hue_order=natural_freq_sort(sample["osc_freq"].dropna().unique()),
         row="osc_type", col="biosensor",
-        kind="scatter", alpha=0.3, s=12, palette="viridis",
-        height=3.5, aspect=1.3,
+        kind="scatter", alpha=0.3, s=12,
+        palette=strain_ramp("_", sample["osc_freq"].nunique()),
+        height=3.0, aspect=1.2,
     )
     for ax in g.axes.flat:
         ax.set_xscale("log")
@@ -548,8 +539,8 @@ def plot_single_cell_trajectories(
                 continue
             for _, track in sub.groupby("cell_uid"):
                 track = track.sort_values("time_h")
-                ax.plot(track["time_h"], track[value_col], alpha=0.5, linewidth=0.6)
-            ax.set_title(f"{osc_type} | {freq} | {biosensor}", fontsize=8)
+                ax.plot(track["time_h"], track[value_col], alpha=0.45, linewidth=0.6, color=strain_color(biosensor))
+            panel_title(ax, f"{osc_type} | {freq} | {biosensor}")
             if i == len(osc_types) - 1:
                 ax.set_xlabel("Time [h]")
             if j == 0:

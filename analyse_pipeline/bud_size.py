@@ -271,7 +271,7 @@ def _format_axis(ax: plt.Axes, result: BudSizeThreshold) -> None:
     ax.set_ylabel(YLABEL)
     if np.isfinite(result.plausible_low) and np.isfinite(result.plausible_high):
         ax.axvspan(np.log10(result.plausible_low), np.log10(result.plausible_high),
-                   color="C3", alpha=0.05, lw=0)
+                   color="#bbbbbb", alpha=0.18, lw=0)
 
 
 def plot_bud_size_distribution(
@@ -288,7 +288,7 @@ def plot_bud_size_distribution(
     thr_label = (f"threshold {result.threshold:.2f} (antimode)" if result.source == "antimode"
                  else f"threshold {result.threshold:.2f} (fallback)")
 
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.3))
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.2, 3.0))
     if logx.size:
         bins = np.linspace(_GRID[0], _GRID[-1], 71)
         ax.hist(logx, bins=bins, density=True, color="0.8", edgecolor="white",
@@ -298,18 +298,18 @@ def plot_bud_size_distribution(
             # Dichte auf dem Fenster, auf den Anteil der Kandidaten im Fenster
             # skaliert, damit sie zum Histogramm ueber ALLE Kandidaten passt.
             dens = _density(logx_in, result.bw_factor) * (logx_in.size / logx.size)
-            ax.plot(_GRID, dens, color="C0", lw=2,
+            ax.plot(_GRID, dens, color="#444444", lw=1.6,
                     label="kernel density (critical bandwidth, dotted = window)")
             for peak, name in ((result.peak_low, "buds"), (result.peak_high, "washed in")):
                 if np.isfinite(peak):
                     i = int(np.argmin(np.abs(_GRID - np.log10(peak))))
                     ax.annotate(name, (_GRID[i], dens[i]), xytext=(0, 6), textcoords="offset points",
-                                ha="center", fontsize=8, color="C0")
+                                ha="center", fontsize=8, color="#444444")
     if has_threshold:
-        ax.axvline(thr_log, color="C3", ls="--", lw=1.5, label=thr_label)
+        ax.axvline(thr_log, color="#222222", ls="--", lw=1.2, label=thr_label)
     else:
         ax.plot([], [], " ", label="no size filter applied (not bimodal)")
-    ax.set_title("all branches pooled", fontsize=10)
+    ax.set_title("all branches pooled", loc="left")
     _format_axis(ax, result)
     ax.legend(fontsize=8, loc="upper left")
 
@@ -323,11 +323,14 @@ def plot_bud_size_distribution(
             factor = result.bw_factor if np.isfinite(result.bw_factor) else None
             d = stats.gaussian_kde(lx, bw_method=factor)(_GRID)
             keys = keys if isinstance(keys, tuple) else (keys,)
-            ax2.plot(_GRID, d, lw=1.5, label="/".join(map(str, keys)) + f" (n = {lx.size})")
+            from plot_style import strain_color
+            style = {"Glc": "-", "pH": "--"}.get(str(keys[1]) if len(keys) > 1 else "", ":")
+            ax2.plot(_GRID, d, lw=1.3, color=strain_color(keys[0]), linestyle=style,
+                     label="/".join(map(str, keys)) + f" (n = {lx.size})")
             n_lines += 1
     if has_threshold:
-        ax2.axvline(thr_log, color="C3", ls="--", lw=1.5)
-    ax2.set_title("per " + "/".join(cols) if cols else "per group", fontsize=10)
+        ax2.axvline(thr_log, color="#222222", ls="--", lw=1.2)
+    ax2.set_title("per " + "/".join(cols) if cols else "per group", loc="left")
     _format_axis(ax2, result)
     if n_lines:
         ax2.legend(fontsize=8, loc="upper left")
@@ -335,13 +338,9 @@ def plot_bud_size_distribution(
         ax2.text(0.5, 0.5, "no group with >= 20 candidates", ha="center", va="center",
                  transform=ax2.transAxes, fontsize=9, color="0.4")
 
-    fig.suptitle(
-        "Size criterion of the bud heuristic - threshold source: " + result.source,
-        fontsize=10,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=180)
-    plt.close(fig)
+    fig.suptitle("size criterion of the bud assignment, threshold source: " + result.source, fontsize=9.5, y=1.0)
+    from plot_style import finish
+    finish(fig, out_path)
 
 
 def run_bud_size_threshold(

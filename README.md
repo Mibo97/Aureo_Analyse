@@ -185,6 +185,8 @@ Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
 | `queen_controls.py` | PosCtrl-vs-NegCtrl-Validierung der Sensoren selbst |
 | `pko_comparison.py` | **WT gegen PKO**: Kammer-Übereinstimmung, Kontroll-Bracket, Zell-Ausbeute |
 | `analysis.py`, `summary_plots.py`, `violin_plots.py`, `mother_trajectories.py` | Plots & gemeinsame Helfer |
+| `plot_style.py` | EIN Aussehen fuer alle Abbildungen: Farbe = Stamm (`config.STRAIN_COLORS`), Kontrollarten als Marker/Fuellung, Perioden als Hell-Dunkel-Rampe, keine Erklaertexte in der Abbildung |
+| `growth_from_budding.py` | Spezifische Wachstumsrate der Population aus den Knospungen: Geburten je Zellstunde im Sparse-Phase-Fenster (`24_*`), daneben die Einwanderung (neue Tracks ohne Elternmaske) |
 | `inspect_lineage.py` | Interaktive Kalibrierung der Lineage-Parameter |
 | `validate_lineage.py` | **Quantitative** Validierung der Mutter/Bud-Heuristik (alle Kammern) |
 | `plot_qc_lineage_overlay.py` | **Visuelle** Validierung: Events ins QC-TIFF zeichnen (eine Kammer) |
@@ -202,7 +204,8 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
-| `50_` | Zusammenfassungstabelle; `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`) |
+| `24_` | Wachstumsrate aus Knospungen: `24_growth_from_budding_*` (µ_bud = Geburten je Zellstunde im Sparse-Phase-Fenster; dieselben Tabellen und dieselbe Abbildung wie `21_`), `24_immigration_*` (angespuelte Zellen je Zellstunde), `24_mu_bud_vs_mu_area.pdf` (Population gegen Einzelzelle). `11_specific_growth_rate*` bleibt als Interbud-Rate, ist aber keine Wachstumsrate (siehe `growth_from_budding.py`) |
+| `50_` | Zusammenfassungstabelle; `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`, `24_`) |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
 | `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |

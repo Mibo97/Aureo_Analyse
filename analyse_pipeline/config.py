@@ -162,10 +162,12 @@ STATIC_MEDIUM_ORDER = ["omlp", "ypd"]
 # Chip-Familien, bei denen ALLE 'replicate' auf EINEM Chip aus EINER Vorkultur
 # liegen: 'replicate' ist dort die Kammer, die Einheit ist der eine Chip, und
 # die Fehlerbalken sind Kammer-Fehlerbalken (n = 1 Kultur). W65 laut Laborbuch.
-# Fuer W109 (Ordner static_omlp/static_ypd, je 4 'replicate' an einem Tag) ist
-# offen, ob es ein Chip oder vier sind - solange nicht hier eingetragen, gilt
-# jedes 'replicate' als eigener Chip.
-STATIC_SINGLE_CHIP_FAMILIES = {"W65"}
+# W109 ebenso (Laborbuch: EIN Chip mit drei Strukturen; die je 4 'replicate' in
+# static_omlp/static_ypd sind Kammern dieses Chips, verteilt ueber die
+# Strukturen). Die beiden Medienordner bleiben getrennte Chip-Labels
+# (W109_static_omlp / W109_static_ypd), die Einheit ist in beiden die Kammer.
+# Eine Familie, die hier NICHT steht, zaehlt jedes 'replicate' als eigenen Chip.
+STATIC_SINGLE_CHIP_FAMILIES = {"W65", "W109"}
 
 # Kammern, die NICHT in die Auswertung gehen: exp_id -> Grund (data_loading.drop_excluded_chambers,
 # direkt nach dem Einlesen, vor jedem Schritt). exp_id =
@@ -206,6 +208,18 @@ OSCILLATION_START_MIN = 120.0
 # Gruppen auf der x-Achse (im Paper: der Hefe-Stamm)? Auf "strain" umstellen,
 # sobald eine echte Stamm-Spalte aus der Bildverarbeitung kommt.
 PANEL_A_GROUP_COL = "biosensor"
+
+# Farben der Staemme in ALLEN Abbildungen (plot_style.py). Kontrollarten bekommen keine eigene
+# Farbe, sondern Marker und Fuellung (Oszillation: Kreis gefuellt, Feast-Kontrolle: Dreieck hoch,
+# Famine-Kontrolle: Dreieck runter, hohl); Perioden eine Hell-Dunkel-Rampe der Stammfarbe;
+# statisch: komplexes Medium gefuellt, Minimalmedium hohl. PKO und Unbekanntes: neutrales Grau.
+# Die fuenf Farben bestehen den Farbsehschwaeche-Check (schwaechstes Paar BSG/BSO); Gelb, Gruen
+# und Rosa liegen unter 3:1 Kontrast auf Weiss, deshalb tragen Marker einen dunklen Rand.
+STRAIN_COLORS: dict[str, str] = {
+    "WT": "#2a78d6", "BSA": "#eb6834", "BSO": "#1baf7a", "BSG": "#eda100", "BSPH": "#e87ba4",
+}
+STRAIN_COLOR_OTHER = "#6e6e6e"
+STRAIN_ORDER = ["WT", "BSA", "BSO", "BSG", "BSPH", "PKO"]
 PANEL_A_FACET_COL = "osc_type"
 
 # Panel A fuer die STATISCHEN Daten: dort ist 'biosensor' die falsche Gruppe.

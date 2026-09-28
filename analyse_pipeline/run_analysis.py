@@ -111,6 +111,8 @@ from pko_comparison import run_pko_comparison
 from experiment_units import add_experiment_units, chip_overview, run_order_check
 from bud_size import run_bud_size_threshold
 from cell_filter import flag_cells
+from plot_style import apply_style
+apply_style()   # EIN Aussehen fuer alle Abbildungen (plot_style.py, config.STRAIN_COLORS)
 from relink import (
     gap_close_tracks,
     track_fragmentation,

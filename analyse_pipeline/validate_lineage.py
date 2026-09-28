@@ -81,7 +81,8 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-sns.set_theme(style="whitegrid", context="notebook")
+from plot_style import INK, INK_SOFT, apply_style, finish, legend_below, panel_title, strain_color, strain_handles
+apply_style()
 
 META_COLS = ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber"]
 
@@ -485,22 +486,16 @@ def plot_d_over_r_distribution(diagnostics: pd.DataFrame, out_path: Path) -> Non
     axes = axes[0]
     for ax, facet in zip(axes, facets):
         sub = df[df[facet_col] == facet] if facet_col else df
-        ax.hist(sub["d_over_r"], bins=40, range=(0, 1), color="#4C78A8", edgecolor="white", linewidth=0.4)
-        ax.axvline(1.0, color="#E45756", linestyle="--", linewidth=1.2)
-        ax.set_xlabel("Distance / search radius (d/r)")
+        ax.hist(sub["d_over_r"], bins=40, range=(0, 1), color="#d9d9d9", edgecolor="white", linewidth=0.4)
+        ax.axvline(1.0, color=INK, linestyle="--", linewidth=1.0)
+        ax.set_xlabel("distance / search radius (d/r)")
         if ax is axes[0]:
-            ax.set_ylabel("Budding events")
-        ax.set_title(str(facet) if facet else "All data", fontsize=11, fontweight="bold")
+            ax.set_ylabel("budding events")
+        panel_title(ax, str(facet) if facet else "all data")
 
-    fig.suptitle(
-        "How comfortably did each bud fall inside its mother's search radius?\n"
-        "Mass near 1.0 means the tolerance, not real adjacency, made the assignment",
-        y=1.04,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    fig.suptitle("distance of each bud to its mother relative to the search radius (mass near 1 = tolerance-made)",
+                 fontsize=9.5, y=1.0)
+    finish(fig, out_path, logger)
 
 
 def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
@@ -521,58 +516,47 @@ def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
     facet_col = "osc_type" if "osc_type" in per_chamber.columns else None
     facets = sorted(per_chamber[facet_col].dropna().unique()) if facet_col else [None]
 
-    fig, axes = plt.subplots(1, len(facets), figsize=(5.2 * len(facets), 4.4), squeeze=False, sharey=True)
+    fig, axes = plt.subplots(1, len(facets), figsize=(3.4 * len(facets) + 0.4, 3.1), squeeze=False, sharey=True)
     axes = axes[0]
     rng = np.random.default_rng(0)
+    has_strain = "biosensor" in per_chamber.columns
     for ax, facet in zip(axes, facets):
         sub = per_chamber[per_chamber[facet_col] == facet] if facet_col else per_chamber
         for x, freq in enumerate(order):
-            vals = sub.loc[sub["osc_freq"] == freq, "assignment_rate"]
-            if vals.empty:
+            part = sub[sub["osc_freq"] == freq].dropna(subset=["assignment_rate"])
+            if part.empty:
                 continue
-            ax.scatter(np.full(len(vals), x) + rng.uniform(-.12, .12, len(vals)), vals,
-                       s=30, alpha=.75, color="#4C78A8", edgecolor="white", linewidth=.4, zorder=3)
-            ax.plot([x - .2, x + .2], [vals.median()] * 2, color="black", linewidth=1.8, zorder=4)
+            colors = list(part["biosensor"].map(strain_color)) if has_strain else INK_SOFT
+            ax.scatter(np.full(len(part), x) + rng.uniform(-.14, .14, len(part)), part["assignment_rate"],
+                       s=22, alpha=.8, c=colors, edgecolor="white", linewidth=.4, zorder=3)
+            ax.plot([x - .2, x + .2], [part["assignment_rate"].median()] * 2, color=INK, linewidth=1.6, zorder=4)
         ax.set_xticks(range(len(order)))
-        ax.set_xticklabels(order, rotation=30)
+        ax.set_xticklabels([str(o) for o in order], rotation=30 if len(order) > 4 else 0)
         ax.set_ylim(0, 1.02)
-        ax.set_xlabel(pretty_label("osc_freq"))
+        ax.set_xlabel("cycle period [min]")
         if ax is axes[0]:
-            ax.set_ylabel("Assigned bud candidates (fraction)")
-        ax.set_title(str(facet) if facet else "All data", fontsize=11, fontweight="bold")
+            ax.set_ylabel("assigned bud candidates (fraction)")
+        panel_title(ax, str(facet) if facet else "all data")
 
-    fig.suptitle(
-        "Detection rate of the mother/bud heuristic, per chamber\n"
-        "A trend across frequencies would confound every condition comparison downstream",
-        y=1.04,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    if has_strain:
+        legend_below(fig, strain_handles(per_chamber["biosensor"].dropna().unique()), ncol=6, y=0.0)
+    fig.suptitle("detection rate of the mother/bud assignment per chamber; bar = median", fontsize=9.5, y=1.0)
+    finish(fig, out_path, logger)
 
 
 def plot_tolerance_sweep(sweep: pd.DataFrame, current_tolerance: float, out_path: Path) -> None:
     """Zuordenbare Kandidaten als Funktion von tolerance_px, mit aktuellem Wert."""
     if sweep.empty:
         return
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    ax.plot(sweep["tolerance_px"], sweep["frac_assignable"], color="#4C78A8", linewidth=2)
-    ax.axvline(current_tolerance, color="#E45756", linestyle="--", linewidth=1.4)
-    ax.text(current_tolerance, 0.02, f" current: {current_tolerance:g} px",
-            color="#E45756", fontsize=9, ha="left")
-    ax.set_xlabel("tolerance_px")
-    ax.set_ylabel("Assignable bud candidates (fraction)")
+    fig, ax = plt.subplots(figsize=(4.2, 3.0))
+    ax.plot(sweep["tolerance_px"], sweep["frac_assignable"], color=INK_SOFT, linewidth=1.8)
+    ax.axvline(current_tolerance, color=INK, linestyle="--", linewidth=1.0)
+    ax.text(current_tolerance, 0.03, f" current: {current_tolerance:g} px", color=INK, fontsize=8, ha="left")
+    ax.set_xlabel("tolerance [px]")
+    ax.set_ylabel("assignable bud candidates (fraction)")
     ax.set_ylim(0, 1.02)
-    ax.set_title(
-        "Sensitivity of detection to the tolerance parameter\n"
-        "A steep slope at the current value means results move with the setting",
-        fontsize=11,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    panel_title(ax, "sensitivity of the radius heuristic to its tolerance")
+    finish(fig, out_path, logger)
 
 
 def plot_ambiguity(diagnostics: pd.DataFrame, out_path: Path) -> None:
@@ -581,20 +565,13 @@ def plot_ambiguity(diagnostics: pd.DataFrame, out_path: Path) -> None:
     if df.empty:
         return
     counts = df["n_competing_mothers"].value_counts().sort_index()
-    fig, ax = plt.subplots(figsize=(6.4, 4.2))
-    colors = ["#4C78A8" if k <= 1 else "#E45756" for k in counts.index]
+    fig, ax = plt.subplots(figsize=(4.2, 3.0))
+    colors = ["#c8c8c8" if k <= 1 else INK_SOFT for k in counts.index]
     ax.bar(counts.index.astype(str), counts.values, color=colors, edgecolor="white", linewidth=.5)
-    ax.set_xlabel("Established cells whose search radius also covered this bud")
-    ax.set_ylabel("Budding events")
-    ax.set_title(
-        "Assignment ambiguity\n"
-        "Red = more than one candidate mother; the nearest one was picked greedily",
-        fontsize=11,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    ax.set_xlabel("established cells whose search radius also covered the bud")
+    ax.set_ylabel("budding events")
+    panel_title(ax, "assignment ambiguity (dark = more than one candidate mother, nearest picked)")
+    finish(fig, out_path, logger)
 
 
 # ==============================================================================

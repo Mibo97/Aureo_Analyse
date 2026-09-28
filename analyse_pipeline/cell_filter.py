@@ -105,6 +105,18 @@ def flag_cells(cells: pd.DataFrame, min_frames: int = 2, min_max_area_px: float 
             "%d Spuren, %d Objekt-Frames (%.1f %%) - tote Zellen / Zelltruemmer ohne Phasenkontrast.",
             min_phase_cv, n_ct, n_cf, 100 * n_cf / max(len(out), 1),
         )
+        if not rep.empty:
+            heavy = rep[rep["share_object_frames_removed_by_contrast"] > 0.25]
+            if not heavy.empty:
+                logger.warning(
+                    "  Kontrastregel entfernt in %d Kammer(n) mehr als 25 %% der Objekt-Frames - entweder viele tote "
+                    "Zellen oder ein Film mit schwaecherem Phasenkontrast (dann greift die Regel zu weit; Kalibriert "
+                    "wurde sie auf BSG/pH/6 und WT/pH/6): %s",
+                    len(heavy),
+                    ", ".join(f"{r.exp_id} ({100 * r.share_object_frames_removed_by_contrast:.0f} %)"
+                              for r in heavy.sort_values("share_object_frames_removed_by_contrast", ascending=False)
+                              .head(8).itertuples()),
+                )
     elif min_phase_cv is not None:
         logger.info("  Kontrastregel aus: keine phase_mean/phase_std-Spalten (Tabellen vor Pipeline v12).")
     return out, rep

@@ -152,9 +152,13 @@ would not have changed the lineage readouts.
   chamber (q10 8, q90 39); 8,345 (74 %) measured, 3,006 heuristic; 72 % of the mothers were tracked for
   30 frames or more. *WT/pH/6*: 93 events in 10 chambers, 4 to 14 per chamber, 57 measured and 36 heuristic
   (v11 with gap closing: 136).
-- **Validation** (`lineage_validation/`, *v11*): the share of new tracks in the window that are assigned to a
-  mother differed between the structures of a series (Kruskal p < 0.05 in 7 of 10 series) and fell with the
-  period in BSG/Glc (ρ −0.94) and BSPH/Glc (−0.77). Not yet re-run on the v12 tables (`validate_lineage.py`).
+- **Validation** (`lineage_validation/`, `validate_lineage.py` on the v12 tables): the share of bud candidates
+  in the window that are assigned to a mother differs between the structures of a series in 4 of 10 series
+  (Kruskal p < 0.05; v11: 7 of 10) and trends with the period in no consistent direction (BSA/Glc −0.77,
+  BSPH/Glc −0.77, BSG/pH −0.80, BSPH/pH +0.80, BSO/Glc +0.60; `lv_03_detection_rate_kruskal.csv`). Median
+  assignment rate 0.67 per chamber, median distance over search radius 0.93, 4 % of the candidates ambiguous
+  (`lv_02_detection_rate_per_chamber.csv`). Inflowing cells are new tracks without a mother; a washed-in cell
+  that lands on a mother still counts, which is what the size criterion (2.5) removes.
 
 ### 2.5 The size criterion, now active
 
@@ -194,17 +198,42 @@ next run and touches three chambers of BSG/pH/6 noticeably (NegCtrl Rep1 and Rep
 frames). It cannot tell a dead cell that kept its contrast from a live one, and a chamber whose cells all
 lost contrast, dead or out of focus, drops out and shows up in the report.
 
+The second run applied the rule: 1.3 % of all object-frames go, but 17 chambers lose more than 20 %, and the
+heaviest losses are the W109 static chambers (minimal medium 39 to 68 % of their object-frames, complex medium
+Rep2 and Rep4 65 and 53 %), far beyond the calibration chips. Whether those chambers are full of dead cells or
+the W109 movies simply have a weaker phase contrast is open (section 9); the static numbers in section 3 are
+quoted from the first run, before the rule, until that is settled.
+
+### 2.8 Specific growth rate from budding
+
+With the mother measured, the budding events give a growth rate of the population (`growth_from_budding.py`,
+`24_growth_from_budding_*`): µ_bud = births per cell-hour in the sparse window, births being the accepted
+events and cell-hours the cells present in every frame of the window times 10 min. In balanced growth each
+birth adds one cell, so births per cell-hour are the specific growth rate; a burst of ten buds counts ten, and
+no interval between events is needed. The interbud table (`11_specific_growth_rate.csv`, µ = ln(1 + k)/Δt per
+mother after Blöbaum 2024) is not a growth rate here: the median interval is 1.3 h, one in ten is a single
+frame, and the daughters' generation time never enters, so it comes out at 1.6 to 2.9 h⁻¹. Next to µ_bud the
+same table carries the immigration rate, new tracks without a parent mask per cell-hour. On the *WT/pH/6*
+table the five oscillation chambers give µ_bud 0.09 to 0.22 h⁻¹ (doubling times 3 to 7 h) and an immigration
+rate of 0.15 to 0.28 per cell-hour: washed-in cells arrive faster than cells are born, which is why the count
+of objects in a chamber is not a growth curve. µ_bud is the specific birth rate, an upper bound of the net
+growth rate; deaths are not countable (a dead cell stays as debris until the cell filter removes it). The
+figure against the period (`24_growth_from_budding_vs_period_<osc_type>.pdf`) has the layout of the budding
+rate figure, and `24_mu_bud_vs_mu_area.pdf` sets the population rate against the single-cell area growth.
+Full-run numbers follow with the next analysis run.
+
 ---
 
 ## 3. Section 1: static medium
 
-W109 has four `replicate` per medium, all dated the same day; the pipeline treats them as four chips, and
-the p-values below are over those four values. **(open)**: if the four were chambers of one chip, as W65 is,
-they are technical replicates of one culture and the p-values describe chamber scatter, not cultures. W65
-was one chip with one pre-culture and five chambers per medium (`STATIC_SINGLE_CHIP_FAMILIES`); its error
-bars are chamber error bars and its n is one culture.
+Both static families are one chip each (`STATIC_SINGLE_CHIP_FAMILIES`). W109 is one chip with three
+structures; its four movies per medium are four distinct chambers of that chip (no duplicates: 186 to 410
+tracks in minimal medium), so its p-values below describe chamber scatter within one culture, not cultures.
+W65 was one chip with one pre-culture; of its five minimal-medium recordings, Rep1 and Rep5 are the same
+stage position recorded twice (`EXCLUDED_CHAMBERS` drops Rep5), so four chambers remain. Neither family has
+biological replication; the medium effect rests on chambers of one chip in each family.
 
-| W109, complex (ypd) vs minimal (omlp) | omlp | ypd | Welch p over the four replicates |
+| W109, complex (ypd) vs minimal (omlp), first run | omlp | ypd | Welch p over the four chambers |
 | --- | --- | --- | --- |
 | endpoint cell area, px² (`static/13_endpoint_summary.csv`) | 5,489 | 18,301 | 0.002 |
 | endpoint eccentricity | 0.80 | 0.75 | 0.19 |
@@ -213,17 +242,22 @@ bars are chamber error bars and its n is one culture.
 Cells in complex medium end up 3.3 times larger, marginally rounder, and bud a sixth as often per
 mother-hour (0.45, 0.58, 0.27 and 0.00 against 0.03 to 0.08; the fourth minimal-medium chamber had no bud in
 its window): growth goes into cell size rather than into blastoconidia. The v11 tables gave the same picture
-(5,049 against 14,451 px², 0.47 against 0.09 per mother-hour).
+(5,049 against 14,451 px², 0.47 against 0.09 per mother-hour). The second run, with the contrast rule, keeps
+the direction but not the size of the effect (area 8,199 against 19,670 px², budding 0.13 against 0.009 per
+mother-hour), because the rule removes 39 to 68 % of the object-frames of the W109 chambers; which of the
+two runs describes W109 is the open question of section 9.
 
 The W65 chip does not repeat it. The area ratio ypd/omlp is 0.77, the eccentricity 0.70 against 0.40
-(Welch p 0.001 over chambers, the opposite direction to W109), the budding rate 0.17 in both media. The five
-W65 minimal-medium chambers are not one population: Rep1 and Rep5 end at 40,000 px² (215 µm²) with 35 to 37
-objects and two mothers each, Rep2 to Rep4 at 13,000 to 16,000 px² with 4 to 16 objects
-(`static/13_endpoint_per_chamber.csv`, `static/13_endpoint_saturation_per_chamber.csv`); the group's area
-varies by 56 % and its eccentricity by 27 %, against 6 to 19 % in every other group. In complex medium the
-two chip families agree (W65 19,006 px², W109 18,301); in minimal medium W65 is 4.5 times larger, so the odd
-group is W65 in minimal medium, not the chip family. With one culture on W65, the section's claim rests on
-W109 and on the answer to the open question above; the two large-cell chambers are worth a look in the images.
+(Welch p 0.001 over chambers, the opposite direction to W109), the budding rate 0.17 in both media. The four
+W65 minimal-medium chambers are not one population: Rep1 ends at 40,000 px² (215 µm²), Rep2 to Rep4 at
+13,000 to 16,000 px² (`static/13_endpoint_per_chamber.csv`). Rep1 holds two swollen cells of about 50,000 px²
+each, and the overlay of frames 85 to 88 shows the lower one releasing a ring of ten blastoconidia within
+three frames (tracks 3 to 14): the swollen-cell-to-blastoconidia transition of Rensink et al. 2026, caught
+in one chamber, and the reason the chamber's endpoint area and budding rate stand apart. In complex medium
+the two chip families agree (W65 19,006 px², W109 18,301); in minimal medium W65 is 4.5 times larger, and
+that difference is the one chamber. With one culture per family, the medium effect is a W109 result with
+W65 as a second, single chip that shows the same cell size in complex medium and a different picture in
+minimal medium.
 
 - Main text: `static/13_endpoint_vs_medium_area.pdf`, `static/13_endpoint_vs_medium_eccentricity.pdf`,
   `static/21_budding_rate_vs_medium.pdf` (mean ± SEM, one panel per chip family; the error unit per family
@@ -380,9 +414,9 @@ the 92nd percentile, `level_mean` in the same table); the µ_area bracket of fea
 | Methods: units and sampling | none (a schematic of chip, structures, arrays and chambers is the author's) | `00_n_tracks_overview_summary.pdf` | `00_chip_overview.csv`, `00_chip_run_order.csv` |
 | Methods: tracking and sparse window | `20_lineage_window.pdf` | `20_bud_size_at_appearance.pdf`, `qc_comparison/70_qc_effect.pdf` and `lineage_validation/lv_02_detection_rate.pdf` (v11 run) | `00_track_fragmentation.csv`, `00_cell_filter.csv`, `20_bud_size_threshold.csv`, the block table of 2.2 |
 | 1 Static medium | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf` | `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/10_cell_area_over_time.pdf`, `static/21_panel_a_violin.pdf` | `static/13_endpoint_summary.csv`, `static/13_endpoint_per_chamber.csv`, `static/21_budding_rate_summary.csv` |
-| 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `12_area_growth_rate_spearman.csv` |
+| 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `24_immigration_vs_period_*.pdf`, `24_mu_bud_vs_mu_area.pdf`, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `24_growth_from_budding_spearman.csv`, `12_area_growth_rate_spearman.csv` |
 | 3 Biosensors | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | `95_*_comparison.pdf`, `31_ratio_*_over_time_*.pdf` | ratio rows of `13_endpoint_control_trend.csv`, `95_*_summary_per_replicate.csv` |
-| 4 Controls (the pivot) | `50_control_trend_summary.pdf`; `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf`, bracket rows of the `13_`/`21_` figures | `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `13_endpoint_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
+| 4 Controls (the pivot) | `50_control_trend_summary.pdf`; `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf`, bracket rows of the `13_`/`21_`/`24_` figures | `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `24_growth_from_budding_control_trend.csv`, `13_endpoint_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
 | PKO | `pko/61_pko_control_agreement.pdf` | `pko/13_endpoint_vs_period_area_Glc.pdf` | `pko/60_pko_within_chip_agreement.csv`, `pko/60_pko_control_bracket.csv` |
 
 Suggested order of the results chapter: static first (the clean result), then the tracking limit as a short
@@ -391,22 +425,29 @@ is not a separate finding after the others; it is what the others turn into. The
 between the two trackings (section 4) belongs in the methods block: it is the direct evidence that the
 per-series trends of a lineage readout are tracker properties.
 
+All figures share one style (`plot_style.py`, colours in `config.py`): colour means strain (WT blue, BSA
+orange, BSO green, BSG yellow, BSPH pink, PKO grey), the control chambers are markers in the strain colour
+(feast control filled up-triangle, famine control hollow down-triangle, oscillation filled circle), periods in
+the time-series figures run from light (short) to dark (long) within the strain hue, and the static media are
+filled (complex) versus lighter (minimal). The figures carry no explanatory footers; what a band or a marker
+means goes into the caption.
+
 ---
 
 ## 9. Open points and proposed additions
 
 Answered so far: the thesis is in English and the four sections stay in the results chapter; W65 was one chip
-with one pre-culture; the sensors show no clear feast/famine difference on the real data; there is no run sheet
-of structure positions, so the outlook asks for one; the small objects of BSG/pH/6 are dead-cell debris; the
-W65 spread comes from the minimal-medium chambers Rep1 and Rep5 (section 3).
+with one pre-culture, and its minimal-medium Rep5 is a second recording of Rep1; W109 is one chip with three
+structures; the sensors show no clear feast/famine difference on the real data; there is no run sheet of
+structure positions, so the outlook asks for one; the small objects of BSG/pH/6 are dead-cell debris; the W65
+outlier chamber holds two swollen cells, one of which releases ten blastoconidia at once (section 3).
 
 Still open:
 
-1. **W109.** The four `replicate` of each medium carry the same date. Were they four chips with four
-   pre-cultures, four chambers of one chip, or one chip per medium? The answer decides whether section 1
-   has replication (`STATIC_SINGLE_CHIP_FAMILIES` in `config.py` is where the pipeline learns it).
-2. **W65 Rep1 and Rep5.** What do the two large-cell minimal-medium chambers look like in the images: a few
-   swollen cells, an aggregate, or a segmentation of touching cells as one mask?
+1. **The contrast rule on W109.** The second run removes 39 to 68 % of the object-frames of the W109 static
+   chambers as low-contrast objects. If those chambers are full of dead cells the second run is right; if the
+   W109 movies have a weaker phase contrast, live cells are being removed and the rule needs a per-experiment
+   reference. The W109 `Combined_Results.csv` tables (static_omlp, static_ypd) decide it.
 
 Built since the first draft: the control-trend summary figure (`50_control_trend_summary.pdf`), the control-trend
 check for µ_area, the rebuilt segmentation and tracking with the measured mother, the cell filter, the
@@ -432,6 +473,6 @@ python validate_lineage.py        # lineage_validation/ (needs the full run firs
 
 Segmentation, tracking and the cluster route: `imaging/README.md` (`segment_all.py`, `merge_results.py`).
 `config.py` holds every threshold named above (`CELL_MIN_FRAMES`, `CELL_MIN_MAX_AREA_PX`, `CELL_MIN_PHASE_CV`,
-`LINEAGE_PARAMS`, `LINEAGE_SPARSE_*`, `AREA_GROWTH_MIN_FRAMES`, `BUD_MAX_AREA_FRACTION_FALLBACK`,
-`FLAG_EXCLUDE_ROWS`) and logs them, together with the method caveats, at the start of every run.
-`README.md` describes each module and output prefix.
+`EXCLUDED_CHAMBERS`, `STATIC_SINGLE_CHIP_FAMILIES`, `LINEAGE_PARAMS`, `LINEAGE_SPARSE_*`, `AREA_GROWTH_MIN_FRAMES`,
+`BUD_MAX_AREA_FRACTION_FALLBACK`, `FLAG_EXCLUDE_ROWS`) and the figure colours (`STRAIN_COLORS`), and logs them,
+together with the method caveats, at the start of every run. `README.md` describes each module and output prefix.

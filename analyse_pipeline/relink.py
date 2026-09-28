@@ -281,26 +281,26 @@ def plot_lineage_window(cells: pd.DataFrame, window: pd.DataFrame, out_path, max
                         min_frames: int, max_curves: int = 80, seed: int = 0) -> None:
     """Links: Objekte pro Frame ueber die Zeit (Stichprobe von Kammern), Grenze
     max_objects. Rechts: Verteilung der Fensterlaengen ueber alle Kammern."""
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.2))
+    from plot_style import INK, INK_MUTED, finish, panel_title, strain_color
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.9))
     counts = cells.groupby(["exp_id", "frame"]).size().rename("n").reset_index()
     exp_ids = counts["exp_id"].unique()
+    strain_of = (cells.drop_duplicates("exp_id").set_index("exp_id")["biosensor"].astype(str).to_dict()
+                 if "biosensor" in cells.columns else {})
     rng = np.random.default_rng(seed)
     shown = rng.choice(exp_ids, size=min(max_curves, len(exp_ids)), replace=False) if len(exp_ids) else []
     for e in shown:
         sub = counts[counts["exp_id"] == e]
-        ax.plot(sub["frame"], sub["n"], lw=0.7, alpha=0.5, color="0.3")
-    ax.axhline(max_objects, color="C3", ls="--", lw=1.2, label=f"sparse limit ({max_objects} objects)")
+        ax.plot(sub["frame"], sub["n"], lw=0.6, alpha=0.45, color=strain_color(strain_of.get(e, "_")))
+    ax.axhline(max_objects, color=INK, ls="--", lw=1.0, label=f"sparse limit ({max_objects} objects)")
     ax.set_xlabel("frame"); ax.set_ylabel("objects per frame")
-    ax.set_title(f"objects per frame ({len(shown)} of {len(exp_ids)} chambers shown)", fontsize=10)
-    ax.set_yscale("symlog", linthresh=10); ax.legend(fontsize=8, loc="upper left")
+    panel_title(ax, f"objects per frame, {len(shown)} of {len(exp_ids)} chambers")
+    ax.set_yscale("symlog", linthresh=10); ax.legend(loc="upper left")
     if not window.empty:
-        ax2.hist(window["n_frames"], bins=30, color="0.75", edgecolor="white")
-        ax2.axvline(min_frames, color="C3", ls="--", lw=1.2, label=f"minimum ({min_frames} frames)")
+        ax2.hist(window["n_frames"], bins=30, color="#d9d9d9", edgecolor="white")
+        ax2.axvline(min_frames, color=INK, ls="--", lw=1.0, label=f"minimum ({min_frames} frames)")
         n_ok = int(window["window_ok"].sum())
-        ax2.set_title(f"sparse window length: {n_ok} of {len(window)} chambers usable", fontsize=10)
-        ax2.legend(fontsize=8)
-    ax2.set_xlabel("frames in sparse window"); ax2.set_ylabel("chambers")
-    fig.suptitle("Sparse-phase window for the lineage heuristic", fontsize=10)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=180)
-    plt.close(fig)
+        panel_title(ax2, f"window length, {n_ok} of {len(window)} chambers usable")
+        ax2.legend()
+    ax2.set_xlabel("frames in the sparse window"); ax2.set_ylabel("chambers")
+    finish(fig, out_path)

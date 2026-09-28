@@ -70,8 +70,12 @@ from experiment_units import summarise_hierarchical
 
 logger = logging.getLogger(__name__)
 
+from plot_style import (CONTROL_LINESTYLES, INK, INK_MUTED, INK_SOFT, SURFACE, control_handles, edge_color,
+                        errorbar_kwargs, finish, legend_below, marker_kwargs, ordered_strains, panel_title,
+                        strain_color, strain_handles)
+from matplotlib.lines import Line2D
+
 CONTROL_TYPES = ["NegCtrl", "PosCtrl"]
-CONTROL_COLORS = {"NegCtrl": "#4C78A8", "PosCtrl": "#E45756"}
 
 # Spearman braucht mindestens so viele verschiedene Perioden, damit eine
 # Rangkorrelation ueberhaupt etwas aussagt. Bei zwei Punkten ist rho immer
@@ -433,22 +437,19 @@ def control_trend_check(
 _READOUT_LABELS = {
     "area": "endpoint area", "eccentricity": "endpoint eccentricity",
     "mu_area": "µ_area", "budding_rate_per_h": "budding rate (sparse window)",
+    "mu_bud": "µ_bud (births per cell-hour)", "immigration_per_cell_h": "immigration per cell-hour",
 }
 
 
 def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong: float = 0.6) -> None:
-    """EINE Abbildung fuer den Befund: pro Readout und Serie der Spearman der
-    Oszillationskammern gegen die Periode (x) und der der staerksten Kontrolle
-    derselben Strukturen (y). Punkte nahe der Diagonale: die Struktur traegt
-    beide. Farbe = verdict aus control_trend_check(), Marker = Readout,
-    Beschriftung = Stamm. Eine Facette je Oszillationstyp.
-
-    Zonen spiegeln die Verdict-Regel: rot = |rho_osc| >= strong UND die
-    staerkste Kontrolle gleichsinnig >= strong (Struktureffekt); blau = der
-    Rest des Bands |rho_osc| >= strong, also Kontrolle schwach ODER
-    gegenlaeufig (Periodeneffekt oder 'not robust', je nach Differenz)."""
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch, Rectangle
+    """EINE Abbildung fuer den Befund: pro Readout und Serie der Spearman der Oszillationskammern
+    gegen die Periode (x) und der der staerksten Kontrolle derselben Strukturen (y). Punkte nahe der
+    Diagonale: die Struktur traegt beide. Farbe = Stamm, Marker = Readout, hohl = 'not robust'.
+    Die Zonen tragen die Verdict-Regel: dunkleres Grau in den Ecken = |rho_osc| >= strong UND die
+    staerkste Kontrolle gleichsinnig >= strong (Struktureffekt); helles Band = |rho_osc| >= strong
+    ohne gleichsinnige Kontrolle (Periodeneffekt oder 'not robust', je nach Differenz).
+    Eine Facette je Oszillationstyp."""
+    from matplotlib.patches import Rectangle
 
     if ctrl_trend is None or ctrl_trend.empty:
         return
@@ -462,64 +463,44 @@ def plot_control_trend_summary(ctrl_trend: pd.DataFrame, out_path: Path, strong:
     readouts = list(dict.fromkeys(df["value_col"].astype(str)))
     marker_cycle = ["o", "s", "^", "D", "v", "P", "X", "*", "<", ">"]
     markers = {r: marker_cycle[i % len(marker_cycle)] for i, r in enumerate(readouts)}
+    zone_structure, zone_period = "#e3e3e3", "#f3f3f3"
 
-    def style(verdict: str) -> tuple[str, str]:
-        v = str(verdict)
-        if v.startswith("structure"):
-            return "C3", "C3"
-        if v.startswith("period"):
-            return "C0", "C0"
-        if v.startswith("not robust"):
-            return "none", "C0"
-        return "0.65", "0.65"
-
-    fig, axes = plt.subplots(1, len(osc_types), figsize=(4.9 * len(osc_types), 5.2), squeeze=False, sharey=True)
+    fig, axes = plt.subplots(1, len(osc_types), figsize=(3.6 * len(osc_types) + 0.4, 3.9), squeeze=False, sharey=True)
     for ax, ot in zip(axes[0], osc_types):
         sub = df[df["osc_type"].astype(str) == ot]
-        # Zonen: rot = Kontrolle trendet gleichsinnig (Struktureffekt), blau = nur die
-        # Oszillationskammern trenden (Periodeneffekt moeglich).
-        for sx, sy in ((1, 1), (-1, -1)):
-            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), min(sy * strong, sy * 1.05)),
-                                   1.05 - strong, 1.05 - strong, color="C3", alpha=0.07, lw=0))
+        ax.grid(False)
         for sx in (1, -1):
-            # Band |rho_osc| >= strong ohne die rote Ecke: y von -1.05 bis strong (sx = 1)
-            # bzw. von -strong bis 1.05 (sx = -1) - eine gegenlaeufige Kontrolle zaehlt nicht
-            # als Struktureffekt.
             y0 = -1.05 if sx > 0 else -strong
             ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), y0), 1.05 - strong, 1.05 + strong,
-                                   color="C0", alpha=0.07, lw=0))
-        ax.plot([-1.05, 1.05], [-1.05, 1.05], color="0.5", lw=0.8, ls="--")
-        ax.axhline(0, color="0.85", lw=0.6)
-        ax.axvline(0, color="0.85", lw=0.6)
+                                   color=zone_period, lw=0, zorder=0))
+        for sx, sy in ((1, 1), (-1, -1)):
+            ax.add_patch(Rectangle((min(sx * strong, sx * 1.05), min(sy * strong, sy * 1.05)),
+                                   1.05 - strong, 1.05 - strong, color=zone_structure, lw=0, zorder=0))
+        ax.text(0.83, 1.0, "structure\neffect", ha="center", va="top", fontsize=6.5, color=INK_MUTED, zorder=1)
+        ax.text(0.83, -0.02, "period\neffect", ha="center", va="top", fontsize=6.5, color=INK_MUTED, zorder=1)
+        ax.plot([-1.05, 1.05], [-1.05, 1.05], color=INK_MUTED, lw=0.7, ls="--", zorder=1)
+        ax.axhline(0, color="#d0d0d0", lw=0.6, zorder=1)
+        ax.axvline(0, color="#d0d0d0", lw=0.6, zorder=1)
         for _, r in sub.iterrows():
-            fc, ec = style(r.get("verdict", ""))
-            ax.scatter(r["rho_osc"], r["rho_ctrl_strongest"], marker=markers[str(r["value_col"])], s=64,
-                       facecolors=fc, edgecolors=ec, linewidths=1.3, zorder=3)
-            ax.annotate(str(r.get("biosensor", "")), (r["rho_osc"], r["rho_ctrl_strongest"]),
-                        xytext=(4, 3), textcoords="offset points", fontsize=7, color="0.3")
+            color = strain_color(r.get("biosensor", ""))
+            hollow = str(r.get("verdict", "")).startswith("not robust")
+            ax.scatter(r["rho_osc"], r["rho_ctrl_strongest"], marker=markers[str(r["value_col"])], s=46,
+                       facecolor=SURFACE if hollow else color, edgecolor=edge_color(color), linewidth=0.9, zorder=3)
         ax.set_xlim(-1.05, 1.05)
         ax.set_ylim(-1.05, 1.05)
         ax.set_aspect("equal")
-        ax.set_title(f"{ot}  (n = {len(sub)} readout × strain series)", fontsize=10)
+        ax.set_xticks([-1, -0.5, 0, 0.5, 1]); ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        panel_title(ax, f"{ot}  (n = {len(sub)} readout × strain series)")
         ax.set_xlabel("Spearman ρ vs period: oscillation chambers")
-    axes[0][0].set_ylabel("Spearman ρ vs period: strongest control\nof the same structures")
+    axes[0][0].set_ylabel("Spearman ρ vs period:\nstrongest control of the same structures")
 
-    handles = [Line2D([], [], marker=markers[r], color="0.3", ls="", label=_READOUT_LABELS.get(r, r))
+    handles = [Line2D([], [], marker=markers[r], color=INK_SOFT, ls="", markersize=6, label=_READOUT_LABELS.get(r, r))
                for r in readouts]
-    handles += [
-        Patch(color="C3", alpha=0.35, label=f"structure effect: a control trends the same way (|ρ| ≥ {strong:g})"),
-        Patch(color="C0", alpha=0.35, label="period effect: oscillation chambers trend, no control trends the same way"),
-        Line2D([], [], marker="o", mfc="none", mec="C0", ls="", label="not robust: trend vanishes after subtracting the controls"),
-        Line2D([], [], marker="o", color="0.65", ls="", label="no trend of the oscillation chambers"),
-    ]
-    fig.legend(handles=handles, loc="upper center", ncol=2, fontsize=8, frameon=False,
-               bbox_to_anchor=(0.5, 0.0))
-    fig.suptitle("Do the constant-medium controls trend with the period like the treated chambers?\n"
-                 "one point per readout and strain series; the diagonal is where the structure carries both",
-                 fontsize=10)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=180)
-    plt.close(fig)
+    handles += strain_handles(df["biosensor"].unique()) if "biosensor" in df.columns else []
+    handles.append(Line2D([], [], marker="o", mfc=SURFACE, mec=INK_SOFT, ls="", markersize=6,
+                          label="not robust: trend vanishes after subtracting the controls"))
+    legend_below(fig, handles, ncol=3, y=0.0)
+    finish(fig, out_path, logger)
 
 
 def within_culture_trend(
@@ -646,26 +627,21 @@ def plot_endpoint_vs_period(
     strain_order: Optional[Sequence[str]] = None,
     title: Optional[str] = None,
 ) -> None:
-    """Endzustand gegen die Periode: EIN Chip pro Periode, mit SEINEN Kontrollen.
+    """Endzustand gegen die Periode: EINE Struktur pro Periode, mit IHREN Kontrollen.
 
-    title: erste Zeile des Abbildungstitels; Default beschreibt den Endzustand.
-    Schritt 20 nutzt dieselbe Abbildung fuer die Knospungsrate und setzt den
-    Titel entsprechend.
+    Obere Reihe: pro Periode der Mittelwert der Oszillationskammern (Fehlerbalken = Kammern dieser
+    Struktur, technisch) als gefuellter Kreis mit Linie in der Stammfarbe; an derselben x-Position
+    die Feast- (Dreieck hoch, gefuellt) und Famine-Kontrolle (Dreieck runter, hohl) DERSELBEN
+    Struktur. Duenne graue Referenzlinien: das ueber alle Strukturen des Stamms gepoolte Mittel je
+    Kontrollart (gestrichelt Feast, gepunktet Famine) - wie weit die Kontrollen selbst wandern,
+    zeigen die Dreiecke.
 
-    Obere Reihe (Rohwert): pro Periode der Chip-Mittelwert ueber die
-    Oszillationskammern (Fehlerbalken = Kammern dieses Chips, technisch), und
-    an derselben x-Position die PosCtrl-/NegCtrl-Mittelwerte DESSELBEN Chips
-    als kleine Marker. Dahinter, blass, das ueber alle Chips gepoolte
-    Kontrollband (Mittelwert +- SD ueber Chips) als Bezugsrahmen. So sieht man
-    beides: wo die Periode relativ zu ihren eigenen Kontrollen liegt, und wie
-    stark die Kontrollen selbst von Chip zu Chip wandern.
+    Untere Reihe: der bracket-normierte Score (bracket_normalise()), 0 = Famine-Kontrolle,
+    1 = Feast-Kontrolle; Strukturen mit entartetem Bracket hohl bei 0.5.
 
-    Untere Reihe: der bracket-normierte Score (bracket_normalise()), 0 = wie
-    Starvation, 1 = wie Feast. Entartete Chips hohl.
-
-    Eine Facette pro Stamm - die Staemme bleiben getrennt (n = 1 Serie je
-    Stamm). Der Spearman-Wert steht in der Facette, zu der er gehoert, mit
-    n = Zahl der Chips = Zahl der Perioden.
+    Eine Facette pro Stamm in der Stammfarbe (config.STRAIN_COLORS); Spearman-Wert in der Facette,
+    n = Zahl der Strukturen = Zahl der Perioden. Schritt 20/24 nutzen dieselbe Abbildung fuer die
+    Knospungsrate und µ_bud (title/ylabel).
     """
     if per_chip is None or per_chip.empty:
         logger.warning("plot_endpoint_vs_period(): keine Daten fuer '%s' - uebersprungen.", value_col)
@@ -677,40 +653,33 @@ def plot_endpoint_vs_period(
         logger.warning("plot_endpoint_vs_period(): keine Oszillations-Chips mit numerischer Periode "
                        "fuer '%s' - uebersprungen.", value_col)
         return
-    strains = [b for b in (strain_order or sorted(osc["biosensor"].unique()))
-               if b in set(osc["biosensor"])]
+    strains = [b for b in (strain_order or ordered_strains(osc["biosensor"].unique())) if b in set(osc["biosensor"])]
     has_score = score is not None and not score.empty
     n_rows = 2 if has_score else 1
-    degenerate_labelled = False  # Legendeneintrag an der ERSTEN Facette, die einen hohlen Punkt hat
-    fig, axes = plt.subplots(n_rows, len(strains), figsize=(3.9 * len(strains), 3.4 * n_rows),
+    periods_all = sorted(osc["_period"].unique())
+    fig, axes = plt.subplots(n_rows, len(strains), figsize=(2.7 * len(strains) + 0.5, 2.7 * n_rows + 0.4),
                              squeeze=False, sharex=True)
+    any_degenerate = False
 
     for j, strain in enumerate(strains):
+        color = strain_color(strain)
         ax = axes[0][j]
         sub = df[df["biosensor"] == strain]
-        # Gepooltes Kontrollband ueber alle Chips dieses Stamms (Bezugsrahmen).
+        # Gepooltes Kontrollmittel je Art als duenne Referenzlinie (Feast gestrichelt, Famine gepunktet).
         for ct in CONTROL_TYPES:
             vals = sub.loc[sub["condition_type"] == ct, "value"].dropna()
             if len(vals) >= 2:
-                ax.axhspan(vals.mean() - vals.std(), vals.mean() + vals.std(),
-                           color=CONTROL_COLORS[ct], alpha=0.10, zorder=0)
-                ax.axhline(vals.mean(), color=CONTROL_COLORS[ct], linewidth=0.9, linestyle=":",
-                           alpha=0.7, zorder=1)
-        # Kontrollen DIESES Chips an der x-Position seiner Periode.
-        for ct, marker in (("NegCtrl", "v"), ("PosCtrl", "^")):
+                ax.axhline(vals.mean(), color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES[ct], zorder=1)
+        # Kontrollen DIESER Struktur an der x-Position ihrer Periode.
+        for ct in ("NegCtrl", "PosCtrl"):
             c = sub[sub["condition_type"] == ct].dropna(subset=["_period", "value"]).sort_values("_period")
             if not c.empty:
-                ax.scatter(c["_period"], c["value"], marker=marker, s=34, color=CONTROL_COLORS[ct],
-                           edgecolor="white", linewidth=0.5, zorder=3,
-                           label=f"{ct} of the same chip" if j == 0 else None)
+                ax.scatter(c["_period"], c["value"], **marker_kwargs(ct, color, size=30))
         o = sub[sub["condition_type"] == "Oscillation"].dropna(subset=["_period", "value"]).sort_values("_period")
-        ax.errorbar(o["_period"], o["value"],
-                    yerr=o["sd_chamber"].fillna(0.0) if "sd_chamber" in o.columns else None,
-                    marker="o", markersize=5.5, linewidth=1.4, capsize=3, color="#333333", zorder=4,
-                    label="Oscillation (mean of chambers on the chip;\nbar = chamber SD, technical)" if j == 0 else None)
-        _log_period_axis(ax, sorted(osc["_period"].unique()))
-        ax.set_title(f"{strain}  (n = {o['_period'].nunique()} chips)", fontsize=10)
-        ax.grid(alpha=0.22, linewidth=0.6)
+        yerr = o["sd_chamber"].fillna(0.0) if "sd_chamber" in o.columns else None
+        ax.errorbar(o["_period"], o["value"], yerr=yerr, **errorbar_kwargs("Oscillation", color))
+        _log_period_axis(ax, periods_all)
+        panel_title(ax, f"{strain}  (n = {o['_period'].nunique()} structures)")
         if j == 0:
             ax.set_ylabel(ylabel or f"{value_col}\n(endpoint)")
         _annotate_trend(ax, trend, strain, value_col)
@@ -721,54 +690,37 @@ def plot_endpoint_vs_period(
             sc = sc.dropna(subset=["_period"]).sort_values("_period")
             good = sc[~sc["bracket_degenerate"]].dropna(subset=["value"])
             bad = sc[sc["bracket_degenerate"]]
-            ax2.axhspan(0, 1, color="#999999", alpha=0.06, zorder=0)
-            ax2.axhline(0, color=CONTROL_COLORS["NegCtrl"], linewidth=0.9, linestyle=":", alpha=0.8)
-            ax2.axhline(1, color=CONTROL_COLORS["PosCtrl"], linewidth=0.9, linestyle=":", alpha=0.8)
+            ax2.axhline(0, color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES["NegCtrl"], zorder=1)
+            ax2.axhline(1, color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES["PosCtrl"], zorder=1)
             if not good.empty:
-                ax2.plot(good["_period"], good["value"], marker="o", markersize=5.5, linewidth=1.4,
-                         color="#333333", zorder=3)
+                ax2.plot(good["_period"], good["value"], marker="o", markersize=5.5, linewidth=1.4, color=color,
+                         markerfacecolor=color, markeredgecolor=edge_color(color), markeredgewidth=0.8, zorder=3)
             if not bad.empty:
-                ax2.scatter(bad["_period"], np.full(len(bad), 0.5), marker="o", s=40, facecolor="white",
-                            edgecolor="#333333", linewidth=1.2, zorder=3,
-                            label=None if degenerate_labelled else "bracket degenerate on this chip (score undefined)")
-                degenerate_labelled = True
-            _log_period_axis(ax2, sorted(osc["_period"].unique()))
+                any_degenerate = True
+                ax2.scatter(bad["_period"], np.full(len(bad), 0.5), marker="o", s=34, facecolor=SURFACE,
+                            edgecolor=edge_color(color), linewidth=0.9, zorder=3)
+            _log_period_axis(ax2, periods_all)
             ax2.set_ylim(-0.3, 1.3)
-            ax2.grid(alpha=0.22, linewidth=0.6)
-            ax2.set_xlabel("Feast/famine cycle period [min]")
+            ax2.set_xlabel("feast/famine cycle period [min]")
             if j == 0:
-                ax2.set_ylabel("Bracket score\n0 = NegCtrl, 1 = PosCtrl (same chip)")
+                ax2.set_ylabel("bracket score\n0 = famine control, 1 = feast control")
             _annotate_trend(ax2, score_trend, strain, value_col)
         else:
-            ax.set_xlabel("Feast/famine cycle period [min]")
+            ax.set_xlabel("feast/famine cycle period [min]")
 
-    handles, labels = [], []
-    for row in axes:
-        for ax_ in row:
-            h, l = ax_.get_legend_handles_labels()
-            for hh, ll in zip(h, l):
-                if ll not in labels:
-                    handles.append(hh); labels.append(ll)
-    if handles:
-        fig.legend(handles, labels, loc="lower center", ncol=min(len(labels), 3),
-                   bbox_to_anchor=(0.5, -0.10 if has_score else -0.16), frameon=False, fontsize=8)
-    fig.suptitle(
-        (title or f"{value_col}: cumulative endpoint vs cycle period — one chip per period") + "\n"
-        "(shaded = PosCtrl/NegCtrl pooled over chips, mean ± SD; markers = controls of that chip)",
-        y=1.02,
-    )
-    fig.text(
-        0.5, -0.20 if has_score else -0.26,
-        "Each period is one chip from one preculture: n = 1 biological replicate per point. Error bars "
-        "are chambers on that chip (technical).\nIndividual cycles are below the sampling limit; only "
-        "the cumulative endpoint is interpretable. Spearman on chip means: an effect size, not a test "
-        "to lean on at n ≤ 6.",
-        ha="center", fontsize=8,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=180)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    handles = control_handles(INK_SOFT)
+    handles[0].set_label("oscillation chambers (mean ± SD of the structure's chambers)")
+    handles += [Line2D([], [], color=INK_MUTED, linewidth=0.9, linestyle=CONTROL_LINESTYLES["PosCtrl"],
+                       label="feast controls, mean over structures"),
+                Line2D([], [], color=INK_MUTED, linewidth=0.9, linestyle=CONTROL_LINESTYLES["NegCtrl"],
+                       label="famine controls, mean over structures")]
+    if any_degenerate:
+        handles.append(Line2D([], [], marker="o", linestyle="", markersize=6, markerfacecolor=SURFACE,
+                              markeredgecolor=INK_SOFT, label="bracket undefined (controls do not separate)"))
+    legend_below(fig, handles, ncol=3, y=0.0)
+    if title:
+        fig.suptitle(title, fontsize=9.5, y=1.0)
+    finish(fig, out_path, logger)
 
 
 def _log_period_axis(ax, periods) -> None:
@@ -791,6 +743,8 @@ def _annotate_trend(ax, trend, strain, value_col) -> None:
     hit = trend[mask]
     if len(hit) == 1 and pd.notna(hit.iloc[0]["spearman_rho"]):
         rho, p, n = hit.iloc[0]["spearman_rho"], hit.iloc[0]["p_value"], int(hit.iloc[0].get("n_chips", 0))
-        ax.annotate(f"ρ = {rho:+.2f}, p = {p:.2g}\n(n = {n} chips)",
-                    xy=(0.03, 0.97), xycoords="axes fraction", va="top", ha="left", fontsize=8,
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#BBBBBB", alpha=0.92))
+        ax.text(0.03, 0.97, f"ρ = {rho:+.2f}, p = {p:.2f}, n = {n}", transform=ax.transAxes,
+                va="top", ha="left", fontsize=7.5, color=INK_SOFT, zorder=6,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor=SURFACE, edgecolor="none", alpha=0.85))
+
+

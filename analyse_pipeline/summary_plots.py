@@ -24,7 +24,10 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-sns.set_theme(style="whitegrid", context="notebook")
+from plot_style import (CONTROL_LABELS, INK_MUTED, INK_SOFT, MEDIUM_FILLED, SURFACE, axis_label, control_handles, edge_color, errorbar_kwargs,
+                        finish, legend_below, marker_kwargs, ordered_strains, panel_title, strain_color,
+                        strain_handles, strain_ramp)
+from matplotlib.lines import Line2D
 
 try:
     from analysis import natural_freq_sort, pretty_label  # falls dort schon definiert
@@ -95,10 +98,11 @@ def plot_budding_ratio_timeseries(
     groups = sorted(df[group_col].dropna().unique()) if group_col in df.columns else [None]
     facets = sorted(df[facet_col].dropna().unique()) if facet_col in df.columns else [None]
     colors = freq_order if freq_order is not None else natural_freq_sort(df[color_col].dropna().unique())
-    palette = dict(zip(colors, sns.color_palette("viridis", n_colors=len(colors))))
+    if group_col == "biosensor":
+        groups = ordered_strains(groups)
 
     fig, axes = plt.subplots(
-        len(facets), len(groups), figsize=(4.5 * len(groups), 3.5 * len(facets)),
+        len(facets), len(groups), figsize=(2.9 * len(groups) + 0.4, 2.6 * len(facets) + 0.4),
         squeeze=False, sharex=True,
     )
 
@@ -129,6 +133,8 @@ def plot_budding_ratio_timeseries(
                 ax.set_visible(False)
                 continue
 
+            # Hell-Dunkel-Rampe der Stammfarbe ueber die Perioden (kurz hell, lang dunkel).
+            ramp = dict(zip(colors, strain_ramp(group if group_col == "biosensor" else "_", len(colors))))
             for c in colors:
                 line_df = sub[sub[color_col] == c]
                 if line_df.empty:
@@ -139,26 +145,24 @@ def plot_budding_ratio_timeseries(
                     .reset_index()
                     .sort_values(time_col)
                 )
-                ax.plot(agg[time_col], agg["mean"], color=palette[c], label=str(c), linewidth=1.4)
+                ax.plot(agg[time_col], agg["mean"], color=ramp[c], label=str(c), linewidth=1.3)
                 ax.fill_between(
                     agg[time_col], agg["mean"] - agg["sd"], agg["mean"] + agg["sd"],
-                    color=palette[c], alpha=0.15,
+                    color=ramp[c], alpha=0.12, lw=0,
                 )
 
             title_parts = [str(p) for p in (facet, group) if p is not None]
-            ax.set_title(" | ".join(title_parts), fontsize=10)
+            panel_title(ax, " | ".join(title_parts))
             if last_visible_row_per_col.get(j) == i:
-                ax.set_xlabel("Frame")
+                ax.set_xlabel("frame")
             if j == 0:
-                ax.set_ylabel("Budding Ratio\n(buds/cell)")
+                ax.set_ylabel("budding ratio\n(buds per cell)")
 
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    if handles:
-        fig.legend(handles, labels, title=pretty_label(color_col), loc="lower center",
-                   ncol=min(len(colors), 6), bbox_to_anchor=(0.5, -0.05))
-    fig.suptitle("Budding ratio over time (mean ± SD over replicates)", y=1.02)
-    fig.tight_layout()
-    _save_fig(fig, out_path)
+    grey = dict(zip(colors, strain_ramp("_", len(colors))))
+    handles = [Line2D([], [], color=grey[c], linewidth=2, label=str(c)) for c in colors]
+    legend_below(fig, handles, ncol=min(len(colors), 6), y=0.0,
+                 title=axis_label(color_col) + " (light = short, dark = long; hue = strain)")
+    finish(fig, out_path, logger)
 
 
 def plot_point_errorbar(
@@ -175,42 +179,27 @@ def plot_point_errorbar(
     title: Optional[str] = None,
 ) -> None:
     """
-    Generischer Punkt+Errorbar-Plot über eine Bedingung (z.B. Oszillations-
-    frequenz), analog zu Paper Fig. 3b / Fig. 6 (Wachstumsrate, ATP, Robustness).
+    Generischer Punkt+Errorbar-Plot ueber eine Bedingung (z.B. die Periode), analog zu
+    Paper Fig. 3b / Fig. 6 (Wachstumsrate, Robustness).
 
-    Funktioniert mit JEDER Summary-Tabelle, die value_col und (optional)
-    eine '<value_col ohne sd>_sd'-artige Spalte enthält - z.B. das Ergebnis
-    von summarise_growth_rate() (Spalten mean_mu/sd_mu) oder
-    aggregate_robustness_over_replicates() (Spalten mean/sd).
-
-    Parameters
-    ----------
-    summary : aggregierte Tabelle (eine Zeile pro Bedingung, ggf. + style_col)
-    value_col : Spaltenname des Mittelwerts (z.B. 'mean_mu' oder 'mean')
-    sd_col : Spaltenname der Standardabweichung (None = automatisch aus
-             value_col abgeleitet: 'mean_X' -> 'sd_X', sonst 'mean' -> 'sd')
-    x_col : Spalte für die x-Achse (z.B. 'osc_freq')
-    facet_col : Spalte für separate Subplots (None = ein einziger Plot)
-    color_col : Spalte für die Farbkodierung innerhalb eines Subplots (None = einfarbig)
-    style_col : optionale zusätzliche Spalte (z.B. 'condition_type' mit Werten
-        'Oscillation'/'PosCtrl'/'NegCtrl'), die als Marker-Form kodiert wird.
-        Notwendig, wenn (facet_col, color_col, x_col) die Zeilen NICHT eindeutig
-        identifizieren - z.B. weil derselbe osc_freq-Wert sowohl für die
-        Oszillationsbedingung als auch für ihre Kontrollkammer(n) vorkommt
-        (siehe growth_rate.classify_condition_type()). Ohne style_col würden
-        solche Zeilen beim Reindex auf x_order kollidieren (Duplicate-Label-Fehler).
-    x_order : Reihenfolge der x-Achse (None = natürliche Frequenzsortierung)
+    Funktioniert mit JEDER Summary-Tabelle, die value_col und (optional) eine sd-Spalte enthaelt -
+    z.B. summarise_growth_rate() (mean_mu/sd_mu) oder aggregate_robustness_over_replicates()
+    (mean/sd). Farbe = color_col ('biosensor': Stammfarbe aus config.STRAIN_COLORS, sonst Grau);
+    style_col (z.B. 'condition_type' mit Oscillation/PosCtrl/NegCtrl) = Marker und Fuellung
+    (plot_style). style_col ist noetig, wenn (facet_col, color_col, x_col) die Zeilen nicht
+    eindeutig machen, etwa weil derselbe osc_freq-Wert fuer die Oszillationsbedingung und ihre
+    Kontrollkammern vorkommt. x_order = Reihenfolge der x-Achse (None = natuerliche Sortierung).
     """
     if summary is None or summary.empty or value_col not in summary.columns:
         logger.warning(
-            "plot_point_errorbar(): leere Tabelle oder Spalte '%s' fehlt - Plot '%s' übersprungen.",
+            "plot_point_errorbar(): leere Tabelle oder Spalte '%s' fehlt - Plot '%s' uebersprungen.",
             value_col, out_path.name,
         )
         return
 
     df = summary.dropna(subset=[value_col]).copy()
     if df.empty:
-        logger.warning("plot_point_errorbar(): keine gültigen Werte in '%s' - Plot übersprungen.", value_col)
+        logger.warning("plot_point_errorbar(): keine gueltigen Werte in '%s' - Plot uebersprungen.", value_col)
         return
 
     if sd_col is None:
@@ -223,117 +212,89 @@ def plot_point_errorbar(
 
     facets = sorted(df[facet_col].dropna().unique()) if facet_col and facet_col in df.columns else [None]
 
-    # x_values nur auf Kategorien einschränken, die in DIESER Tabelle
-    # tatsächlich vorkommen - x_order gibt lediglich die WÜNSCHENSWERTE
-    # Reihenfolge vor (z.B. alle möglichen Frequenzen/Bedingungen über den
-    # gesamten Datensatz), nicht dass jede davon auch in "summary" vertreten
-    # sein muss. Ohne diesen Schritt reserviert reindex() weiter unten für
-    # fehlende Kategorien einen leeren x-Tick mit NaN-Werten - das ergibt
-    # sichtbar leere Lücken auf der x-Achse.
+    # x-Kategorien nur, wenn sie in DIESER Tabelle vorkommen; x_order gibt die Reihenfolge vor.
     present_x = set(df[x_col].dropna().unique())
     x_values_configured = x_order if x_order is not None else natural_freq_sort(df[x_col].dropna().unique())
     x_values = [v for v in x_values_configured if v in present_x]
     if not x_values:
         logger.warning(
             "plot_point_errorbar(): keine der konfigurierten x_order-Kategorien %s kommt in "
-            "'%s' vor - Plot übersprungen.", list(x_values_configured), x_col,
+            "'%s' vor - Plot uebersprungen.", list(x_values_configured), x_col,
         )
         return
-    dropped = [v for v in x_values_configured if v not in present_x]
-    if dropped:
-        logger.info(
-            "plot_point_errorbar(): %d von %d konfigurierten x-Kategorien haben keine Daten "
-            "in dieser Tabelle und werden nicht als leerer Tick angezeigt: %s", len(dropped), len(x_values_configured), dropped,
-        )
 
-    colors = sorted(df[color_col].dropna().unique()) if color_col and color_col in df.columns else [None]
-    palette = dict(zip(colors, sns.color_palette("Set2", n_colors=max(len(colors), 1))))
+    has_color = bool(color_col) and color_col in df.columns
+    colors = (ordered_strains(df[color_col].dropna().unique()) if has_color and color_col == "biosensor"
+              else sorted(df[color_col].dropna().unique()) if has_color else [None])
+    if has_color and color_col == "biosensor":
+        palette = {c: strain_color(c) for c in colors}
+    else:
+        palette = dict(zip(colors, strain_ramp("_", max(len(colors), 1))))
 
-    styles = sorted(df[style_col].dropna().unique()) if style_col and style_col in df.columns else [None]
-    marker_map = dict(zip(styles, ["o", "^", "s", "D", "P", "X", "v"]))
+    has_style = bool(style_col) and style_col in df.columns
+    styles = sorted(df[style_col].dropna().unique()) if has_style else [None]
 
-    # Breite pro Facette richtet sich nach der ANZAHL DER X-KATEGORIEN, nicht
-    # nur nach der Anzahl der Facetten - vorher blieb die Breite pro Facette
-    # bei 4in fix, egal ob x_order 2 oder 6 Einträge hatte, wodurch die
-    # Datenpunkte bei vielen Frequenzen/Kategorien eng zusammengequetscht
-    # wurden und sich Marker/Errorbars sichtbar überlappt haben.
-    width_per_facet = max(4.0, 0.75 * len(x_values) + 1.5)
-    fig, axes = plt.subplots(1, len(facets), figsize=(width_per_facet * len(facets), 4.5), squeeze=False, sharey=True)
+    width_per_facet = max(2.6, 0.55 * len(x_values) + 1.2)
+    fig, axes = plt.subplots(1, len(facets), figsize=(width_per_facet * len(facets) + 0.4, 3.2),
+                             squeeze=False, sharey=True)
     axes = axes[0]
 
     n_series = len(colors) * len(styles)
-    # Horizontaler Versatz (Dodge) zwischen den Serien (color x style) pro
-    # x-Kategorie: statt eines fixen Schritts von 0.08 unabhängig von
-    # n_series wird jetzt eine feste GESAMTBREITE (dodge_span) gleichmäßig
-    # auf alle Serien verteilt. Dadurch rücken die Punkte bei wenigen Serien
-    # nah an die Kategorie-Mitte (wie vorher), aber bei vielen Serien wird
-    # der Versatz automatisch enger gehalten statt in die Nachbarkategorie
-    # hineinzulaufen - und bei z.B. nur 2 Serien deutlich sichtbarer als
-    # die alten pauschalen 0.08.
     dodge_span = 0.5
     dodge_step = dodge_span / n_series if n_series > 0 else 0.0
-    # EINE konsolidierte Legende für die ganze Abbildung statt einer Legende
-    # pro Facette - sonst verdeckt sie bei mehreren Facetten wiederholt Teile
-    # des Plots. Reihenfolge nach erstem Auftreten, Duplikate (gleiches Label
-    # in mehreren Facetten) werden zusammengeführt.
-    legend_handles: dict[str, object] = {}
 
     for ax, facet in zip(axes, facets):
         sub = df[df[facet_col] == facet] if facet_col and facet_col in df.columns else df
-
         series_idx = 0
         for c in colors:
-            color_df = sub[sub[color_col] == c] if color_col and color_col in df.columns else sub
-
+            color_df = sub[sub[color_col] == c] if has_color else sub
             for st in styles:
-                line_df = color_df[color_df[style_col] == st] if style_col and style_col in df.columns else color_df
+                line_df = color_df[color_df[style_col] == st] if has_style else color_df
                 if line_df.empty:
                     series_idx += 1
                     continue
-
-                # Pro (facet, color, style) muss x_col jetzt eindeutig sein - falls
-                # nicht, ist das ein echter Datenfehler, den wir nicht verstecken wollen.
                 if line_df[x_col].duplicated().any():
                     dupes = line_df.loc[line_df[x_col].duplicated(keep=False), x_col].unique()
                     raise ValueError(
                         f"plot_point_errorbar(): mehrdeutige '{x_col}'-Werte {list(dupes)} innerhalb "
                         f"({facet_col}={facet!r}, {color_col}={c!r}, {style_col}={st!r}). "
-                        f"Erwartet wird eine Zeile pro Bedingung - prüft group_cols der Summary-Tabelle."
+                        f"Erwartet wird eine Zeile pro Bedingung - prueft group_cols der Summary-Tabelle."
                     )
                 line_df = line_df.set_index(x_col).reindex(x_values).reset_index()
-
                 x_pos = np.arange(len(x_values)) + (series_idx - n_series / 2 + 0.5) * dodge_step
                 yerr = line_df[sd_col] if sd_col else None
-                label = " | ".join(str(p) for p in (c, st) if p is not None) or None
-                handle = ax.errorbar(
-                    x_pos, line_df[value_col], yerr=yerr,
-                    fmt=marker_map.get(st, "o"), capsize=3, markersize=6,
-                    color=palette[c] if c is not None else None,
-                    label=label,
-                )
-                if label is not None and label not in legend_handles:
-                    legend_handles[label] = handle
+                kw = errorbar_kwargs(st if st is not None else "Oscillation", palette.get(c, INK_SOFT))
+                kw["linestyle"] = ""
+                if x_col == "medium":
+                    # statisch: komplexes Medium gefuellt, Minimalmedium hohl (plot_style.MEDIUM_FILLED)
+                    for k, xv in enumerate(x_values):
+                        kw_k = dict(kw, markerfacecolor=kw["color"] if MEDIUM_FILLED.get(str(xv), True) else SURFACE)
+                        ax.errorbar(x_pos[k:k + 1], line_df[value_col].iloc[k:k + 1],
+                                    yerr=None if yerr is None else yerr.iloc[k:k + 1], **kw_k)
+                else:
+                    ax.errorbar(x_pos, line_df[value_col], yerr=yerr, **kw)
                 series_idx += 1
 
         ax.set_xticks(np.arange(len(x_values)))
-        ax.set_xticklabels(x_values, rotation=30)
+        ax.set_xticklabels([str(v) for v in x_values], rotation=30 if len(x_values) > 4 else 0)
         if facet is not None:
-            ax.set_title(str(facet), fontsize=11, fontweight="bold")
-        ax.set_xlabel(pretty_label(x_col))
+            panel_title(ax, str(facet))
+        ax.set_xlabel(axis_label(x_col))
         if ax is axes[0]:
             ax.set_ylabel(ylabel or pretty_label(value_col))
 
-    if legend_handles:
-        # Außerhalb rechts neben der letzten Facette - bbox_inches="tight" bei
-        # savefig() sorgt dafür, dass die Legende trotzdem mit ins PDF kommt.
-        fig.legend(
-            legend_handles.values(), legend_handles.keys(),
-            loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, borderaxespad=0.0,
-        )
-
-    fig.suptitle(title or f"{ylabel or pretty_label(value_col)} per condition (mean ± SD over replicates)", y=1.02)
-    fig.tight_layout()
-    _save_fig(fig, out_path)
+    handles = []
+    if has_color and len(colors) > 1:
+        handles += strain_handles(colors) if color_col == "biosensor" else [
+            Line2D([], [], marker="o", linestyle="", markersize=6, markerfacecolor=palette[c],
+                   markeredgecolor=edge_color(palette[c]), label=str(c)) for c in colors]
+    if has_style and len(styles) > 1:
+        handles += control_handles(INK_SOFT, which=[s for s in ("Oscillation", "PosCtrl", "NegCtrl") if s in styles])
+    if handles:
+        legend_below(fig, handles, ncol=min(len(handles), 4), y=0.0)
+    if title:
+        fig.suptitle(title.split("\n")[0], fontsize=9.5, y=1.0)
+    finish(fig, out_path, logger)
 
 
 def plot_rt_vs_rp_quadrant(
@@ -348,30 +309,10 @@ def plot_rt_vs_rp_quadrant(
     join_cols: Optional[Sequence[str]] = None,
 ) -> None:
     """
-    R(t) vs R(p) Quadranten-Plot, analog zu Paper Fig. 9: zeigt für jede
-    Bedingung, ob die Funktion über Zeit stabil/instabil UND die Population
-    homogen/heterogen ist (vier Quadranten). Ein Punkt = eine Bedingung
-    (z.B. eine Kombination aus Biosensor x Oszillationstyp x Frequenz x
-    Oscillation/PosCtrl/NegCtrl - je nachdem, was `join_cols` gemeinsam hat).
-
-    Gestrichelte Linien = Mittelwert über ALLE geplotteten Punkte (nicht pro
-    Facette) - so bleiben die 4 Quadranten über Facetten hinweg vergleichbar.
-
-    Parameters
-    ----------
-    rt_summary, rp_summary : aggregierte Tabellen (eine Zeile pro Bedingung),
-        z.B. Ergebnis von aggregate_robustness_over_replicates() für
-        R_t_population bzw. R_p
-    facet_col : Spalte für separate Subplots (Standard 'biosensor', None für
-        einen einzigen Plot). Ohne Facettierung landen bei mehreren
-        Biosensoren/Kontrollarten schnell viele Punkte in einem einzigen,
-        unübersichtlichen Panel übereinander.
-    color_col : Spalte für die Punktfarbe (Standard 'condition_type', falls
-        vorhanden - unterscheidet Oscillation/PosCtrl/NegCtrl farblich).
-        None = einfarbig. Vorher wurden Punkte einfach in Tabellen-
-        Reihenfolge eingefärbt (viridis-Verlauf ohne inhaltliche Bedeutung).
-    join_cols : Spalten, über die rt_summary und rp_summary zusammengeführt
-        werden (Standard: alle gemeinsamen Spalten außer den Werten selbst)
+    R(t) vs R(p) Quadranten-Plot (Paper Fig. 9): pro Bedingung, ob die Funktion ueber die Zeit
+    stabil UND die Population homogen ist. Ein Punkt = eine Bedingung; Farbe = Stamm (Facette),
+    Marker = Kontrollart (color_col 'condition_type'), Beschriftung = label_col (Periode).
+    Gestrichelte Linien = Mittelwert ueber ALLE Punkte (ueber Facetten vergleichbar).
     """
     if join_cols is None:
         join_cols = [c for c in rt_summary.columns if c in rp_summary.columns
@@ -382,55 +323,39 @@ def plot_rt_vs_rp_quadrant(
     rp_col = rp_value_col + "_rp" if rp_value_col + "_rp" in merged.columns else rp_value_col
 
     if merged.empty:
-        logger.warning("plot_rt_vs_rp_quadrant(): kein Überlapp zwischen rt_summary und rp_summary - Plot übersprungen.")
+        logger.warning("plot_rt_vs_rp_quadrant(): kein Ueberlapp zwischen rt_summary und rp_summary - Plot uebersprungen.")
         return
 
-    facets = sorted(merged[facet_col].dropna().unique()) if facet_col and facet_col in merged.columns else [None]
-    colors_vals = sorted(merged[color_col].dropna().unique()) if color_col and color_col in merged.columns else [None]
-    palette = dict(zip(colors_vals, sns.color_palette("Set2", n_colors=max(len(colors_vals), 1))))
-
+    facets = (ordered_strains(merged[facet_col].dropna().unique()) if facet_col == "biosensor"
+              else sorted(merged[facet_col].dropna().unique())) if facet_col and facet_col in merged.columns else [None]
+    has_style = bool(color_col) and color_col in merged.columns
     mean_rt, mean_rp = merged[rt_col].mean(), merged[rp_col].mean()
 
-    fig, axes = plt.subplots(1, len(facets), figsize=(5 * len(facets), 5), squeeze=False, sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, len(facets), figsize=(3.0 * len(facets) + 0.4, 3.2), squeeze=False,
+                             sharex=True, sharey=True)
     axes = axes[0]
-
-    legend_handles: dict[str, object] = {}
+    styles_seen: set = set()
     for ax, facet in zip(axes, facets):
         sub = merged[merged[facet_col] == facet] if facet_col and facet_col in merged.columns else merged
-
-        ax.axhline(mean_rt, color="gray", linewidth=0.8, linestyle="--")
-        ax.axvline(mean_rp, color="gray", linewidth=0.8, linestyle="--")
-
-        for cv in colors_vals:
-            sub_c = sub[sub[color_col] == cv] if color_col and color_col in sub.columns else sub
-            if sub_c.empty:
-                continue
-            handle = ax.scatter(
-                sub_c[rp_col], sub_c[rt_col],
-                color=palette[cv] if cv is not None else None,
-                s=70, zorder=5, label=str(cv) if cv is not None else None,
-            )
-            if cv is not None and str(cv) not in legend_handles:
-                legend_handles[str(cv)] = handle
-            for _, row in sub_c.iterrows():
-                ax.annotate(str(row[label_col]), (row[rp_col], row[rt_col]),
-                            textcoords="offset points", xytext=(5, 5), fontsize=7)
-
-        ax.set_xlabel("R(p) (a.u.) — higher = more homogeneous population")
+        color = strain_color(facet) if facet_col == "biosensor" else INK_SOFT
+        ax.axhline(mean_rt, color=INK_MUTED, linewidth=0.7, linestyle="--")
+        ax.axvline(mean_rp, color=INK_MUTED, linewidth=0.7, linestyle="--")
+        for st, part in (sub.groupby(color_col) if has_style else [(None, sub)]):
+            styles_seen.add(st)
+            ax.scatter(part[rp_col], part[rt_col], **marker_kwargs(st if st is not None else "Oscillation", color, size=34))
+            for _, row in part.iterrows():
+                ax.annotate(str(row[label_col]), (row[rp_col], row[rt_col]), textcoords="offset points",
+                            xytext=(4, 4), fontsize=6.5, color=INK_SOFT)
+        ax.set_xlabel("R(p): higher = more homogeneous population")
         if ax is axes[0]:
-            ax.set_ylabel("R(t) (a.u.) — higher = more stable over time")
+            ax.set_ylabel("R(t): higher = more stable over time")
         if facet is not None:
-            ax.set_title(str(facet), fontsize=11, fontweight="bold")
+            panel_title(ax, str(facet))
 
-    if legend_handles:
-        fig.legend(
-            legend_handles.values(), legend_handles.keys(), title=pretty_label(color_col),
-            loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, borderaxespad=0.0,
-        )
-
-    fig.suptitle("Robustness over time vs. over the population", y=1.02)
-    fig.tight_layout()
-    _save_fig(fig, out_path)
+    handles = control_handles(INK_SOFT, which=[s for s in ("Oscillation", "PosCtrl", "NegCtrl") if s in styles_seen])
+    if handles:
+        legend_below(fig, handles, ncol=3, y=0.0)
+    finish(fig, out_path, logger)
 
 
 def plot_rt_single_cell_distribution(
@@ -441,37 +366,33 @@ def plot_rt_single_cell_distribution(
     freq_order: Optional[Sequence[str]] = None,
 ) -> None:
     """
-    Verteilung der Einzelzell-R(t)-Werte als KDE pro Bedingung (z.B.
-    Oszillationsfrequenz) - analog zu Paper Fig. S9c.
-
-    Im Unterschied zu plot_point_errorbar() (EIN aggregierter Wert pro
-    Bedingung) zeigt dieser Plot die VOLLE VERTEILUNG über alle Zellen -
-    sinnvoll, weil R(t) auf Einzelzell-Ebene typischerweise sehr heterogen
-    ist und ein einzelner Mittelwert das verdecken würde.
+    Verteilung der Einzelzell-R(t)-Werte als KDE pro Bedingung (z.B. Periode), analog zu Paper
+    Fig. S9c: die VOLLE Verteilung ueber alle Zellen statt eines Mittelwerts. Perioden als
+    Hell-Dunkel-Rampe (kurz hell, lang dunkel; alle Staemme gepoolt, daher grau).
     """
     df = rt_cell.dropna(subset=[value_col])
     if df.empty:
-        logger.warning("plot_rt_single_cell_distribution(): keine gültigen Werte - Plot übersprungen.")
+        logger.warning("plot_rt_single_cell_distribution(): keine gueltigen Werte - Plot uebersprungen.")
         return
 
     facets = freq_order if freq_order is not None else natural_freq_sort(df[facet_col].dropna().unique())
-    palette = dict(zip(facets, sns.color_palette("viridis", n_colors=len(facets))))
+    palette = dict(zip(facets, strain_ramp("_", len(facets))))
 
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(4.6, 3.2))
     for f in facets:
         sub = df[df[facet_col] == f]
         if sub.empty or sub[value_col].nunique() < 2:
-            continue  # KDE braucht Streuung, sonst Fehler/leere Kurve
-        sns.kdeplot(sub[value_col], ax=ax, color=palette[f], label=str(f), fill=True, alpha=0.15, linewidth=1.5)
+            continue
+        sns.kdeplot(sub[value_col], ax=ax, color=palette[f], label=str(f), fill=True, alpha=0.12, linewidth=1.4)
 
     if not ax.get_legend_handles_labels()[0]:
-        logger.warning("plot_rt_single_cell_distribution(): zu wenig Streuung in allen Gruppen - Plot übersprungen.")
+        logger.warning("plot_rt_single_cell_distribution(): zu wenig Streuung in allen Gruppen - Plot uebersprungen.")
         plt.close(fig)
         return
 
     ax.set_xlabel(pretty_label(value_col))
-    ax.set_ylabel("Density")
-    ax.set_title(f"Distribution of {pretty_label(value_col)} across single cells, by {pretty_label(facet_col)}")
-    ax.legend(title=pretty_label(facet_col), loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=8, borderaxespad=0.0)
-    fig.tight_layout()
-    _save_fig(fig, out_path)
+    ax.set_ylabel("density")
+    ax.legend(title=axis_label(facet_col), loc="upper right", fontsize=7.5)
+    finish(fig, out_path, logger)
+
+

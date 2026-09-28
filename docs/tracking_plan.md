@@ -380,8 +380,53 @@ Two things changed on the analysis side with the measured parent:
   cell that keeps its contrast is not caught, and nothing in these tables distinguishes dead from dormant
   cells that still have contrast.
 
-Not yet re-run on v12: `validate_lineage.py` (the detection-rate and ambiguity figures of the data story are
-from the v11 run and marked so).
+## 6i. Checkpoint 7: second v12 run (contrast rule, validation), W65/W109, growth rate from budding, restyle
+
+**Second run** (564 chambers: W65 minimal Rep5 dropped, see below; contrast rule active). The contrast
+rule removed 1,951 tracks and 13,321 object-frames (1.3 %) over the whole run, but unevenly: 49 chambers
+lose more than 5 % of their object-frames and 17 more than 20 %, and the heaviest losses are the W109 static
+chambers (minimal medium Rep1 to Rep4: 46, 39, 49 and 68 %; complex medium Rep2 and Rep4: 65 and 53 %), far
+beyond anything the two calibration chips showed. The W109 numbers moved accordingly (minimal-medium area
+5,489 → 8,199 px², budding rate 0.33 → 0.13 per mother-hour; complex medium 0.05 → 0.009). Open: are those
+chambers full of dead cells, or do the W109 movies have a different phase contrast so that live cells fall
+below 0.12? That needs the W109 `Combined_Results.csv` tables; until then the static section is provisional.
+The control-trend verdicts moved from 23/20/3/2 to 26/18/2/2: area BSG/pH, area WT/pH and µ_area WT/pH went
+from ρ −0.8 to −0.4, one rank swap in a four-period series each.
+
+**Validation on v12** (`lineage_validation/`): the detection rate of the mother assignment differs between
+the structures of a series in 4 of 10 series (Kruskal p < 0.05; v11: 7 of 10) and trends with the period in
+no consistent direction (BSA/Glc −0.77, BSPH/Glc −0.77, BSG/pH −0.80, BSPH/pH +0.80, BSO/Glc +0.60);
+median assignment rate 0.67 per chamber, median distance over search radius 0.93, 4 % ambiguous candidates.
+
+**W65 minimal medium**: Rep1 and Rep5 are the same stage position recorded twice (110 and 109 tracks, 37 and
+35 objects, the same 51,000 px² cell); Rep5 is dropped through `config.EXCLUDED_CHAMBERS`, four chambers
+remain. The overlay of frames 85 to 88 shows the lower of the two swollen cells releasing a ring of ten
+blastoconidia within three frames (tracks 3 to 14): synchronous multipolar budding, the thesis illustration
+of a swollen cell turning into blastoconidia.
+
+**W109** is one chip with three structures (lab book), so it joins `STATIC_SINGLE_CHIP_FAMILIES`: the four
+movies per medium are four distinct chambers of that chip (186, 225, 369 and 410 tracks in minimal medium,
+no duplicates), the unit is the chamber and n is one culture for both static families.
+
+**Growth rate from budding** (`growth_from_budding.py`, outputs `24_*`): µ_bud = births per cell-hour in the
+sparse window, births = accepted budding events, cell-hours = cells present per frame summed over the window
+times 10 min. In balanced growth each birth adds one cell, so the ratio is the specific growth rate of the
+population; bursts count every bud and no interval is needed. The interbud table `11_specific_growth_rate`
+stays but is an interbud rate, not µ (medians of 1.6 to 2.9 h⁻¹ per condition; its summary table had been
+empty because of a pandas groupby default, fixed). Alongside: immigration = new tracks without a parent mask
+per cell-hour. Check on the WT/pH/6 v12 table: µ_bud 0.09 to 0.22 h⁻¹ in the oscillation chambers (doubling
+3 to 7 h), immigration 0.15 to 0.28 per cell-hour, i.e. washed-in cells arrive faster than cells are born.
+Same tables and figure as the budding rate (per chamber, per chip, summary, Spearman, bracket, control trend,
+within culture, vs period), a row in `50_control_trend_summary`, and `24_mu_bud_vs_mu_area.pdf`.
+
+**Restyle** (`plot_style.py`, `config.STRAIN_COLORS`): colour = strain everywhere (WT #2a78d6, BSA #eb6834,
+BSO #1baf7a, BSG #eda100, BSPH #e87ba4, PKO grey); controls by marker and fill in the strain colour
+(oscillation filled circle, feast control filled up-triangle, famine control hollow down-triangle), periods
+as a light-to-dark ramp of the strain hue, static media by fill; white background, faint horizontal grid,
+two spines, 8 to 9 pt text, dark marker edges (yellow, green and pink are below 3:1 contrast on white),
+editable PDF text. The five colours pass the colour-vision check (weakest pair BSG/BSO, ΔE 9.1); the old
+control red clashed with BSA orange (ΔE 5.9), hence markers instead of colours for the controls. The
+explanatory footers inside the figures are gone; they belong in the captions. Rendered on the synthetic data.
 
 ## 7. Order and checkpoints
 

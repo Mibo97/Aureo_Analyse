@@ -78,6 +78,7 @@ from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
 from mother_trajectories import plot_stable_mother_per_group, build_lineage_tree, summarise_lineage_depth
 from budding_ratio_timeseries import compute_budding_ratio_timeseries, aggregate_budding_ratio_over_replicates
 from growth_rate import compute_specific_growth_rate, summarise_growth_rate, classify_condition_type
+from growth_from_budding import compute_growth_from_budding, plot_mu_bud_vs_mu_area
 from area_growth import compute_area_growth_rate, summarise_area_growth, plot_mu_event_vs_mu_area
 from robustness import (
     compute_rt_population,
@@ -269,10 +270,15 @@ class PipelineContext:
 
     @property
     def mu_table(self) -> pd.DataFrame:
-        return self._lazy("mu_table", lambda: compute_specific_growth_rate(
-            self.lineage_events, self.cells_lineage,
-            min_per_frame=MIN_PER_FRAME, mu_max_threshold=MU_MAX_THRESHOLD,
-        ))
+        def compute() -> pd.DataFrame:
+            if self.lineage_events.empty:
+                logger.warning("Keine Budding-Events - µ_event (11_) entfaellt fuer diesen Zweig.")
+                return pd.DataFrame()
+            return compute_specific_growth_rate(
+                self.lineage_events, self.cells_lineage,
+                min_per_frame=MIN_PER_FRAME, mu_max_threshold=MU_MAX_THRESHOLD,
+            )
+        return self._lazy("mu_table", compute)
 
     @property
     def mu_summary(self) -> pd.DataFrame:
@@ -463,9 +469,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
                 style_col="condition_type" if "condition_type" in area_rep_summary.columns else None,
                 x_order=freq_order,
                 ylabel="µ_area, all cells [h⁻¹]",
-                title="µ_area over all cells, oscillation and control chambers — mean ± SEM "
-                      "(error unit per table: error_unit)\n"
-                      "(no mother/bud filter, so independent of the lineage heuristic)",
+                title="µ_area over all cells, oscillation and control chambers, mean ± SEM over chambers",
             )
 
             area_trend = spearman_against_period(area_rep)
@@ -594,9 +598,8 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
                 x_order=ctx.freq_order,
                 ylabel=f"{pretty_label(value_col)} (endpoint)",
-                title=f"{value_col}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]})\n"
-                      "mean ± SEM; error unit per chip family (error_unit: chips, or chambers of one chip)"
-                      if frame_window else f"{value_col}: endpoint, mean ± SEM (error unit per table)",
+                title=f"{pretty_label(value_col)}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]}), mean ± SEM over chambers"
+                      if frame_window else f"{pretty_label(value_col)}: endpoint, mean ± SEM over chambers",
             )
 
     if not all_summary:
@@ -692,10 +695,81 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
             out_path=output_dir / f"21_budding_rate_vs_{ctx.x_col}.pdf",
             x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
             x_order=ctx.freq_order, ylabel="buds per mother-hour (sparse-phase window)",
-            title="Budding rate in the sparse-phase window, mean ± SEM "
-                  "(error unit per chip family: chips, or chambers of one chip)",
+            title="budding rate in the sparse-phase window, mean ± SEM over chambers",
         )
     logger.info("Knospungsrate gespeichert: 21_budding_rate_per_chip.csv / _summary.csv (+ Plots)")
+
+
+def _growth_from_budding_outputs(ctx: PipelineContext) -> None:
+    """Spezifische Wachstumsrate der Population aus den Knospungen (growth_from_budding.py):
+    Geburten je Zellstunde im Sparse-Phase-Fenster, daneben die Einwanderung (neue Tracks ohne
+    Elternmaske je Zellstunde). Dieselbe Chip-Logik und dieselben Tabellen wie Schritt 21
+    (per_chamber, per_chip, summary, spearman, bracket, control_trend, within_culture, Abbildung
+    gegen die Periode) unter dem Praefix 24_, plus ein Scatter gegen µ_area je Chip."""
+    output_dir = ctx.output_dir
+    per_chamber = compute_growth_from_budding(ctx.cells_lineage, ctx.lineage_events, MIN_PER_FRAME)
+    if per_chamber.empty:
+        logger.warning("Wachstumsrate aus Knospungen: keine Kammern im Fenster - 24_* uebersprungen.")
+        return
+    per_chamber.to_csv(output_dir / "24_growth_from_budding_per_chamber.csv", index=False)
+    for value_col, stem, ylabel, title in (
+        ("mu_bud", "24_growth_from_budding", "µ_bud [h⁻¹]\n(births per cell-hour, sparse window)",
+         "specific growth rate from budding vs cycle period — one chip per period"),
+        ("immigration_per_cell_h", "24_immigration", "washed-in cells per cell-hour\n(new tracks without a parent mask)",
+         "immigration into the chambers vs cycle period — one chip per period"),
+    ):
+        if per_chamber[value_col].isna().all():
+            logger.info("%s: Spalte '%s' leer (kein link_type in den Tabellen) - uebersprungen.", stem, value_col)
+            continue
+        per_chip, summary = summarise_per_replicate(per_chamber.dropna(subset=[value_col]), value_col)
+        if summary.empty:
+            continue
+        per_chip.to_csv(output_dir / f"{stem}_per_chip.csv", index=False)
+        summary.to_csv(output_dir / f"{stem}_summary.csv", index=False)
+        if ctx.x_col == "osc_freq":
+            trend = spearman_against_period(per_chip)
+            score = bracket_normalise(per_chip)
+            score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
+            trends = [trend] if not trend.empty else []
+            if not score_trend.empty:
+                trends.append(score_trend.assign(value_col=f"{value_col}__bracket_score"))
+            if trends:
+                pd.concat(trends, ignore_index=True).to_csv(output_dir / f"{stem}_spearman.csv", index=False)
+            if not score.empty:
+                score.to_csv(output_dir / f"{stem}_bracket_score.csv", index=False)
+            ctrl_trend = control_trend_check(per_chip)
+            if not ctrl_trend.empty:
+                ctrl_trend.to_csv(output_dir / f"{stem}_control_trend.csv", index=False)
+                logger.info("Tabelle gespeichert: %s_control_trend.csv\n%s", stem,
+                            ctrl_trend[["biosensor", "osc_type", "rho_osc", "rho_ctrl_strongest",
+                                        "rho_osc_minus_ctrl", "verdict"]].round(2).to_string(index=False))
+            within = within_culture_trend(per_chip)
+            if not within.empty:
+                within.to_csv(output_dir / f"{stem}_within_culture.csv", index=False)
+            for osc_type in sorted(per_chip["osc_type"].dropna().unique()):
+                sel = per_chip["osc_type"] == osc_type
+                plot_endpoint_vs_period(
+                    per_chip[sel], output_dir / f"{stem}_vs_period_{osc_type}.pdf", value_col=value_col,
+                    trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
+                    score=score[score["osc_type"] == osc_type] if not score.empty else None,
+                    score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
+                    ylabel=ylabel, title=title,
+                )
+        else:
+            plot_point_errorbar(
+                summary, value_col="mean", sd_col="sem", out_path=output_dir / f"{stem}_vs_{ctx.x_col}.pdf",
+                x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL, x_order=ctx.freq_order,
+                ylabel=ylabel.replace("\n", " "),
+                title=title.split(" vs ")[0] + ", mean ± SEM (error unit per chip family)",
+            )
+        logger.info("Wachstumsrate aus Knospungen gespeichert: %s_per_chip.csv / _summary.csv (+ Plots)", stem)
+
+    # µ_bud gegen µ_area je Chip: Population gegen Einzelzelle.
+    area_table = ctx.area_table
+    if not area_table.empty and "mu_area" in area_table.columns:
+        area_chip, _ = summarise_per_replicate(area_table, "mu_area")
+        bud_chip, _ = summarise_per_replicate(per_chamber.dropna(subset=["mu_bud"]), "mu_bud")
+        plot_mu_bud_vs_mu_area(bud_chip, area_chip, output_dir / "24_mu_bud_vs_mu_area.pdf")
 
 
 def step_20_lineage(ctx: PipelineContext) -> None:
@@ -728,6 +802,8 @@ def step_20_lineage(ctx: PipelineContext) -> None:
         logger.info("Tabellen gespeichert: 21_budding_ratio_per_mother.csv / _per_experiment.csv")
         # Die Lineage-Abbildung: Knospungsrate gegen die Periode, mit eigenen Kontrollen.
         _lineage_rate_outputs(ctx, per_experiment)
+        # Spezifische Wachstumsrate der Population aus den Knospungen (24_*).
+        _growth_from_budding_outputs(ctx)
 
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
@@ -1021,7 +1097,7 @@ def step_50_summary(ctx: PipelineContext) -> None:
     if ctx.x_col == "osc_freq":
         parts = []
         for name in ("13_endpoint_control_trend.csv", "12_area_growth_rate_control_trend.csv",
-                     "21_budding_rate_control_trend.csv"):
+                     "21_budding_rate_control_trend.csv", "24_growth_from_budding_control_trend.csv"):
             path = output_dir / name
             if path.exists():
                 try:
@@ -1127,12 +1203,12 @@ def step_95_sensor_controls(ctx: PipelineContext) -> None:
             plot_sensor_control_timeseries(
                 control_time, output_dir / f"{output_stem}_timeseries.pdf",
                 sensor_label=sensor_label,
-                preconditioning_end_min=OSCILLATION_START_MIN,
+                preconditioning_end_min=OSCILLATION_START_MIN, strain=biosensor,
             )
             plot_sensor_control_comparison(
                 control_summary, output_dir / f"{output_stem}_comparison.pdf",
                 sensor_label=sensor_label, analysis_start_min=analysis_start_min,
-                control_labels=CONTROL_CONCENTRATION_LABELS.get(osc_type),
+                control_labels=CONTROL_CONCENTRATION_LABELS.get(osc_type), strain=biosensor,
             )
 
             # A flat ratio can arise because both raw channels shift together
@@ -1154,7 +1230,7 @@ def step_95_sensor_controls(ctx: PipelineContext) -> None:
                 channel_a_time, channel_b_time, output_dir / f"{output_stem}_raw_channels.pdf",
                 sensor_label=sensor_label, channel_a_label=sensor_cfg.channel_a,
                 channel_b_label=sensor_cfg.channel_b,
-                preconditioning_end_min=OSCILLATION_START_MIN,
+                preconditioning_end_min=OSCILLATION_START_MIN, strain=biosensor,
             )
 
             chamber_summary = summarise_sensor_controls_by_chamber(
@@ -1164,7 +1240,7 @@ def step_95_sensor_controls(ctx: PipelineContext) -> None:
                 chamber_summary.to_csv(output_dir / f"{output_stem}_control_chambers.csv", index=False)
                 plot_control_chamber_comparison(
                     chamber_summary, output_dir / f"{output_stem}_control_chambers.pdf",
-                    sensor_label=sensor_label,
+                    sensor_label=sensor_label, strain=biosensor,
                 )
 
     logger.info("=== Fertig! Alle Plots & Tabellen in: %s ===", output_dir)

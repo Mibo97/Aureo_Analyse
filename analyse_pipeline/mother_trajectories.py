@@ -51,6 +51,15 @@ if not logger.handlers:
 # 1. Trajektorien-Plot mit Budding-Markern für stabile Mütter
 # ==============================================================================
 
+def _line_color(mom_row, traj) -> str:
+    """Stammfarbe der Mutter (aus der Mutterzeile oder ihrer Trajektorie), sonst Grau."""
+    from plot_style import strain_color
+    strain = mom_row.get("biosensor") if hasattr(mom_row, "get") else None
+    if strain is None and "biosensor" in traj.columns and not traj.empty:
+        strain = traj["biosensor"].iloc[0]
+    return strain_color(strain if strain is not None else "_")
+
+
 def plot_mother_trajectories(
     cells: pd.DataFrame,
     lineage_events: pd.DataFrame,
@@ -153,11 +162,11 @@ def plot_mother_trajectories(
                 for col_i, value_col in enumerate(value_cols):
                     ax = axes[row_i][col_i]
                     x = traj["frame"] * min_per_frame / 60.0 if min_per_frame is not None else traj["frame"]
-                    ax.plot(x, traj[value_col], color="#0F6E56", linewidth=1.2, marker="o", markersize=2)
+                    ax.plot(x, traj[value_col], color=_line_color(mom_row, traj), linewidth=1.1, marker="o", markersize=2)
 
                     for bf in bud_frames:
                         bx = bf * min_per_frame / 60.0 if min_per_frame is not None else bf
-                        ax.axvline(bx, color="#D85A30", linewidth=1.0, linestyle="--", alpha=0.8)
+                        ax.axvline(bx, color="#222222", linewidth=0.9, linestyle="--", alpha=0.7)
 
                     if row_i == 0:
                         ax.set_title(value_col, fontsize=10)
@@ -171,7 +180,7 @@ def plot_mother_trajectories(
 
             fig.suptitle(
                 f"Stably tracked mother cells (coverage ≥ {min_coverage:.2f}) - "
-                f"page {page + 1}/{n_pages} - dashed red lines = detected budding events",
+                f"page {page + 1}/{n_pages} - dashed lines = detected budding events",
                 fontsize=10,
             )
             fig.tight_layout(rect=(0, 0, 1, 0.96))
@@ -382,10 +391,10 @@ def plot_stable_mother_per_group(
                         continue
 
                     value_col = vcols[col_i]
-                    ax.plot(x, traj[value_col], color="#0F6E56", linewidth=1.2, marker="o", markersize=2)
+                    ax.plot(x, traj[value_col], color=_line_color(mom_row, traj), linewidth=1.1, marker="o", markersize=2)
                     for bf in bud_frames:
                         bx = bf * min_per_frame / 60.0 if min_per_frame is not None else bf
-                        ax.axvline(bx, color="#D85A30", linewidth=1.0, linestyle="--", alpha=0.8)
+                        ax.axvline(bx, color="#222222", linewidth=0.9, linestyle="--", alpha=0.7)
 
                     ax.set_title(value_col, fontsize=9)
                     if col_i == 0:
@@ -399,7 +408,7 @@ def plot_stable_mother_per_group(
 
             fig.suptitle(
                 f"One stably tracked mother per condition ({' x '.join(group_cols)}) - "
-                f"page {page + 1}/{n_pages} - dashed red lines = budding events",
+                f"page {page + 1}/{n_pages} - dashed lines = budding events",
                 fontsize=9.5,
             )
             fig.tight_layout(rect=(0, 0, 1, 0.95))
