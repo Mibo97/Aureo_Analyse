@@ -286,3 +286,21 @@ def _normalize_mixed_type_columns(df: pd.DataFrame) -> pd.DataFrame:
             )
             df[col] = df[col].astype(str).where(df[col].notna(), other=pd.NA)
     return df
+
+
+
+def drop_excluded_chambers(cells: pd.DataFrame, excluded: dict[str, str] | None) -> pd.DataFrame:
+    """Kammern aus config.EXCLUDED_CHAMBERS (exp_id -> Grund) entfernen; jede mit Zeilenzahl und Grund
+    geloggt, ein Eintrag ohne Treffer als Warnung (Tippfehler-Schutz)."""
+    if not excluded or cells.empty or "exp_id" not in cells.columns:
+        return cells
+    keep = cells
+    for exp_id, why in excluded.items():
+        hit = keep["exp_id"] == exp_id
+        n = int(hit.sum())
+        if n == 0:
+            logger.warning("EXCLUDED_CHAMBERS: '%s' kommt in den Tabellen nicht vor (%s).", exp_id, why)
+            continue
+        logger.info("EXCLUDED_CHAMBERS: %s entfernt (%d Zeilen) - %s", exp_id, n, why)
+        keep = keep[~hit]
+    return keep

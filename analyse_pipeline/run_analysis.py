@@ -60,6 +60,7 @@ from config import (
     RESULTS_PATTERN,
     RESULTS_SUBDIR,
     FLAG_EXCLUDE_ROWS,
+    EXCLUDED_CHAMBERS,
     CELL_MIN_FRAMES,
     CELL_MIN_MAX_AREA_PX,
     CELL_MIN_PHASE_CV,
@@ -90,7 +91,7 @@ from config import (
     RELINK_MAX_AREA_RATIO,
     log_active_configuration,
 )
-from data_loading import load_all_results
+from data_loading import drop_excluded_chambers, load_all_results
 from qc_exclusions import (
     init_qc_exclusions,
     read_qc_exclusions,
@@ -319,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD,
                              filename_pattern=RESULTS_PATTERN, results_subdir=RESULTS_SUBDIR)
+    cells = drop_excluded_chambers(cells, EXCLUDED_CHAMBERS)   # z.B. eine zweimal aufgenommene Kammer
     # Urspruengliche Track-ID festhalten: manuelle Merges benennen track_id um, parent_track_id einer
     # re-getrackten Tabelle zeigt aber weiter auf die urspruengliche ID (lineage.classify_mother_bud_measured).
     cells["track_id_orig"] = cells["track_id"]

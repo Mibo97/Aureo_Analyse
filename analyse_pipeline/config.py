@@ -167,6 +167,16 @@ STATIC_MEDIUM_ORDER = ["omlp", "ypd"]
 # jedes 'replicate' als eigener Chip.
 STATIC_SINGLE_CHIP_FAMILIES = {"W65"}
 
+# Kammern, die NICHT in die Auswertung gehen: exp_id -> Grund (data_loading.drop_excluded_chambers,
+# direkt nach dem Einlesen, vor jedem Schritt). exp_id =
+# "<biosensor>__<osc_type>__<osc_freq>__<condition>__<replicate>__<chamber>" (data_loading.py).
+# W65 minimal: Rep1 und Rep5 sind laut Laborbuch dieselbe Stage-Position, also EINE Kammer, zweimal
+# aufgenommen (110/109 Spuren, 37/35 Objekte, dieselbe Riesenzelle mit ~51,000 px2, die in
+# Frame 85-88 Blastokonidien ausstoesst). Rep5 faellt, Rep1 bleibt; W65 minimal hat damit 4 Kammern.
+EXCLUDED_CHAMBERS: dict[str, str] = {
+    "WT__Static__static_W65__St.omlp__Rep5__ChamA0": "same stage position as Rep1 (one chamber recorded twice)",
+}
+
 # --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
 # Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
 # Kontrollen sich ohne Exopolysaccharid korrekt verhalten (Clogging-Hypothese,
@@ -444,6 +454,8 @@ def log_active_configuration() -> None:
         if os.environ.get(var):
             logger.warning("  Umgebungsvariable %s ist gesetzt, wird aber nicht mehr gelesen (RESULTS_VERSION entscheidet).", var)
     logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
+    for exp_id, why in EXCLUDED_CHAMBERS.items():
+        logger.info("  EXCLUDED_CHAMBERS: %s - %s", exp_id, why)
     logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2, Kontrast (phase_std/phase_mean) >= %s",
                 CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX,
                 "aus" if CELL_MIN_PHASE_CV is None else f"{CELL_MIN_PHASE_CV:.2f} (nur v12-Tabellen)")
