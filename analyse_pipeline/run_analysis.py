@@ -63,7 +63,7 @@ from config import (
     EXCLUDED_CHAMBERS,
     CELL_MIN_FRAMES,
     CELL_MIN_MAX_AREA_PX,
-    CELL_MIN_PHASE_CV,
+    CELL_MIN_PHASE_CV_REL,
     DATA_ROOT,
     OUTPUT_DIR,
     OUTPUT_DIR_STATIC,
@@ -400,8 +400,8 @@ def main(argv: list[str] | None = None) -> int:
 
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
     # Zellfilter (cell_filter.py): Schmutz, Halo-Stuecke, Flackern von einem Frame - nach dem manuellen QC;
-    # auf v12-Tabellen zusaetzlich tote Zellen/Truemmer ohne Phasenkontrast (CELL_MIN_PHASE_CV).
-    cells, cell_filter_report = flag_cells(cells, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX, CELL_MIN_PHASE_CV)
+    # auf v12-Tabellen zusaetzlich tote Zellen/Truemmer ohne Phasenkontrast (CELL_MIN_PHASE_CV_REL).
+    cells, cell_filter_report = flag_cells(cells, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX, CELL_MIN_PHASE_CV_REL)
     if not cell_filter_report.empty:
         cell_filter_report.to_csv(OUTPUT_DIR / "00_cell_filter.csv", index=False)
     cells = cells[cells["is_cell"]].drop(columns="is_cell")
@@ -653,7 +653,7 @@ def main(argv: list[str] | None = None) -> int:
         raw = add_time_column(cells_raw, MIN_PER_FRAME)
         raw = add_experiment_units(raw, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX,
                                    static_single_chip_families=STATIC_SINGLE_CHIP_FAMILIES)
-        raw, raw_filter_report = flag_cells(raw, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX, CELL_MIN_PHASE_CV)
+        raw, raw_filter_report = flag_cells(raw, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX, CELL_MIN_PHASE_CV_REL)
         if not raw_filter_report.empty:
             (OUTPUT_DIR / "no_qc").mkdir(parents=True, exist_ok=True)
             raw_filter_report.to_csv(OUTPUT_DIR / "no_qc" / "00_cell_filter.csv", index=False)

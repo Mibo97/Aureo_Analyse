@@ -372,7 +372,7 @@ Two things changed on the analysis side with the measured parent:
   1,300–1,700 px², tracked for a median of 31 frames, 70 % of them with a touching "bud" that the lineage
   would have counted; concentrated in three chambers (NegCtrl Rep1/Rep2, Osc Rep3 with 27 % of its frames).
   On WT/pH/6 it removes 4 tracks and 30 object-frames (0.1 %). Implemented as a third rule of
-  `cell_filter.py`: `CELL_MIN_PHASE_CV = 0.12`, applied only when the phase columns exist, reported per
+  `cell_filter.py`: `CELL_MIN_PHASE_CV = 0.12` (made relative to the structure in 6k), applied only when the phase columns exist, reported per
   chamber in `00_cell_filter.csv` (`n_tracks_removed_by_contrast`, `n_object_frames_removed_by_contrast`).
   A chamber whose objects all sit below the threshold (all dead, or focus lost) drops out entirely, which the
   report makes visible. The v12 outputs quoted in the data story predate the rule; the next analysis run
@@ -448,6 +448,24 @@ the panel; the Spearman text sits in the panel title, not on the data; the violi
 against WT only (four brackets instead of ten); the point figures and the validation figure show only the
 periods present in each facet; the size-criterion figure keeps its group legend below the panels; the sensor
 time course keeps its "2 h" mark inside the axes; the sparse-window figure carries a strain legend.
+
+## 6k. The contrast rule made relative (W109 resolved)
+
+The W109 minimal-medium table shows a different recording, not dead cells: cell mean about 480 counts
+(background about 455) against 1,500 to 2,300 on every other chip, and with that little signal above the
+camera offset the ratio phase_std / phase_mean of every live cell lies at 0.07 to 0.12, unimodal at 0.095 in
+all four chambers and at every size (tracks of 3,000 px² or more: median 0.095, 86 % below 0.12). The fixed
+threshold of 0.12 removed 59 % of the size-passing object-frames there. W65 static (the other uploaded table)
+looks like the calibration chips (reference 0.31, 0.2 % below 0.12).
+
+Rule now: a track is low-contrast when its ratio is below `CELL_MIN_PHASE_CV_REL` = 0.45 times the median of
+the size-passing tracks of the same structure (biosensor/osc_type/osc_freq, i.e. one imaging session). On the
+four tables: BSG/pH/6 threshold 0.122, the same 44 tracks (20 % of the size-passing frames) as before;
+WT/pH/6 0.109, 2 tracks; W65 static 0.139, 13 tracks (0.3 %); W109 0.043, none. The reference and the
+effective threshold stand per chamber in `00_cell_filter.csv`; the log still warns when a chamber loses more
+than a quarter of its frames, which is where a debris-dominated reference would show. The oscillation series
+are unaffected by the change (same tracks removed), so the third-run numbers of the data story stand; only the
+W109 static values return to the first-run numbers with the next run.
 
 ## 7. Order and checkpoints
 

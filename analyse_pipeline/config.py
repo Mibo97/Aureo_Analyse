@@ -292,15 +292,17 @@ CELL_MIN_MAX_AREA_PX = 1500.0
 
 # Kontrastregel (nur Tabellen der Pipeline v12 mit phase_mean/phase_std): tote Zellen und
 # Zelltruemmer verlieren im Phasenkontrast ihren Kontrast. Je Spur der Median von
-# phase_std / phase_mean. Auf dem truemmerreichen Chip BSG/pH/6 ist er zweigipflig (Moden 0.05
-# und 0.28, Tal 0.11-0.16), auf WT/pH/6 eingipflig bei 0.2-0.3; Zellen ab 3,000 px2 liegen in
-# beiden nie unter 0.18 (5 %-Quantil). Schwelle 0.12: entfernt auf BSG/pH/6 ZUSAETZLICH zur
-# Groessenregel 44 Spuren mit 20 % der Objekt-Frames (runde, schrumpfende Objekte von
-# 1,300-1,700 px2 ueber ~30 Frames), auf WT/pH/6 4 Spuren (0.1 %). None = aus. Bericht:
-# 00_cell_filter.csv, Spalten n_tracks_removed_by_contrast / n_object_frames_removed_by_contrast.
-# Eine Kammer, deren Zellen ALLE unter der Schwelle liegen (alles tot oder Fokus verloren), faellt
-# damit ganz aus - am Bericht sichtbar.
-CELL_MIN_PHASE_CV: float | None = 0.12
+# phase_std / phase_mean, die Schwelle RELATIV zum Median der groessenbestandenen Spuren derselben
+# Struktur (Aufnahmesitzung biosensor/osc_type/osc_freq). Auf dem truemmerreichen Chip BSG/pH/6
+# ist der Kontrast zweigipflig (Moden 0.05 und 0.28), auf WT/pH/6 eingipflig bei 0.2-0.3 - dort
+# entfernt 0.45 x Median dieselben 44 bzw. 2 Spuren wie die frueher feste Schwelle 0.12. Fest ging
+# nicht: die W109-Filme sind vierfach dunkler aufgenommen (Zellmittel ~480 statt 1,500-2,300
+# Zaehlwerte), alle Zellen liegen dort bei 0.07-0.12, und die feste Schwelle entfernte 59 % ihrer
+# Objekt-Frames, lebende Zellen. Relativ: W109 nichts, W65 statisch 0.3 %. None = aus. Bericht:
+# 00_cell_filter.csv (n_tracks_removed_by_contrast, phase_cv_reference, min_phase_cv je Kammer).
+# Grenze der Regel: eine Struktur, deren Zellen MEHRHEITLICH tot sind, hat eine Truemmer-Referenz;
+# die Warnung im Log (> 25 % einer Kammer) zeigt solche Faelle.
+CELL_MIN_PHASE_CV_REL: float | None = 0.45
 
 # Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): eine neu
 # auftauchende Zelle zaehlt nur als Knospe, wenn ihre Flaeche beim ersten
@@ -425,7 +427,8 @@ METHOD_CAVEATS: list[str] = [
     "Frame, und die Events sind Fragment-Statistik (00_track_fragmentation.csv). Vorher werden "
     "eindeutige Tracking-Luecken automatisch geschlossen (00_track_relinks.csv).",
     "ZELLFILTER: eine Spur zaehlt nur als Zelle mit >= CELL_MIN_FRAMES Frames und groesster Flaeche "
-    ">= CELL_MIN_MAX_AREA_PX sowie (Pipeline v12) Median phase_std/phase_mean >= CELL_MIN_PHASE_CV, "
+    ">= CELL_MIN_MAX_AREA_PX sowie (Pipeline v12) Median phase_std/phase_mean >= CELL_MIN_PHASE_CV_REL x "
+    "Median der Struktur, "
     "tote Zellen und Truemmer haben keinen Phasenkontrast (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
     "fallen so aus allen Readouts, nach dem manuellen QC.",
     "GEMESSENE ELTERNSCHAFT: auf re-getrackten Tabellen (AUREO_RESULTS_PATTERN=Combined_Results_retracked.*, "
@@ -472,7 +475,8 @@ def log_active_configuration() -> None:
         logger.info("  EXCLUDED_CHAMBERS: %s - %s", exp_id, why)
     logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2, Kontrast (phase_std/phase_mean) >= %s",
                 CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX,
-                "aus" if CELL_MIN_PHASE_CV is None else f"{CELL_MIN_PHASE_CV:.2f} (nur v12-Tabellen)")
+                "aus" if CELL_MIN_PHASE_CV_REL is None
+                else f"{CELL_MIN_PHASE_CV_REL:.2f} x Median der Struktur (nur v12-Tabellen)")
     logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
                 LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
     if OSC_FREQ_IS_PERIOD_IN_MINUTES:

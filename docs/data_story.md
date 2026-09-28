@@ -195,19 +195,21 @@ BSG/pH/6 is the low mode. Most of it is already removed by the size rule. What t
 persistent debris that passes it: on BSG/pH/6, 44 tracks with 20 % of the object-frames that survive the
 size rule, round (circularity 0.91), shrinking (area ratio last/first 0.74), 1,300 to 1,700 px², tracked for
 a median of 31 frames, 70 % of them with a touching "bud" that the lineage would have counted; on WT/pH/6,
-4 tracks and 0.1 % of the frames. The rule (`CELL_MIN_PHASE_CV` = 0.12 in `config.py`; columns
-`*_removed_by_contrast` in `00_cell_filter.csv`) is not yet in the tables quoted here; it applies from the
-next run and touches three chambers of BSG/pH/6 noticeably (NegCtrl Rep1 and Rep2, Osc Rep3 with 27 % of its
-frames). It cannot tell a dead cell that kept its contrast from a live one, and a chamber whose cells all
-lost contrast, dead or out of focus, drops out and shows up in the report.
+4 tracks and 0.1 % of the frames. It cannot tell a dead cell that kept its contrast from a live one.
 
-The second run applied the rule: 1.3 % of all object-frames go, but 17 chambers lose more than 20 %, and the
-heaviest losses are the W109 static chambers (minimal medium 39 to 68 % of their object-frames, complex medium
-Rep2 and Rep4 65 and 53 %), far beyond the calibration chips. Whether those chambers are full of dead cells or
-the W109 movies simply have a weaker phase contrast is open (section 9); the W109 numbers in section 3 are
-quoted from the first run, before the rule, until that is settled. The effect is not subtle: after the rule the
-four W109 complex-medium chambers keep cells in only 83, 28, 77 and 19 frames, and two of them have no budding
-event left.
+A fixed threshold failed on W109. The second and third runs applied 0.12 and removed 39 to 68 % of the
+object-frames of the W109 chambers, and its complex-medium chambers kept cells in only 83, 28, 77 and 19
+frames. The W109 tables show why: those movies were recorded four times darker (cell mean about 480 counts
+against 1,500 to 2,300 elsewhere, background about 455), and with that little signal above the camera offset
+every live cell sits at a ratio of 0.07 to 0.12, unimodal at 0.095 across all four chambers and all sizes. The
+rule is therefore relative: a track is low-contrast when its ratio is below 0.45 times the median of the
+size-passing tracks of the same structure (`CELL_MIN_PHASE_CV_REL` in `config.py`; the reference and the
+effective threshold per chamber stand in `00_cell_filter.csv`). On the calibration chips this removes the
+same tracks as the fixed threshold (the 44 of BSG/pH/6, 2 of WT/pH/6), on W65 static 13 tracks (0.3 % of the
+frames), on W109 none. Its limit is a structure whose cells are mostly dead: the reference itself would be
+debris, and the log warns when a chamber loses more than a quarter of its frames. The numbers quoted in this
+document are from the third run, i.e. with the fixed threshold; for the oscillation series the two rules
+remove the same tracks, so only the W109 static values (section 3) change back with the next run.
 
 ### 2.8 Specific growth rate from budding
 
@@ -270,10 +272,11 @@ biological replication; the medium effect rests on chambers of one chip in each 
 Cells in complex medium end up 3.3 times larger, marginally rounder, and bud a sixth as often per
 mother-hour (0.45, 0.58, 0.27 and 0.00 against 0.03 to 0.08; the fourth minimal-medium chamber had no bud in
 its window): growth goes into cell size rather than into blastoconidia. The v11 tables gave the same picture
-(5,049 against 14,451 px², 0.47 against 0.09 per mother-hour). The second run, with the contrast rule, keeps
-the direction but not the size of the effect (area 8,199 against 19,670 px², budding 0.13 against 0.009 per
-mother-hour), because the rule removes 39 to 68 % of the object-frames of the W109 chambers; which of the
-two runs describes W109 is the open question of section 9.
+(5,049 against 14,451 px², 0.47 against 0.09 per mother-hour). The second and third runs, with the fixed
+contrast threshold, kept the direction but not the size of the effect (area 8,199 against 19,670 px², budding
+0.13 against 0.009 per mother-hour) because that threshold removed 39 to 68 % of the object-frames of the
+W109 chambers, live cells in a darker recording (section 2.7); with the structure-relative rule the W109
+chambers lose nothing to it, so the first-run values above are the ones to expect from the next run.
 
 The W65 chip does not repeat it. With the duplicate dropped, the area ratio ypd/omlp is 0.95, the
 eccentricity 0.72 against 0.43 (Welch p 0.006 over chambers, the opposite direction to W109), the budding rate
@@ -481,12 +484,9 @@ structures; the sensors show no clear feast/famine difference on the real data; 
 structure positions, so the outlook asks for one; the small objects of BSG/pH/6 are dead-cell debris; the W65
 outlier chamber holds two swollen cells, one of which releases ten blastoconidia at once (section 3).
 
-Still open:
-
-1. **The contrast rule on W109.** The second run removes 39 to 68 % of the object-frames of the W109 static
-   chambers as low-contrast objects. If those chambers are full of dead cells the second run is right; if the
-   W109 movies have a weaker phase contrast, live cells are being removed and the rule needs a per-experiment
-   reference. The W109 `Combined_Results.csv` tables (static_omlp, static_ypd) decide it.
+Resolved since: the contrast rule on W109 (the W109 movies are a darker recording, the rule is now relative to
+the structure, section 2.7). Still open: nothing that needs the author's input; the next run confirms the W109
+values of section 3.
 
 Built since the first draft: the control-trend summary figure (`50_control_trend_summary.pdf`), the control-trend
 check for µ_area, the rebuilt segmentation and tracking with the measured mother, the cell filter, the
@@ -495,8 +495,8 @@ WT/pH/6), the dead-cell rule (2.7).
 
 Not built, still possible:
 
-- **The next analysis run** with the contrast rule in place, and `validate_lineage.py` on the v12 tables
-  (replaces the v11 numbers in 2.4).
+- **The next analysis run** with the structure-relative contrast rule, which returns the W109 static values to
+  the first-run numbers of section 3.
 - **Per-chamber points** on the static figures, so the W65 spread is visible in the figure itself.
 - **The block table of 2.2 as a figure** over all chambers (objects per frame against new touching tracks).
 
@@ -511,7 +511,7 @@ python validate_lineage.py        # lineage_validation/ (needs the full run firs
 ```
 
 Segmentation, tracking and the cluster route: `imaging/README.md` (`segment_all.py`, `merge_results.py`).
-`config.py` holds every threshold named above (`CELL_MIN_FRAMES`, `CELL_MIN_MAX_AREA_PX`, `CELL_MIN_PHASE_CV`,
+`config.py` holds every threshold named above (`CELL_MIN_FRAMES`, `CELL_MIN_MAX_AREA_PX`, `CELL_MIN_PHASE_CV_REL`,
 `EXCLUDED_CHAMBERS`, `STATIC_SINGLE_CHIP_FAMILIES`, `LINEAGE_PARAMS`, `LINEAGE_SPARSE_*`, `AREA_GROWTH_MIN_FRAMES`,
 `BUD_MAX_AREA_FRACTION_FALLBACK`, `FLAG_EXCLUDE_ROWS`) and the figure colours (`STRAIN_COLORS`), and logs them,
 together with the method caveats, at the start of every run. `README.md` describes each module and output prefix.
