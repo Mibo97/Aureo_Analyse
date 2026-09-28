@@ -467,6 +467,18 @@ than a quarter of its frames, which is where a debris-dominated reference would 
 are unaffected by the change (same tracks removed), so the third-run numbers of the data story stand; only the
 W109 static values return to the first-run numbers with the next run.
 
+## 6l. Checkpoint 9: final run with the relative contrast rule
+
+564 chambers. The contrast rule now removes 432 tracks and 0.6 % of all object-frames (fixed threshold:
+1,951 and 1.3 %); 6 chambers lose more than 20 % (17 before), W109 nothing (structure references 0.095 and
+0.127 against 0.19 to 0.35 elsewhere). W109 static is back at the first-run values: minimal medium 5,489 px²
+against complex 19,105 (Welch p 0.004 over four chambers each), budding 0.33 against 0.05 per mother-hour,
+µ_bud 0.18 against 0.03 per cell-hour. Because the relative threshold differs from 0.12 wherever a structure's
+reference is far from 0.27, a few oscillation rows moved as well: verdicts 31 / 23 / 2 / 2 (was 32 / 22 / 2 / 2),
+the two period effects unchanged (µ_area BSO/Glc, budding rate WT/Glc); µ_bud median 0.21 per cell-hour,
+immigration 0.19, 11,361 births in 49,764 cell-hours; events 11,361. `docs/data_story.md` carries the final
+numbers throughout; the figure fixes of 6j are in the PDFs of this run.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,
