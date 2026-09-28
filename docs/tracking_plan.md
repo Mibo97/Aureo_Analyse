@@ -428,6 +428,20 @@ editable PDF text. The five colours pass the colour-vision check (weakest pair B
 control red clashed with BSA orange (ΔE 5.9), hence markers instead of colours for the controls. The
 explanatory footers inside the figures are gone; they belong in the captions. Rendered on the synthetic data.
 
+## 6j. Checkpoint 8: third run (W109 one chip, growth rate from budding)
+
+Same tables as the second run (cell filter and events identical), W109 as one chip (two structure groups of
+four chambers, unit = chamber) and the `24_` family. Full run: 11,211 births in 49,657 cell-hours over 535
+chambers; µ_bud median 0.21 per cell-hour (q10 0.10, q90 0.37), doubling time 3.3 h; immigration median 0.19
+per cell-hour and above the birth rate in 37 % of the chambers. Chamber type without effect (oscillation 0.22,
+famine control 0.20, feast control 0.19; bracket degenerate on 42 of 49 structures), Glc series 0.22 to 0.30
+against pH series 0.14 to 0.18. Control-trend rows for µ_bud: 4 structure effects, 6 no trend, no period
+effect; the summary now has 58 rows, 32 / 22 / 2 / 2. µ_bud against µ_area per chip and chamber type:
+Spearman −0.4 (n = 146). Static: W109 minimal 0.11, complex 0.01 (the complex-medium chambers keep cells in
+only 83, 28, 77 and 19 frames after the contrast rule, two without any event: the W109 question of 6i
+stands); W65 0.11 and 0.14. PKO famine controls 0.32 to 0.44, feast controls 0.05 to 0.17.
+`docs/data_story.md` carries these numbers (2.8, 4, 5, 7).
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

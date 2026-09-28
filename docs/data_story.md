@@ -2,7 +2,9 @@
 
 Argumentation of the thesis results, with the figures and tables of the pipeline that carry each step.
 Draft of 2026-09-22, rewritten 2026-09-27 on the complete v12 run: segmentation and tracking rebuilt
-(`docs/tracking_plan.md`), all 565 chambers, output `analysis_output_v12/` (paths below are relative to it).
+(`docs/tracking_plan.md`), output `analysis_output_v12/` (paths below are relative to it). Numbers are from the
+third run of 2026-09-28 (564 chambers: contrast rule active, W65 minimal Rep5 dropped as a duplicate, W109 one
+chip, growth rate from budding) unless marked *first run*; the first run differs only by the contrast rule.
 Numbers marked *WT/pH/6* come from the v12 `Combined_Results.csv` of that batch, the batch that carries the
 manual QC of the v11 run; *BSG/pH/6* is the debris-rich batch used for the dead-cell rule. Numbers marked *v11*
 come from the earlier tables and are kept only where the v12 run has no counterpart yet. Statements marked
@@ -43,7 +45,7 @@ one culture, does not repeat it.
 | one structure | one period; 5 oscillation chambers, 3 constant-feast (PosCtrl) and 3 (sometimes 4) constant-famine (NegCtrl) chambers on several arrays; `replicate` is the array index, `chamber` the position (A1/A2 feast, A13/A14 famine, A3 to A12 switching) |
 | one physical chip | 2 or 3 structures = 2 or 3 periods, one pre-culture, one day (`culture`) |
 | oscillation and PKO total | 50 structures, 547 chambers (8 to 12 per structure), 20 cultures |
-| static | 18 chambers. W109: four `replicate` per medium, all on one day, treated as four chips **(open: one chip or four?)**; W65: one chip, one pre-culture, five chambers per medium; `chamber` always A0 |
+| static | 17 chambers on two chips. W109: one chip with three structures, four chambers per medium; W65: one chip, one pre-culture, four chambers in minimal and five in complex medium; `chamber` always A0 |
 
 The pipeline calls a structure `chip` in every table and figure. `culture` is the physical chip.
 
@@ -86,9 +88,9 @@ three frames, merges and splits by overlap) halves that.
 
 | `00_track_fragmentation.csv`, per chamber, after the cell filter | q10 | median | q90 |
 | --- | --- | --- | --- |
-| new tracks per object-frame | 0.048 | 0.070 | 0.111 |
+| new tracks per object-frame | 0.046 | 0.069 | 0.108 |
 | median track length, frames | 4 | 5 | 12 |
-| share of object-frames in tracks of 10 frames or more | 0.60 | 0.78 | 0.89 |
+| share of object-frames in tracks of 10 frames or more | 0.61 | 0.79 | 0.90 |
 
 *v11*, same table before gap closing: 0.09 / 0.14 / 0.22 new tracks per object-frame, median track 1 / 3 / 4
 frames, 31 % of the tracks one frame long. *WT/pH/6*: 4,894 tracks in 11 chambers in the raw v12 table, 1,173
@@ -123,10 +125,11 @@ manual merges fall inside its memory; `docs/tracking_plan.md` 6c). Its four kind
 
 - tracking breaks: the tracker's memory and its merge/split handling (2.1);
 - background objects and debris: the cell filter (`cell_filter.py`, `00_cell_filter.csv`): a track counts as
-  a cell with at least 2 frames and a largest area of at least 1,500 px² (8 µm²). Full run: 34 % of the tracks
-  and 6.2 % of the object-frames removed (median chamber 5.3 %, q10 2.6 %, q90 11.7 %); BSG/pH/6 loses 52 %
-  of its object-frames, and the objects there are dead-cell debris by eye;
-- dead cells: the contrast rule of the same filter (2.7), derived after this run and applied from the next;
+  a cell with at least 2 frames and a largest area of at least 1,500 px² (8 µm²). Full run: 36 % of the tracks
+  and 7.5 % of the object-frames removed (median chamber 5.9 %), of which the contrast rule below accounts for
+  1.3 % of all object-frames; BSG/pH/6 loses 52 % of its object-frames, and the objects there are dead-cell
+  debris by eye;
+- dead cells: the contrast rule of the same filter (2.7);
 - cells on the edge: the `at_border` flag of pipeline v12, tracked but excluded from every measurement
   (13 % of the rows of WT/pH/6).
 
@@ -137,9 +140,9 @@ would not have changed the lineage readouts.
 ### 2.4 Sparse-phase window and events
 
 - **Window** (`20_lineage_window.csv`, `20_lineage_window.pdf`): per chamber, the frames before the rolling
-  median of objects per frame exceeds 20; chambers with fewer than 20 such frames drop out. Full run: 564 of
-  565 chambers qualify (the one that broke off after 13 frames does not), median window 114 of 133 frames,
-  range 26 to 136; 244 chambers never exceed 20 objects and are used whole. Every lineage output (`20_` to
+  median of objects per frame exceeds 20; chambers with fewer than 20 such frames drop out. Full run: 562 of
+  564 chambers qualify (the one that broke off after 13 frames does not), median window 117 of 133 frames,
+  range 26 to 136; 249 chambers never exceed 20 objects and are used whole. Every lineage output (`20_` to
   `23_`, `21_budding_rate_*`, µ_event, mother/bud labels) uses only this window; endpoint, µ_area and
   robustness still see the whole run.
 - **Gap closing** no longer runs in the analysis: the tracker's memory (3 frames, 15 for a track absorbed by
@@ -148,10 +151,10 @@ would not have changed the lineage readouts.
 - **Mother from the mask** (`20_budding_events.csv`, column `method`): a new object that touches a tracked
   mask at first detection has that mask's track as `parent_track_id`; the lineage takes the parent as the
   mother when it is an established cell and the bud persists for 2 frames or more. Candidates without a
-  touching mask go through the old radius heuristic. Full run: 11,351 events in 530 chambers, median 18 per
-  chamber (q10 8, q90 39); 8,345 (74 %) measured, 3,006 heuristic; 72 % of the mothers were tracked for
-  30 frames or more. *WT/pH/6*: 93 events in 10 chambers, 4 to 14 per chamber, 57 measured and 36 heuristic
-  (v11 with gap closing: 136).
+  touching mask go through the old radius heuristic. Full run: 11,211 events in 531 chambers, median 18 per
+  chamber (q10 8, q90 38); 74 % measured, 26 % heuristic; 72 % of the mothers were tracked for 30 frames or
+  more. *WT/pH/6*: 93 events in 10 chambers, 4 to 14 per chamber, 57 measured and 36 heuristic (v11 with gap
+  closing: 136).
 - **Validation** (`lineage_validation/`, `validate_lineage.py` on the v12 tables): the share of bud candidates
   in the window that are assigned to a mother differs between the structures of a series in 4 of 10 series
   (Kruskal p < 0.05; v11: 7 of 10) and trends with the period in no consistent direction (BSA/Glc −0.77,
@@ -166,7 +169,7 @@ A bud should be small at first detection and a washed-in cell mother-sized. In t
 bud area to mother area had one broad mode around 0.4 to 0.5 and the criterion was inactive. With the mother
 from the mask contact the distribution is bimodal: modes at 0.07 and 0.45, antimode 0.32, valley depth 0.25
 (`20_bud_size_threshold.csv`, `20_bud_size_at_appearance.pdf`). The pipeline applies the global threshold of
-0.32 and rejects 2,160 of 13,938 candidates (15.5 %) as mother-sized objects that appear next to a mother:
+0.32 and rejects 2,155 of 13,670 candidates (15.8 %) as mother-sized objects that appear next to a mother:
 washed-in cells and masks that split in two (*WT/pH/6*: 30 % of the touching new objects and 29 % of the
 splits lie above 0.32). Per strain and oscillation type the valley is too shallow in 11 of 12 groups, so the
 one global threshold stays. The mother's mask does not change when a bud is first segmented **(author
@@ -201,8 +204,10 @@ lost contrast, dead or out of focus, drops out and shows up in the report.
 The second run applied the rule: 1.3 % of all object-frames go, but 17 chambers lose more than 20 %, and the
 heaviest losses are the W109 static chambers (minimal medium 39 to 68 % of their object-frames, complex medium
 Rep2 and Rep4 65 and 53 %), far beyond the calibration chips. Whether those chambers are full of dead cells or
-the W109 movies simply have a weaker phase contrast is open (section 9); the static numbers in section 3 are
-quoted from the first run, before the rule, until that is settled.
+the W109 movies simply have a weaker phase contrast is open (section 9); the W109 numbers in section 3 are
+quoted from the first run, before the rule, until that is settled. The effect is not subtle: after the rule the
+four W109 complex-medium chambers keep cells in only 83, 28, 77 and 19 frames, and two of them have no budding
+event left.
 
 ### 2.8 Specific growth rate from budding
 
@@ -220,7 +225,30 @@ of objects in a chamber is not a growth curve. µ_bud is the specific birth rate
 growth rate; deaths are not countable (a dead cell stays as debris until the cell filter removes it). The
 figure against the period (`24_growth_from_budding_vs_period_<osc_type>.pdf`) has the layout of the budding
 rate figure, and `24_mu_bud_vs_mu_area.pdf` sets the population rate against the single-cell area growth.
-Full-run numbers follow with the next analysis run.
+
+Full run, 535 chambers with a window: 11,211 births in 49,657 cell-hours.
+
+| `24_growth_from_budding_per_chamber.csv` | q10 | median | q90 |
+| --- | --- | --- | --- |
+| µ_bud, births per cell-hour | 0.10 | 0.21 | 0.37 |
+| doubling time, h | | 3.3 | |
+| immigration, new tracks without a parent per cell-hour | 0.08 | 0.19 | 0.34 |
+
+- The chamber type does not matter: oscillation chambers 0.22, famine controls 0.20, feast controls 0.19 per
+  cell-hour (medians); the feast control exceeds the famine control on 25 of 48 structures (Wilcoxon p 0.94),
+  and the bracket is degenerate on 42 of 49. Constant famine does not slow the birth rate in the sparse window.
+- The oscillation type does: the Glc series run at 0.22 to 0.30 per cell-hour, the pH series at 0.14 to 0.18
+  (medians per series), which is a difference between run days and media as much as between treatments.
+- Immigration exceeds births in 37 % of the chambers.
+- Against the period (`24_growth_from_budding_control_trend.csv`): no period effect in any series; BSO/Glc
+  rises with the period (ρ +1.00) together with its famine control (+0.60), BSA/pH, BSG/Glc and BSG/pH fall
+  (−0.60) together with a control (−0.77 to −1.00), the other six series show no trend.
+- Population against single cell: µ_bud and µ_area per chip and chamber type correlate at Spearman −0.4
+  (n = 146, `24_mu_bud_vs_mu_area.pdf`). Where cells grow in area they bud less; growth goes into size or
+  into blastoconidia, the same trade-off as in the static comparison of section 3.
+- Static (`static/24_growth_from_budding_summary.csv`): W109 minimal medium 0.11, complex medium 0.01 per
+  cell-hour (provisional, section 2.7); W65 0.11 and 0.14, with the burst chamber at 0.28. PKO: its famine
+  controls bud at 0.32 to 0.44 per cell-hour, its feast controls at 0.05 to 0.17 (`pko/24_...per_chamber.csv`).
 
 ---
 
@@ -247,17 +275,18 @@ the direction but not the size of the effect (area 8,199 against 19,670 px², bu
 mother-hour), because the rule removes 39 to 68 % of the object-frames of the W109 chambers; which of the
 two runs describes W109 is the open question of section 9.
 
-The W65 chip does not repeat it. The area ratio ypd/omlp is 0.77, the eccentricity 0.70 against 0.40
-(Welch p 0.001 over chambers, the opposite direction to W109), the budding rate 0.17 in both media. The four
-W65 minimal-medium chambers are not one population: Rep1 ends at 40,000 px² (215 µm²), Rep2 to Rep4 at
-13,000 to 16,000 px² (`static/13_endpoint_per_chamber.csv`). Rep1 holds two swollen cells of about 50,000 px²
+The W65 chip does not repeat it. With the duplicate dropped, the area ratio ypd/omlp is 0.95, the
+eccentricity 0.72 against 0.43 (Welch p 0.006 over chambers, the opposite direction to W109), the budding rate
+0.18 against 0.14 per mother-hour. The four W65 minimal-medium chambers are not one population: Rep1 ends at
+40,000 px² (215 µm²), Rep2 to Rep4 at 13,000 to 16,000 px², a spread of 61 % against 4 to 24 % in the other
+groups (`static/13_endpoint_per_chamber.csv`). Rep1 holds two swollen cells of about 50,000 px²
 each, and the overlay of frames 85 to 88 shows the lower one releasing a ring of ten blastoconidia within
 three frames (tracks 3 to 14): the swollen-cell-to-blastoconidia transition of Rensink et al. 2026, caught
 in one chamber, and the reason the chamber's endpoint area and budding rate stand apart. In complex medium
-the two chip families agree (W65 19,006 px², W109 18,301); in minimal medium W65 is 4.5 times larger, and
-that difference is the one chamber. With one culture per family, the medium effect is a W109 result with
-W65 as a second, single chip that shows the same cell size in complex medium and a different picture in
-minimal medium.
+the two chip families agree (W65 19,940 px², W109 18,301 in the first run); in minimal medium W65 is 3.8
+times larger, and that difference is largely the one chamber. With one culture per family, the medium effect
+is a W109 result with W65 as a second, single chip that shows the same cell size in complex medium and a
+different picture in minimal medium.
 
 - Main text: `static/13_endpoint_vs_medium_area.pdf`, `static/13_endpoint_vs_medium_eccentricity.pdf`,
   `static/21_budding_rate_vs_medium.pdf` (mean ± SEM, one panel per chip family; the error unit per family
@@ -284,14 +313,15 @@ What appears in the v12 run:
 | buds per mother-hour | WT/pH | −1.00 |
 | | WT/Glc, BSA/pH, BSG/pH | −0.60 |
 | | BSO/Glc | +0.77 |
-| | BSA/Glc | +0.49 |
+| µ_bud, births per cell-hour | BSO/Glc | +1.00 |
+| | BSA/pH, BSG/Glc, BSG/pH | −0.60 |
 | `ratio_OxPro` | BSO/pH, BSO/Glc | +1.00, +0.77 |
 | `ratio_pHluorin` | BSPH/Glc, BSPH/pH | +0.71, +0.60 |
 | `ratio_GlyRNA` | BSG/Glc | +0.89 |
-| area | BSPH/Glc, BSG/pH, WT/pH | −0.94, −0.80, −0.80 |
-| | BSA/Glc, BSO/pH | +0.71, +0.80 |
-| µ_area | BSA/Glc, BSO/Glc, WT/pH | −0.94, −0.83, −0.80 |
-| eccentricity | 7 of 10 series positive | 0.60 to 0.71 in five of them |
+| area | BSPH/Glc | −0.89 |
+| | BSA/Glc, BSO/pH | +0.94, +0.80 |
+| µ_area | BSA/Glc, BSO/Glc | −0.94, −0.83 |
+| eccentricity | 7 of 10 series positive | 0.60 to 0.80 in six of them |
 
 The budding trend of the v11 run is gone. There, eight of the nine budding-rate series with a non-zero ρ
 were negative (WT/Glc −0.90, BSPH/Glc −0.89, BSG/Glc and BSO/Glc −0.66); the v12 run gives the same series
@@ -309,50 +339,57 @@ Constant-medium chambers cannot respond to the period. On the same structures th
 
 | readout | series | Osc vs period | strongest control vs period | Osc minus controls |
 | --- | --- | --- | --- | --- |
-| buds per mother-hour | WT/pH | −1.00 | −1.00 (PosCtrl) | +0.20 |
+| buds per mother-hour | WT/pH | −1.00 | −1.00 (PosCtrl) | +0.40 |
 | | BSO/Glc | +0.77 | +0.66 (NegCtrl) | +0.77 |
-| | BSA/pH | −0.60 | −1.00 (PosCtrl) | +0.40 |
-| | BSG/pH | −0.60 | −0.80 (PosCtrl) | −0.40 |
+| | BSA/pH | −0.60 | −1.00 (PosCtrl) | +0.20 |
+| | BSG/pH | −0.60 | −0.80 (PosCtrl) | −0.20 |
 | | WT/Glc | −0.60 | 0.00 | −0.80 |
+| µ_bud, births per cell-hour | BSO/Glc | +1.00 | +0.60 (NegCtrl) | +0.09 |
+| | BSA/pH | −0.60 | −1.00 (PosCtrl) | +0.20 |
+| | BSG/Glc | −0.60 | −0.77 (NegCtrl) | +0.14 |
+| | BSG/pH | −0.60 | −0.80 (PosCtrl) | −0.20 |
 | `ratio_OxPro` | BSO/Glc | +0.77 | +0.94 (NegCtrl) | +0.26 |
 | `ratio_OxPro` | BSO/pH | +1.00 | +1.00 (NegCtrl) | +0.40 |
 | `ratio_pHluorin` | BSPH/Glc | +0.71 | +0.89 (NegCtrl) | −0.09 |
 | `ratio_pHluorin` | BSPH/pH | +0.60 | +1.00 (NegCtrl) | −0.40 |
 | `ratio_GlyRNA` | BSG/Glc | +0.89 | +0.43 | −0.26 |
-| area | BSPH/Glc | −0.94 | −0.89 (NegCtrl) | −0.26 |
-| area | BSG/pH | −0.80 | +0.40 | −0.80 |
-| µ_area | BSA/Glc | −0.94 | −0.71 (NegCtrl) | −0.60 |
+| area | BSA/Glc | +0.94 | +0.94 (mean of both) | +0.89 |
+| area | BSPH/Glc | −0.89 | −0.83 (NegCtrl) | −0.26 |
+| µ_area | BSA/Glc | −0.94 | −0.60 (NegCtrl) | −0.60 |
 | µ_area | BSO/Glc | −0.83 | −0.49 | −0.77 |
 
 - `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`
   (collected in `50_control_trend_summary.csv`): per readout and series, the Spearman of the oscillation
   chambers, of PosCtrl, NegCtrl and their mean, of the difference, and a verdict. A `period effect` needs all
   three: the oscillation chambers trend (|ρ| ≥ 0.6), no control trends the same way, and the difference
-  trends. Over the 48 readout × series rows of the full run (area, eccentricity, four sensor ratios, µ_area,
-  budding rate):
+  trends. Over the 58 readout × series rows of the full run (area, eccentricity, four sensor ratios, µ_area,
+  budding rate, µ_bud):
 
   | verdict | rows | which |
   | --- | --- | --- |
-  | no monotone trend of the oscillation chambers | 23 | |
-  | structure effect: a control trends the same way | 20 | 3 of them with a residual difference: area and µ_area BSA/Glc, budding rate BSO/Glc |
+  | no monotone trend of the oscillation chambers | 32 | |
+  | structure effect: a control trends the same way | 22 | 3 of them with a residual difference: area and µ_area BSA/Glc, budding rate BSO/Glc |
   | not robust: the trend vanishes after subtracting the controls | 2 | eccentricity BSPH/pH; GlyRNA BSG/Glc |
-  | period effect: all three conditions | 3 | area BSG/pH; µ_area BSO/Glc; budding rate WT/Glc |
+  | period effect: all three conditions | 2 | µ_area BSO/Glc; budding rate WT/Glc |
 
-  The three are scattered: three readouts, three strains, and none recurs in the other oscillation type of
-  the same strain (area BSG/Glc −0.03, µ_area BSO/pH −0.20, budding rate WT/pH a structure effect). With four
-  periods a |ρ| of 0.8 arises by chance in one series of three, and the count of period effects fell with
-  every improvement of the tracking, from 7 in the v11 run to 5 with the new analysis rules on the v11 tables
-  to 3 now: what is left is what 48 tries produce by chance. The one recurrence of the v11 run, µ_area falling
-  with the period in all five pH series, did not survive the rebuild (ρ −0.8 to +0.4).
-- `13_endpoint_within_culture.csv`: the change from the shortest to the longest period inside one culture,
-  where the pre-culture cannot differ. Area: the oscillation chambers fall in 7 of 19 cultures, the controls
-  in 13 of 19, the difference in 6 of 19; no direction.
-- `13_endpoint_bracket_score.csv`, `21_budding_rate_bracket_score.csv`: the feast and famine controls barely
-  separate. For the budding rate the bracket is degenerate on 44 of 49 structures, and PosCtrl exceeds
-  NegCtrl on 26 of 48 (Wilcoxon p 0.52). Cells under constant famine bud in the sparse window as often as
-  under constant feast, 0.04 to 0.63 against 0.00 to 0.94 per mother-hour. Area and eccentricity have a
-  direction, feast cells larger and more eccentric on 33 of 48 structures (Wilcoxon p 0.01 and < 0.01), but
-  not a separation beyond the chamber scatter: the bracket is degenerate on 41 and 39 of 49 structures.
+  The two are scattered: two readouts, two strains, and neither recurs in the other oscillation type of the
+  same strain (µ_area BSO/pH −0.20, budding rate WT/pH a structure effect). With four periods a |ρ| of 0.8
+  arises by chance in one series of three, and the count of period effects fell with every change of the
+  pipeline: 7 in the v11 run, 5 with the new analysis rules on the v11 tables, 3 in the first v12 run, 2 once
+  the contrast rule removed the dead cells (area BSG/pH went from ρ −0.8 to −0.4, one rank swap among four
+  periods). What is left is what 58 tries produce by chance. The one recurrence of the v11 run, µ_area falling
+  with the period in all five pH series, did not survive the rebuild (ρ −0.4 to +0.4).
+- `13_endpoint_within_culture.csv`, `24_growth_from_budding_within_culture.csv`: the change from the shortest
+  to the longest period inside one culture, where the pre-culture cannot differ. Area: the oscillation
+  chambers fall in 8 of 19 cultures, the controls in 13 of 19, the difference in 7 of 19; µ_bud: 8, 8 and 11
+  of 19. No direction.
+- `13_endpoint_bracket_score.csv`, `21_budding_rate_bracket_score.csv`, `24_growth_from_budding_bracket_score.csv`:
+  the feast and famine controls barely separate. For the budding rate the bracket is degenerate on 43 of 49
+  structures, and PosCtrl exceeds NegCtrl on 28 of 48 (Wilcoxon p 0.58); for µ_bud on 42 of 49 and 25 of 48
+  (p 0.94). Cells under constant famine bud in the sparse window as often as under constant feast, 0.05 to
+  0.63 against 0.00 to 0.94 per mother-hour. Area and eccentricity have a direction, feast cells larger and
+  more eccentric on 31 of 48 structures (Wilcoxon p 0.01 each), but not a separation beyond the chamber
+  scatter: the bracket is degenerate on 43 and 40 of 49 structures.
 - `40_control_consistency_*.pdf`, `40_control_consistency_*_kruskal.csv`, `11_control_consistency_mu_kruskal.csv`:
   the same controls compared across the structures of a series; they differ.
 
@@ -366,8 +403,8 @@ drift in section 4 would have been reported as a dose response.
 one point per readout and strain series, the oscillation Spearman on x, the strongest control Spearman on y,
 coloured by verdict; points along the diagonal are the structure effects. It collects the control-trend tables
 of the endpoint (`13_`), of µ_area (`12_area_growth_rate_control_trend.csv`) and of the budding rate (`21_`).
-On the full run, 20 of the 48 points sit in the red corners on the diagonal and 23 in the grey middle band;
-3 blue points and 2 not-robust points remain off the diagonal.
+On the full run, 22 of the 58 points sit in the structure-effect corners on the diagonal and 32 in the
+middle band; 2 period-effect points and 2 not-robust points remain off the diagonal.
 
 ---
 
@@ -398,12 +435,14 @@ to the period.
 
 One structure at period 3, built for the clogging hypothesis: without pullulan the control chambers of a
 structure should agree better than the producers' do. They do not (`pko/60_pko_within_chip_agreement.csv`,
-`pko/61_pko_control_agreement.pdf`): the PKO chamber-to-chamber CV of the area level is 0.25 for famine and
-0.37 for feast, the 71st and 94th percentile of all producer structures; the detrended temporal CV sits at the
-90th and 65th percentile. One observation, pointing the wrong way for the hypothesis. PKO famine cells are 1.4
-times larger than PKO feast cells, where the producers' median ratio is 0.98 (q10 to q90 0.68 to 1.32; PKO at
-the 92nd percentile, `level_mean` in the same table); the µ_area bracket of feast over famine
-(`pko/60_pko_control_bracket.csv`) is 0.10, the producers' median. Unexplained at n = 1.
+`pko/61_pko_control_agreement.pdf`): the PKO chamber-to-chamber CV of the area level is 0.22 for famine and
+0.31 for feast, the 62nd and 92nd percentile of all producer structures; the detrended temporal CV sits at the
+92nd and 55th percentile. One observation, pointing the wrong way for the hypothesis. PKO famine cells are 1.3
+times larger than PKO feast cells, where the producers' median ratio is 0.98 (PKO at the 88th percentile,
+`level_mean` in the same table); the µ_area bracket of feast over famine (`pko/60_pko_control_bracket.csv`)
+is 0.10, the producers' median. Its famine controls also bud faster than its feast controls (0.32 to 0.44
+against 0.05 to 0.17 births per cell-hour, `pko/24_growth_from_budding_per_chamber.csv`). Unexplained at
+n = 1.
 
 ---
 
