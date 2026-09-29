@@ -100,20 +100,31 @@ against 0.057). The fragmentation rises with the period in two of the ten series
 
 ### 2.2 New objects follow the density
 
-Chambers start with 1 to 3 objects and fill to as many as 180. In the dense phase every new object touches an
-established cell and is a bud candidate. *WT/pH/6*, v12 table, means over the 11 chambers by 22-frame block:
+Chambers start with 1 to 3 objects and fill to as many as 180. In the dense phase most new objects touch an
+established cell and are bud candidates. *WT/pH/6*, v12 table, means over the 11 chambers by 22-frame block
+(tracks present in the first frame are not counted as new):
 
 | block (frames) | 0–21 | 22–43 | 44–65 | 66–87 | 88–109 | 110–131 |
 | --- | --- | --- | --- | --- | --- | --- |
 | objects per frame, median | 2.0 | 5.2 | 12.8 | 32.9 | 83.6 | 131.7 |
 | new tracks touching or split from a tracked mask | 0.5 | 5.3 | 8.2 | 33.2 | 83.3 | 129.8 |
-| new tracks touching nothing | 4.4 | 5.9 | 13.5 | 33.7 | 50.1 | 42.5 |
+| new tracks touching nothing | 2.5 | 5.9 | 13.5 | 33.7 | 50.1 | 42.5 |
 
 237 touching new tracks per chamber over the run, 130 of them in the last block, where their number equals
 the object count: at 130 objects per frame the masks touch, split and re-merge, and a "bud" is any fragment.
 The measured parent does not remove this; only the sparse window does (2.4). Evidence in the pipeline:
 `20_lineage_window.pdf` (objects per frame over time for every chamber) and `00_track_fragmentation.csv`
 (`objects_first_frame`, `objects_last_frame`).
+
+`00_new_objects_vs_density.pdf` draws this table for every chamber (`00_new_objects_vs_density.csv`,
+`relink.new_objects_vs_density()`, block length `DENSITY_BLOCK_FRAMES` = 22): one point per chamber and
+block, new tracks per frame against objects per frame, separately for new tracks that touch a tracked mask or
+split from one and for new tracks that touch nothing, with median and quartiles per density class; the right
+panel gives the touching new tracks per object and frame. On the four v12 tables at hand (35 chambers of
+WT/pH/6, BSG/pH/6, W65 and W109) the touching new tracks rise in proportion to the density, 0.04 to 0.06 per
+object and frame between 8 and 256 objects per frame, while the new tracks touching nothing saturate at about
+two per frame; above the sparse limit 55 to 63 % of the new tracks touch a mask on the three growing chips and
+35 % on W109, which never gets dense. The figure over all 564 chambers comes with the next run.
 
 ### 2.3 What replaced the manual quality control
 
@@ -288,7 +299,12 @@ in one chamber, and the reason the chamber's endpoint area and budding rate stan
 the two chip families agree (W65 19,963 px², W109 19,105); in minimal medium W65 is 3.8 times larger, and
 that difference is largely the one chamber. With one culture per family, the medium effect
 is a W109 result with W65 as a second, single chip that shows the same cell size in complex medium and a
-different picture in minimal medium.
+different picture in minimal medium. The static figures (`static/13_endpoint_vs_medium_*.pdf`,
+`static/21_budding_rate_vs_medium.pdf`, `static/24_growth_from_budding_vs_medium.pdf`,
+`static/12_area_growth_rate_all.pdf`) draw every chamber as a small point next to its mean, so the W65 spread
+and the burst chamber are visible in the figure itself; the per-chamber tables behind them are
+`static/13_endpoint_per_chamber.csv`, `static/21_budding_ratio_per_experiment.csv` and
+`static/24_growth_from_budding_per_chamber.csv`.
 
 - Main text: `static/13_endpoint_vs_medium_area.pdf`, `static/13_endpoint_vs_medium_eccentricity.pdf`,
   `static/21_budding_rate_vs_medium.pdf` (mean ± SEM, one panel per chip family; the error unit per family
@@ -456,7 +472,7 @@ n = 1.
 | thesis section | main-text figures | appendix figures | evidence tables |
 | --- | --- | --- | --- |
 | Methods: units and sampling | none (a schematic of chip, structures, arrays and chambers is the author's) | `00_n_tracks_overview_summary.pdf` | `00_chip_overview.csv`, `00_chip_run_order.csv` |
-| Methods: tracking and sparse window | `20_lineage_window.pdf` | `20_bud_size_at_appearance.pdf`, `qc_comparison/70_qc_effect.pdf` and `lineage_validation/lv_02_detection_rate.pdf` (v11 run) | `00_track_fragmentation.csv`, `00_cell_filter.csv`, `20_bud_size_threshold.csv`, the block table of 2.2 |
+| Methods: tracking and sparse window | `20_lineage_window.pdf`, `00_new_objects_vs_density.pdf` | `20_bud_size_at_appearance.pdf`, `qc_comparison/70_qc_effect.pdf` and `lineage_validation/lv_02_detection_rate.pdf` (v11 run) | `00_track_fragmentation.csv`, `00_cell_filter.csv`, `20_bud_size_threshold.csv`, `00_new_objects_vs_density.csv` (the block table of 2.2 for all chambers) |
 | 1 Static medium | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf` | `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/10_cell_area_over_time.pdf`, `static/21_panel_a_violin.pdf` | `static/13_endpoint_summary.csv`, `static/13_endpoint_per_chamber.csv`, `static/21_budding_rate_summary.csv` |
 | 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `24_immigration_vs_period_*.pdf`, `24_mu_bud_vs_mu_area.pdf`, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `24_growth_from_budding_spearman.csv`, `12_area_growth_rate_spearman.csv` |
 | 3 Biosensors | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | `95_*_comparison.pdf`, `31_ratio_*_over_time_*.pdf` | ratio rows of `13_endpoint_control_trend.csv`, `95_*_summary_per_replicate.csv` |
@@ -473,8 +489,8 @@ All figures share one style (`plot_style.py`, colours in `config.py`): colour me
 orange, BSO green, BSG yellow, BSPH pink, PKO grey), the control chambers are markers in the strain colour
 (feast control filled up-triangle, famine control hollow down-triangle, oscillation filled circle), periods in
 the time-series figures run from light (short) to dark (long) within the strain hue, and the static media are
-filled (complex) versus lighter (minimal). The figures carry no explanatory footers; what a band or a marker
-means goes into the caption.
+filled (complex) versus lighter (minimal), with every chamber as a small point beside its mean. The figures
+carry no explanatory footers; what a band or a marker means goes into the caption.
 
 ---
 
@@ -496,9 +512,10 @@ WT/pH/6), the dead-cell rule (2.7).
 
 Not built, still possible:
 
-- **Nothing pending on the pipeline side.** Every number in this document comes from the final run.
-- **Per-chamber points** on the static figures, so the W65 spread is visible in the figure itself.
-- **The block table of 2.2 as a figure** over all chambers (objects per frame against new touching tracks).
+- **Nothing pending on the pipeline side.** Every number in this document comes from the final run. The two
+  figure additions of 2026-09-29, the per-chamber points on the static figures (section 3) and the block table
+  of 2.2 as a figure over all chambers (`00_new_objects_vs_density.pdf`), are in the code and appear with the
+  next run; the density numbers quoted in 2.2 are from the four tables at hand, not from the full run.
 
 ---
 
@@ -512,6 +529,7 @@ python validate_lineage.py        # lineage_validation/ (needs the full run firs
 
 Segmentation, tracking and the cluster route: `imaging/README.md` (`segment_all.py`, `merge_results.py`).
 `config.py` holds every threshold named above (`CELL_MIN_FRAMES`, `CELL_MIN_MAX_AREA_PX`, `CELL_MIN_PHASE_CV_REL`,
-`EXCLUDED_CHAMBERS`, `STATIC_SINGLE_CHIP_FAMILIES`, `LINEAGE_PARAMS`, `LINEAGE_SPARSE_*`, `AREA_GROWTH_MIN_FRAMES`,
+`EXCLUDED_CHAMBERS`, `STATIC_SINGLE_CHIP_FAMILIES`, `LINEAGE_PARAMS`, `LINEAGE_SPARSE_*`, `DENSITY_BLOCK_FRAMES`,
+`AREA_GROWTH_MIN_FRAMES`,
 `BUD_MAX_AREA_FRACTION_FALLBACK`, `FLAG_EXCLUDE_ROWS`) and the figure colours (`STRAIN_COLORS`), and logs them,
 together with the method caveats, at the start of every run. `README.md` describes each module and output prefix.

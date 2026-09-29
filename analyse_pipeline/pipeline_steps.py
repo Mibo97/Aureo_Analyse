@@ -462,12 +462,18 @@ def step_10_growth(ctx: PipelineContext) -> None:
 
             # Kontrollen bleiben IM Plot (Marker-Form = Kontrollart): ohne sie
             # ist ein Periodentrend nicht von einem Struktureffekt zu unterscheiden.
+            # Statischer Zweig: jede Kammer als Punkt neben dem Mittelwert (W65-Streuung).
+            area_points = None
+            if ctx.x_col == "medium" and "condition_type" in area_rep.columns:
+                key = [c for c in ["biosensor", "osc_type", "osc_freq", "condition"] if c in area_chamber.columns]
+                area_points = area_chamber.merge(area_rep[key + ["condition_type"]].drop_duplicates(key),
+                                                 on=key, how="left")
             plot_point_errorbar(
                 area_rep_summary, value_col="mean", sd_col="sem",
                 out_path=output_dir / "12_area_growth_rate_all.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
                 style_col="condition_type" if "condition_type" in area_rep_summary.columns else None,
-                x_order=freq_order,
+                x_order=freq_order, points=area_points,
                 ylabel="µ_area, all cells [h⁻¹]",
                 title="µ_area over all cells, oscillation and control chambers, mean ± SEM over chambers",
             )
@@ -596,7 +602,7 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                 summary, value_col="mean", sd_col="sem",
                 out_path=output_dir / f"13_endpoint_vs_{ctx.x_col}_{value_col}.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-                x_order=ctx.freq_order,
+                x_order=ctx.freq_order, points=per_chamber, points_col="value",
                 ylabel=f"{pretty_label(value_col)} (endpoint)",
                 title=f"{pretty_label(value_col)}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]}), mean ± SEM over chambers"
                       if frame_window else f"{pretty_label(value_col)}: endpoint, mean ± SEM over chambers",
@@ -694,7 +700,8 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
             summary, value_col="mean", sd_col="sem",
             out_path=output_dir / f"21_budding_rate_vs_{ctx.x_col}.pdf",
             x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-            x_order=ctx.freq_order, ylabel="buds per mother-hour (sparse-phase window)",
+            x_order=ctx.freq_order, points=per_experiment, points_col=value_col,
+            ylabel="buds per mother-hour (sparse-phase window)",
             title="budding rate in the sparse-phase window, mean ± SEM over chambers",
         )
     logger.info("Knospungsrate gespeichert: 21_budding_rate_per_chip.csv / _summary.csv (+ Plots)")
@@ -759,6 +766,7 @@ def _growth_from_budding_outputs(ctx: PipelineContext) -> None:
             plot_point_errorbar(
                 summary, value_col="mean", sd_col="sem", out_path=output_dir / f"{stem}_vs_{ctx.x_col}.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL, x_order=ctx.freq_order,
+                points=per_chamber.dropna(subset=[value_col]), points_col=value_col,
                 ylabel=ylabel.replace("\n", " "),
                 title=title.split(" vs ")[0] + ", mean ± SEM (error unit per chip family)",
             )

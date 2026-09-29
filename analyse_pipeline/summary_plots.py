@@ -26,7 +26,7 @@ if not logger.handlers:
 
 from plot_style import (CONTROL_LABELS, INK_MUTED, INK_SOFT, MEDIUM_FILLED, SURFACE, axis_label, control_handles, edge_color, errorbar_kwargs,
                         finish, legend_below, marker_kwargs, ordered_strains, panel_title, strain_color,
-                        strain_handles, strain_ramp)
+                        strain_handles, strain_ramp, tint)
 from matplotlib.lines import Line2D
 
 try:
@@ -177,6 +177,8 @@ def plot_point_errorbar(
     x_order: Optional[Sequence[str]] = None,
     ylabel: Optional[str] = None,
     title: Optional[str] = None,
+    points: Optional[pd.DataFrame] = None,
+    points_col: str = "value",
 ) -> None:
     """
     Generischer Punkt+Errorbar-Plot ueber eine Bedingung (z.B. die Periode), analog zu
@@ -189,6 +191,10 @@ def plot_point_errorbar(
     (plot_style). style_col ist noetig, wenn (facet_col, color_col, x_col) die Zeilen nicht
     eindeutig machen, etwa weil derselbe osc_freq-Wert fuer die Oszillationsbedingung und ihre
     Kontrollkammern vorkommt. x_order = Reihenfolge der x-Achse (None = natuerliche Sortierung).
+    points = Tabelle auf Kammer-Ebene mit denselben Facetten-/Farb-/Stil-/x-Spalten und dem Wert
+    in points_col: jede Kammer wird als kleiner Punkt neben ihrem Mittelwert gezeichnet (Marker
+    und Fuellung wie der Mittelwert, heller), damit die Streuung hinter dem Fehlerbalken sichtbar
+    ist - im statischen Zweig die vier bis fuenf Kammern je Medium.
     """
     if summary is None or summary.empty or value_col not in summary.columns:
         logger.warning(
@@ -234,6 +240,18 @@ def plot_point_errorbar(
     has_style = bool(style_col) and style_col in df.columns
     styles = sorted(df[style_col].dropna().unique()) if has_style else [None]
 
+    pts = None
+    if points is not None and not points.empty:
+        needed = [c for c in (x_col, points_col, facet_col if facet_col else None,
+                              color_col if has_color else None, style_col if has_style else None) if c]
+        missing = [c for c in needed if c not in points.columns]
+        if missing:
+            logger.warning("plot_point_errorbar(): points ohne Spalten %s - Kammerpunkte in '%s' "
+                           "weggelassen.", missing, out_path.name)
+        else:
+            pts = points.dropna(subset=[points_col])
+    drew_points = False
+
     width_per_facet = max(2.6, 0.55 * len(x_values) + 1.2)
     fig, axes = plt.subplots(1, len(facets), figsize=(width_per_facet * len(facets) + 0.4, 3.2),
                              squeeze=False, sharey=True)
@@ -269,6 +287,28 @@ def plot_point_errorbar(
                 yerr = line_df[sd_col] if sd_col else None
                 kw = errorbar_kwargs(st if st is not None else "Oscillation", palette.get(c, INK_SOFT))
                 kw["linestyle"] = ""
+                if pts is not None:
+                    # Kammerpunkte: dieselbe Auswahl wie die Serie, ueber dem Dodge-Platz
+                    # gleichmaessig aufgefaechert (nach Wert sortiert, deterministisch).
+                    p = pts
+                    if facet_col and facet_col in p.columns and facet is not None:
+                        p = p[p[facet_col] == facet]
+                    if has_color:
+                        p = p[p[color_col] == c]
+                    if has_style:
+                        p = p[p[style_col] == st]
+                    for k, xv in enumerate(x_values):
+                        vals = np.sort(p.loc[p[x_col] == xv, points_col].to_numpy(dtype=float))
+                        if len(vals) == 0:
+                            continue
+                        spread = min(0.14, 0.035 * (len(vals) - 1))
+                        xs = x_pos[k] + np.linspace(-spread, spread, len(vals))
+                        filled = (MEDIUM_FILLED.get(str(xv), True) if x_col == "medium"
+                                  else kw["markerfacecolor"] != SURFACE)
+                        ax.scatter(xs, vals, marker=kw["marker"], s=11,
+                                   facecolor=tint(kw["color"], 0.45) if filled else SURFACE,
+                                   edgecolor=kw["color"], linewidth=0.5, zorder=2)
+                        drew_points = True
                 if x_col == "medium":
                     # statisch: komplexes Medium gefuellt, Minimalmedium hohl (plot_style.MEDIUM_FILLED)
                     for k, xv in enumerate(x_values):
@@ -294,6 +334,10 @@ def plot_point_errorbar(
                    markeredgecolor=edge_color(palette[c]), label=str(c)) for c in colors]
     if has_style and len(styles) > 1:
         handles += control_handles(INK_SOFT, which=[s for s in ("Oscillation", "PosCtrl", "NegCtrl") if s in styles])
+    if drew_points:
+        handles.append(Line2D([], [], marker="o", linestyle="", markersize=3.6,
+                              markerfacecolor=tint(INK_SOFT, 0.45), markeredgecolor=INK_SOFT,
+                              markeredgewidth=0.5, label="single chambers"))
     if handles:
         legend_below(fig, handles, ncol=min(len(handles), 4), y=0.0)
     if title:

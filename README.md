@@ -175,7 +175,7 @@ Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
 | `qc_exclusions.py` | Nicht-destruktives manuelles QC: Track-Merges & Exclusions |
 | `sensors.py` | Ratiometrische Sensoren → `ratio_*`-Spalten (`SENSOR_CONFIG`) |
 | `lineage.py` | Mutter/Bud-Heuristik, Budding Ratio pro Mutter |
-| `relink.py` | Gap Closing und Sparse-Phase-Fenster gegen die Track-Fragmentierung |
+| `relink.py` | Gap Closing und Sparse-Phase-Fenster gegen die Track-Fragmentierung; neue Tracks gegen die Objektdichte (`00_new_objects_vs_density.*`) |
 | `growth_rate.py` | µ_event aus Budding-Intervallen (Eq. 2) |
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
 | `budding_ratio_timeseries.py` | Budding Ratio als Zeitreihe (Eq. 3) |
@@ -198,7 +198,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 | Präfix | Inhalt |
 | --- | --- |
-| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_chip_run_order.csv` = wurden die Perioden einer Serie in Datumsreihenfolge gefahren (dann ist ein Periodentrend nicht von einer Tagesdrift zu trennen)?; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing |
+| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_chip_run_order.csv` = wurden die Perioden einer Serie in Datumsreihenfolge gefahren (dann ist ein Periodentrend nicht von einer Tagesdrift zu trennen)?; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing; `00_new_objects_vs_density.csv/.pdf` = neue Tracks je Frame gegen Objekte je Frame, je Kammer und Block von `DENSITY_BLOCK_FRAMES` Frames, getrennt nach berührender Maske (`link_type`) - die Begründung des Sparse-Phase-Fensters |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
@@ -268,7 +268,7 @@ Endfenster, dann Kammer → Chip → Bedingung (`experiment_units.summarise_hier
 | `13_endpoint_bracket_score.csv` | pro Chip: `(osc − NegCtrl) / (PosCtrl − NegCtrl)`, 0 = wie Starvation, 1 = wie Feast, plus `bracket_degenerate` |
 | `13_endpoint_spearman.csv` | Spearman ρ gegen die Periode auf Chip-Mittelwerten, `n_chips` = Perioden |
 | `13_endpoint_vs_period_<spalte>_<osc_type>.pdf` | pro Periode der Chip-Wert mit **seinen** Kontrollen als Marker, gepooltes Kontrollband dahinter, Bracket-Score darunter; eine Facette pro Stamm |
-| `static/13_endpoint_vs_medium_<spalte>.pdf` | statisch: Medium × Chip-Familie, Fehler über Chips |
+| `static/13_endpoint_vs_medium_<spalte>.pdf` | statisch: Medium × Chip-Familie, Fehler über Kammern, jede Kammer als Punkt neben dem Mittelwert (ebenso `static/12_area_growth_rate_all.pdf`, `static/21_budding_rate_vs_medium.pdf`, `static/24_*_vs_medium.pdf`) |
 
 **Bracket-Score.** Jede Periode ist ein eigener Chip; ihre Kontrollen liegen
 auf demselben Chip und tragen denselben Chip-Effekt. Der Score entfernt ihn.
@@ -406,7 +406,12 @@ Deshalb:
    Median-Tracklänge, neue Tracks je Objekt und Frame, Anteil der
    Objekt-Frames in Tracks ≥ 10 Frames — vor und nach dem Gap Closing, je
    Kammer. Diese Tabelle gehört in die Arbeit, sobald Lineage-Ergebnisse
-   gezeigt werden.
+   gezeigt werden. `00_new_objects_vs_density.csv/.pdf` löst dieselbe Zahl
+   nach der Dichte auf: je Kammer und Block von `DENSITY_BLOCK_FRAMES`
+   Frames die neuen Tracks je Frame gegen die Objekte je Frame, getrennt
+   nach berührender Maske (`link_type` `new_touching`/`split`) und ohne
+   (`new`). Im dichten Feld wächst die Zahl der berührenden neuen Tracks
+   proportional zur Objektzahl (Fragmente, keine Knospen).
 
 Im QC-Batch bleiben im Fenster 136 Events in 11 Kammern (manuelles QC: 128,
 beides zusammen: 116), 118 davon mit einer über ≥ 30 Frames verfolgten Mutter

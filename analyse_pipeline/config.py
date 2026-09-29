@@ -336,6 +336,15 @@ LINEAGE_SPARSE_MAX_OBJECTS = 20
 LINEAGE_SPARSE_SMOOTH_FRAMES = 5
 LINEAGE_SPARSE_MIN_FRAMES = 20
 
+# Neue Tracks gegen die Objektdichte (relink.new_objects_vs_density(),
+# 00_new_objects_vs_density.csv/.pdf): je Kammer und Block von
+# DENSITY_BLOCK_FRAMES Frames die Objekte pro Frame und die neu beginnenden
+# Tracks, getrennt nach beruehrender Elternmaske (link_type 'new_touching' /
+# 'split') und ohne ('new'). Im dichten Feld hat jeder neue Track eine
+# beruehrende Maske - Fragmente, keine Knospen; das ist der Grund fuer das
+# Sparse-Phase-Fenster. 22 Frames = die Block-Tabelle in docs/data_story.md 2.2.
+DENSITY_BLOCK_FRAMES = 22
+
 # Gap Closing (relink.py): ein neu beginnender Track wird an einen hoechstens
 # RELINK_MAX_GAP_FRAMES Frames vorher beendeten Track angehaengt, wenn Abstand
 # <= RELINK_MAX_DISTANCE_PX, Flaechenverhaeltnis in [1/r, r] und die Zuordnung

@@ -479,6 +479,31 @@ the two period effects unchanged (µ_area BSO/Glc, budding rate WT/Glc); µ_bud 
 immigration 0.19, 11,361 births in 49,764 cell-hours; events 11,361. `docs/data_story.md` carries the final
 numbers throughout; the figure fixes of 6j are in the PDFs of this run.
 
+## 6m. Two figure additions (2026-09-29)
+
+**Per-chamber points on the static figures.** `plot_point_errorbar()` (summary_plots.py) takes a chamber-level
+table (`points`, value in `points_col`) and draws each chamber as a small point beside its mean, fanned out
+over the dodge position in order of value, marker and fill as the mean (complex medium filled, minimal hollow),
+tinted; legend entry "single chambers". The static branch passes the chamber tables of steps 12 (µ_area over
+all cells), 13 (endpoint), 21 (budding rate) and 24 (µ_bud, immigration). The oscillation figures are
+unchanged (they have their own layout in `plot_endpoint_vs_period()`).
+
+**The block table of 2.2 as a figure.** `relink.new_objects_vs_density()` counts per chamber and block of
+`DENSITY_BLOCK_FRAMES` = 22 frames the objects per frame (median), the tracks that begin in the block (the
+first frame of the chamber not counted), split by `link_type` into touching a tracked mask or split from one
+(`new_touching`, `split`) and touching nothing (`new`), with rates per frame and per object-frame;
+`plot_new_objects_vs_density()` draws one point per chamber and block, median and quartiles per density
+class (powers of two, classes with at least five blocks), and the sparse limit; the right panel is the
+touching rate per object and frame. `run_analysis.py` writes `00_new_objects_vs_density.csv/.pdf` for the
+main run, after the fragmentation table; without `link_type` (v11 tables) only the total is drawn.
+
+Checked on the four v12 tables at hand (35 chambers): the WT/pH/6 block means reproduce the table of
+`docs/data_story.md` 2.2 exactly (block 0 differs only by the convention that tracks present in the first
+frame are not new: 2.5 instead of 4.4 free new tracks). Touching new tracks per object and frame sit at 0.04
+to 0.06 between 8 and 256 objects per frame (proportional to the density), free new tracks saturate at about two
+per frame; above 20 objects per frame 55 to 63 % of the new tracks touch a mask on WT/pH/6, BSG/pH/6 and
+W65, 35 % on W109. The synthetic run (no `link_type`) passes with the total-only variant.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

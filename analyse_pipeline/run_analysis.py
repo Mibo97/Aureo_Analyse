@@ -83,6 +83,7 @@ from config import (
     LINEAGE_PARAMS,
     BUD_MAX_AREA_FRACTION_FALLBACK,
     BUD_SIZE_PLAUSIBLE_RANGE,
+    DENSITY_BLOCK_FRAMES,
     LINEAGE_SPARSE_MAX_OBJECTS,
     LINEAGE_SPARSE_SMOOTH_FRAMES,
     LINEAGE_SPARSE_MIN_FRAMES,
@@ -119,6 +120,8 @@ from relink import (
     detect_sparse_window,
     flag_lineage_window,
     plot_lineage_window,
+    new_objects_vs_density,
+    plot_new_objects_vs_density,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -159,6 +162,33 @@ def _gap_close_and_report(cells: pd.DataFrame, out_dir: Path, stage_before: str,
         frag_before["new_tracks_per_object_frame"].median(), frag_after["new_tracks_per_object_frame"].median(),
     )
     return cells, relinks, relink_stats
+
+
+def _density_report(cells: pd.DataFrame, out_dir: Path) -> None:
+    """Neue Tracks gegen die Objektdichte je Kammer und Block (relink.new_objects_vs_density()):
+    00_new_objects_vs_density.csv/.pdf. Zeigt ueber alle Kammern, dass im dichten Feld jeder
+    neue Track eine beruehrende Maske hat - die Begruendung des Sparse-Phase-Fensters."""
+    table = new_objects_vs_density(cells, block_frames=DENSITY_BLOCK_FRAMES)
+    if table.empty:
+        return
+    table.to_csv(out_dir / "00_new_objects_vs_density.csv", index=False)
+    plot_new_objects_vs_density(table, out_dir / "00_new_objects_vs_density.pdf",
+                                max_objects=LINEAGE_SPARSE_MAX_OBJECTS, block_frames=DENSITY_BLOCK_FRAMES)
+    dense = table["objects_per_frame"] >= LINEAGE_SPARSE_MAX_OBJECTS
+    if table["new_tracks_touching"].notna().any():
+        def share(sel):
+            tot = table.loc[sel, "new_tracks_total"].sum()
+            return 100.0 * table.loc[sel, "new_tracks_touching"].sum() / tot if tot else float("nan")
+        logger.info(
+            "Tabelle gespeichert: 00_new_objects_vs_density.csv (%d Kammern, Bloecke von %d Frames). "
+            "Neue Tracks mit beruehrender Maske: %.0f %% der neuen Tracks in Bloecken ueber der "
+            "Sparse-Grenze (%d Objekte), %.0f %% darunter.",
+            table["exp_id"].nunique(), DENSITY_BLOCK_FRAMES, share(dense), LINEAGE_SPARSE_MAX_OBJECTS,
+            share(~dense),
+        )
+    else:
+        logger.info("Tabelle gespeichert: 00_new_objects_vs_density.csv (%d Kammern; ohne link_type nur "
+                    "die Gesamtzahl neuer Tracks).", table["exp_id"].nunique())
 
 
 def _flag_sparse_window_and_report(cells: pd.DataFrame, out_dir: Path, plot: bool) -> pd.DataFrame:
@@ -439,6 +469,12 @@ def main(argv: list[str] | None = None) -> int:
     cells = _flag_sparse_window_and_report(cells, OUTPUT_DIR, plot=True)
     cells, relinks, relink_stats = _gap_close_and_report(cells, OUTPUT_DIR, stage_before="after manual QC",
                                                           skip=has_parent)
+    # Neue Tracks gegen die Objektdichte (Block-Tabelle von docs/data_story.md 2.2 als
+    # Abbildung ueber alle Kammern): im dichten Feld beruehrt jeder neue Track eine Maske.
+    try:
+        _density_report(cells, OUTPUT_DIR)
+    except Exception:
+        logger.exception("00_new_objects_vs_density: Tabelle/Abbildung uebersprungen")
 
     # ------------------------------------------------------------------
     # 2c. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
