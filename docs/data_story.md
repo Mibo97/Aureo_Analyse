@@ -429,6 +429,58 @@ middle band; 2 period-effect points and 2 not-robust points remain off the diago
 
 ---
 
+## 5b. Robustness: the oscillation against constant medium, and R(t) / R(p)
+
+The thesis question is robustness under oscillation (introduction 1.4). Two readings of it, computed on the
+final-run tables with the pipeline's own functions (`docs/scratch/robust.py`, `robust2.py`; to be wired into step 40
+and a new `51_osc_vs_controls.csv`, section 9):
+
+**Oscillation chambers against the controls of their structure**, paired over the 49 structures (Wilcoxon of the
+oscillation mean against the control mean; ratio Osc / control mean):
+
+| readout | Glc (29 structures): Osc > ctrl | ratio | p | pH (20): Osc > ctrl | ratio | p |
+| --- | --- | --- | --- | --- | --- | --- |
+| buds per mother-hour | 27 | 1.25 | < 0.001 | 13 | 1.09 | 0.09 |
+| µ_bud | 23 | 1.15 | < 0.001 | 14 | 1.05 | 0.12 |
+| endpoint area | 25 | 1.14 | < 0.001 | 10 | 1.00 | 0.65 |
+| eccentricity | 7 | 0.98 | < 0.001 | 7 | 0.98 | 0.45 |
+| µ_area | 7 | 0.88 | 0.010 | 8 | 0.97 | 0.33 |
+| immigration | 16 | 1.02 | 0.90 | 13 | 1.10 | 0.45 |
+
+Under Glc oscillation the cells bud a quarter more often, are 14 % larger, marginally rounder and grow 12 % slower
+in area than under constant feast or famine on the same structure; under pH oscillation nothing differs. The
+budding rate lies above both controls on 26 of 49 structures and below both on 4; every strain shows it (ratio
+1.07 BSG to 1.37 BSA). The ratio does not depend on the period (|ρ| ≥ 0.6 in 2 to 5 of 10 series per readout,
+both signs). Immigration is the same in oscillation and control chambers, so the flow is comparable; but the
+oscillation chambers are the positions A3 to A12 and the controls A1/A2 and A13/A14, so position is confounded
+with treatment here too. Note also that the famine controls (0 g/L) bud as often as the feast controls in the
+sparse window (section 5), while in the BioLector the biosensor strains do not grow at 0 g/L within 24 h.
+
+**R(t) and R(p)** (Trivellin 2022 / Blöbaum 2024, R = −σ²/x̄ · 1/m ≤ 0), medians over structures, oscillation
+against feast / famine controls, structures with the oscillation chambers less robust than the control mean:
+
+| metric | readout | Osc | feast | famine | less robust of 49 | p | period effects of 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| R(t) population | area | −0.127 | −0.096 | −0.123 | 31 | 0.013 | 1 (WT/Glc) |
+| R(t) population | eccentricity | −0.015 | −0.012 | −0.014 | 33 | 0.019 | 0 |
+| R(t) single cell (≥ 10 frames) | area | −0.106 | −0.100 | −0.077 | 35 | 0.007 | 1 (BSG/pH) |
+| R(t) single cell | eccentricity | −0.022 | −0.020 | −0.018 | 30 | 0.010 | 0 |
+| R(p) | area | −0.671 | −0.571 | −0.613 | 34 | 0.003 | 2 (BSA/Glc, BSPH/pH) |
+| R(p) | eccentricity | −0.048 | −0.041 | −0.042 | 33 | 0.003 | 1 (BSA/Glc) |
+| R(p) | µ_area | −0.333 | −0.412 | −0.453 | 16 | 0.008 | 1 (BSA/Glc) |
+
+Under oscillation the cell area is less stable over time and more heterogeneous across cells, the growth rate more
+homogeneous; the two heterogeneities are unrelated across chambers (ρ 0.06, n 497). Sensors: no difference
+between oscillation and control chambers for any of the four ratios (p 0.06 to 0.92); pHluorin the most robust
+(R −0.01), OxPro the least (R(t) −0.21, R(p) −0.73, values near zero). The control-trend classification over all
+94 robustness combinations: 48 no trend, 30 structure effects, 9 not robust, 7 period effects (three of them
+BSA/Glc: R(p) of area, eccentricity and µ_area), the same picture as the 58 readout rows of section 5.
+
+Static context: R(t) of the area −0.18 in minimal and −0.39 in complex medium (the growing cells), R(p) −0.47 and
+−0.51.
+
+---
+
 ## 6. Section 3: biosensors
 
 On the real data none of the sensors shows a clear feast versus famine difference between its PosCtrl and
@@ -512,7 +564,11 @@ WT/pH/6), the dead-cell rule (2.7).
 
 Not built, still possible:
 
-- **Nothing pending on the pipeline side.** Every number in this document comes from the final run. The two
+- **Robustness outputs (section 5b) as pipeline tables**: in step 40 the paired oscillation-versus-control
+  comparison and the control-trend classification for R(t) and R(p), with figures that carry the controls; a
+  `51_osc_vs_controls.csv` with the paired comparison for endpoint, budding rate, µ_bud, µ_area and immigration.
+  Until then the numbers come from `docs/scratch/robust.py` / `robust2.py` on the final-run tables.
+- **Nothing else pending on the pipeline side.** Every number in this document comes from the final run. The two
   figure additions of 2026-09-29, the per-chamber points on the static figures (section 3) and the block table
   of 2.2 as a figure over all chambers (`00_new_objects_vs_density.pdf`), are in the code and appear with the
   next run; the density numbers quoted in 2.2 are from the four tables at hand, not from the full run.

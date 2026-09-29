@@ -5,7 +5,10 @@ Draft of 2026-09-29 for the thesis. Numbers come from the final v12 run of the a
 Figures are numbered on from Figure 1 of the methods chapter and tables on from Table 2; the pipeline file behind
 every figure and table stands in square brackets in its caption and is to be removed before submission. Citation
 keys follow the methods chapter (`2024_Blöbaum`). Strain names follow Section 2.3 (BSpH is labelled BSPH in the
-pipeline figures). Sentences in *[italic square brackets]* are notes to the author, not thesis text.
+pipeline figures). Sentences in *[italic square brackets]* are notes to the author, not thesis text. The robustness results of 3.4
+and 3.5 (oscillation against control chambers, R(t) and R(p) against the controls and the period) were computed
+from the per-chamber tables of the final run with the pipeline's own aggregation and classification functions;
+they become pipeline outputs once the proposed addition to step 40 is in place (notes at the end).
 
 ---
 
@@ -14,7 +17,8 @@ formed the poles of the feast/famine oscillations, measured in a conventional mi
 microfluidic data set and the limit that the cell density set to single-cell tracking are described next, because
 they define which single-cell readouts could be evaluated and over which part of a cultivation (3.2). The
 comparison of complex and minimal medium under static conditions follows (3.3), then the oscillation
-experiments: growth, morphology and budding against the cycle period (3.4), the biosensor readouts (3.5), and the
+experiments: growth, morphology and their robustness against the cycle period (3.4), the biosensor readouts
+(3.5), and the
 behaviour of the constant-medium control chambers on the same structures (3.6). The chapter closes with the
 pullulan knockout strain (3.7).
 
@@ -255,7 +259,12 @@ as a small point beside the mean, complex medium filled and minimal medium hollo
 [`static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf`,
 `static/24_growth_from_budding_vs_medium.pdf`; the per-chamber points appear with the next pipeline run]
 
-## 3.4 Oscillations: growth, morphology and budding against the cycle period
+## 3.4 Oscillations: growth, morphology and their robustness against the cycle period
+
+Robustness under oscillation was read in three ways: from the stability of the readouts across the cycle periods
+against the trends of the constant-medium controls, from the comparison of the oscillation chambers with the
+controls of their own structure, and from the temporal and population robustness metrics R(t) and R(p)
+(Section 2.5.5).
 
 For every oscillation series (strain by oscillation type) one value per structure was compared across the cycle
 periods, with the constant-medium control chambers of the same structure plotted as separate markers and the
@@ -286,6 +295,25 @@ immigration exceeded births in 37 % of the chambers, so that the object count of
 curve (Appendix Figure A6). Per structure and chamber type, µ_bud and the area growth rate of single cells
 µ_area were negatively correlated (Spearman ρ −0.4, n = 146): where cells grew in area, they budded less.
 
+**Oscillation against constant medium.** Robustness to the oscillation itself was read from the comparison of
+the oscillation chambers with the constant-medium controls of the same structure, paired over structures
+(Wilcoxon signed-rank test of the oscillation mean against the mean of the two controls, n = 49). Under glucose
+oscillation the cells budded more often than under constant feast or famine: the budding rate of the oscillation
+chambers exceeded the control mean on 27 of the 29 Glc structures (median ratio 1.25, p < 0.001), and µ_bud on
+23 of 29 (ratio 1.15, p < 0.001). The cells were also larger (endpoint area above the control mean on 25 of 29
+structures, ratio 1.14, p < 0.001), marginally rounder (eccentricity ratio 0.98, p < 0.001) and grew more slowly
+in area (µ_area below the control mean on 22 of 29 structures, ratio 0.88, p 0.010). Under pH oscillation none
+of the readouts differed from the controls (budding rate ratio 1.09, p 0.09; µ_bud 1.05, p 0.12; area 1.00,
+p 0.65; µ_area 0.97, p 0.33; eccentricity 0.98, p 0.45). Over both oscillation types the budding rate of the
+oscillation chambers lay above both controls of their structure on 26 of the 49 structures and below both on 4,
+and the difference was present in every strain (median ratio 1.07 for BSG to 1.37 for BSA). The ratio of the
+oscillation chambers to their controls did not depend on the period: it correlated with the period at |ρ| ≥ 0.6
+in two to five of the ten series per readout, with both signs. The immigration rate, which reflects the flow
+through a chamber, did not differ between oscillation and control chambers in either oscillation type (ratio
+1.02 and 1.10, p 0.90 and 0.45). The oscillation chambers occupied the positions A3 to A12 of an array and the
+controls the positions A1, A2, A13 and A14 (Section 2.5.3), so the comparison is also one between chamber
+positions.
+
 **Trends against the period.** Monotone trends of the oscillation chambers with |ρ| ≥ 0.6 appeared in every
 readout, but in different series (Table 6, columns "oscillation chambers"). The budding rate fell with the period
 in WT/pH (ρ −1.00), WT/Glc, BSA/pH and BSG/pH (−0.60) and rose in BSO/Glc (+0.77); µ_bud rose in BSO/Glc (+1.00)
@@ -306,6 +334,43 @@ and 39 of 49 structures.
 differ, the endpoint area fell from the shortest to the longest period in 8 cultures for the oscillation chambers
 and in 13 for their controls, and the difference between the two fell in 6; for µ_bud the counts were 8, 8 and
 11 of 19. Neither readout changed with the period in a consistent direction within cultures.
+
+**Temporal and population robustness.** The robustness metrics R(t) and R(p) (Section 2.5.5) were computed for
+the cell area, the eccentricity and, as R(p), for the area growth rate µ_area of every chamber, and the
+oscillation chambers were compared with the controls of their structure in the same way as above (Table 8;
+Appendix Figure A11). Under oscillation the mean cell area of a chamber was less stable over time than under
+constant medium (R(t) at the population level −0.127 against −0.096 for the feast and −0.123 for the famine
+controls; below the control mean on 31 of 49 structures, p 0.013), and so was the area of the individual cell
+(single-cell R(t) −0.106 against −0.100 and −0.077, below the control mean on 35 of 49, p 0.007). The
+population was also more heterogeneous in cell area (R(p) −0.671 against −0.571 and −0.613, on 34 of 49
+structures, p 0.003) and in eccentricity (−0.048 against −0.041 and −0.042, p 0.003), but more homogeneous in
+its area growth rate (R(p) of µ_area −0.333 against −0.412 and −0.453, above the control mean on 33 of 49
+structures, p 0.008). The heterogeneity of cell area and that of the growth rate were unrelated across chambers
+(Spearman ρ 0.06, n = 497). Against the period the robustness metrics behaved like the readouts themselves: of
+the 70 combinations of the seven metrics and ten series, 39 showed no monotone trend of the oscillation
+chambers, 18 a trend shared by a control of the same structures, 7 a trend that vanished after subtraction of
+the controls, and 6 met the conditions of a period effect (population R(t) of the area in WT/Glc, R(p) of the
+area in BSA/Glc and BSpH/pH, R(p) of the eccentricity and of µ_area in BSA/Glc, single-cell R(t) of the area in
+BSG/pH). Three of the six fell in the series BSA/Glc, in which the population became more homogeneous in area
+and in µ_area and more heterogeneous in eccentricity with longer periods.
+
+**Table 8: Temporal and population robustness of growth and morphology under oscillation and under constant
+medium.** R(t) and R(p) after (2022_Trivellin; 2024_Blöbaum), R ≤ 0 with 0 for a perfectly stable readout; medians
+over structures of the chamber means, single-cell R(t) over cells tracked for at least ten frames. "Less robust":
+structures on which R of the oscillation chambers lay below the mean of the two controls; p: Wilcoxon signed-rank
+test over the 49 structures; period effects: classification of 3.6 over the ten series.
+[`40_Rt_population_<readout>.csv`, `40_Rt_single_cell_<readout>.csv`, `40_Rp_<readout>.csv`, aggregated per
+structure; the paired tests and the classification are to be added to step 40 of the pipeline]
+
+| metric | readout | oscillation | feast control | famine control | less robust (of 49) | p | period effects (of 10) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| R(t), population | cell area | −0.127 | −0.096 | −0.123 | 31 | 0.013 | 1 |
+| R(t), population | eccentricity | −0.015 | −0.012 | −0.014 | 33 | 0.019 | 0 |
+| R(t), single cell | cell area | −0.106 | −0.100 | −0.077 | 35 | 0.007 | 1 |
+| R(t), single cell | eccentricity | −0.022 | −0.020 | −0.018 | 30 | 0.010 | 0 |
+| R(p) | cell area | −0.671 | −0.571 | −0.613 | 34 | 0.003 | 2 |
+| R(p) | eccentricity | −0.048 | −0.041 | −0.042 | 33 | 0.003 | 1 |
+| R(p) | µ_area | −0.333 | −0.412 | −0.453 | 16 | 0.008 | 1 |
 
 ## 3.5 Biosensor readouts against the cycle period
 
@@ -328,6 +393,35 @@ Table 6), with the exception of Gly-RNA, whose trend did not survive the subtrac
 **Figure 6: Biosensor ratios of the Glc oscillation series against the cycle period.** (A) OxPro ratio of BSO,
 (B) sfpHluorin ratio of BSpH; layout as in Figure 5. [`13_endpoint_vs_period_ratio_OxPro_Glc.pdf`,
 `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf`]
+
+**Robustness of the sensor signals.** The temporal and population robustness of the four ratios differed by
+two orders of magnitude between the sensors (Table 9): the sfpHluorin ratio was the most stable over time and
+the most homogeneous across cells (R(t) and R(p) of −0.01), the OxPro ratio, whose values lie close to zero, the
+least (R(t) −0.21 and R(p) −0.73 in the oscillation chambers). For none of the four sensors did the oscillation
+chambers differ from the controls of their structure in R(t) or R(p) (Wilcoxon signed-rank test over ten
+structures, p 0.06 to 0.92). Against the period, 12 of the 24 combinations of sensor, metric and series were
+structure effects, among them both series of OxPro in all three metrics, in which the robustness of the ratio
+fell with the period in the oscillation and in the famine chambers alike; one combination met the conditions of
+a period effect (single-cell R(t) of the Gly-RNA ratio in BSG/pH), two were not robust and nine showed no trend.
+
+**Table 9: Temporal and population robustness of the four sensor ratios.** Layout as in Table 8; ten structures
+per sensor. [`40_Rt_population_ratio_<sensor>.csv`, `40_Rt_single_cell_ratio_<sensor>.csv`,
+`40_Rp_ratio_<sensor>.csv`]
+
+| sensor | metric | oscillation | feast control | famine control | less robust (of 10) | p |
+| --- | --- | --- | --- | --- | --- | --- |
+| QUEEN-2m (BSA) | R(t), population | −0.140 | −0.113 | −0.137 | 4 | 0.77 |
+| | R(t), single cell | −0.037 | −0.034 | −0.040 | 5 | 0.92 |
+| | R(p) | −0.049 | −0.074 | −0.058 | 2 | 0.28 |
+| Gly-RNA (BSG) | R(t), population | −0.015 | −0.009 | −0.022 | 3 | 0.28 |
+| | R(t), single cell | −0.042 | −0.044 | −0.023 | 5 | 0.92 |
+| | R(p) | −0.065 | −0.128 | −0.117 | 5 | 0.77 |
+| OxPro (BSO) | R(t), population | −0.212 | −0.173 | −0.096 | 5 | 0.92 |
+| | R(t), single cell | −0.249 | −0.292 | −0.127 | 4 | 0.56 |
+| | R(p) | −0.728 | −1.032 | −0.380 | 4 | 0.62 |
+| sfpHluorin (BSpH) | R(t), population | −0.010 | −0.010 | −0.010 | 7 | 0.32 |
+| | R(t), single cell | −0.012 | −0.010 | −0.010 | 8 | 0.06 |
+| | R(p) | −0.010 | −0.005 | −0.015 | 5 | 0.43 |
 
 ## 3.6 The constant-medium controls on the same structures
 
@@ -393,7 +487,9 @@ WT/Glc (ρ −0.60, difference −0.80). Neither recurred in the other oscillati
 BSO/pH ρ −0.20; budding rate WT/pH a structure effect). Figure 7 shows all 58 combinations at once: the
 correlation of the oscillation chambers on the x axis and that of the strongest control on the y axis, where a
 point on the diagonal is a structure effect; 23 points lie in the two diagonal corners, 31 in the central band,
-and the two period effects and the two non-robust trends lie off the diagonal.
+and the two period effects and the two non-robust trends lie off the diagonal. Applied to the 94 combinations of
+the robustness metrics with the series (Tables 8 and 9), the same classification gave 48 combinations without a
+trend, 30 structure effects, 9 non-robust trends and 7 period effects.
 
 **Figure 7: Trends of the oscillation chambers against trends of their controls.** One point per readout and
 series (58 combinations): Spearman ρ of the oscillation chambers against the period on the x axis, ρ of the
@@ -458,6 +554,7 @@ coefficient of variation for the feast and famine controls of every structure; t
 | Appendix A8 | `95_<strain>_<osc_type>_ratio_<sensor>_comparison.pdf` | exist |
 | Appendix A9 | `40_control_consistency_*.pdf` | exist |
 | Appendix A10 | `pko/13_endpoint_vs_period_area_Glc.pdf` | exists |
+| Appendix A11 | `40_Rt_population_area.pdf`, `40_Rt_single_cell_area.pdf`, `40_Rp_area.pdf`, `40_Rp_mu_area.pdf` | exist without the control chambers; a version with the controls and the bracket row is proposed for step 40 |
 
 **Open items.**
 
@@ -467,3 +564,9 @@ coefficient of variation for the feast and famine controls of every structure; t
 - The methods chapter must describe the final pipeline before this chapter can cite it; the replacement text for
   Sections 2.3 (growth parameters) and 2.5 is in `docs/methods_2_5_rewrite.md`.
 - Conversion used throughout: 1 px² = 0.00537 µm² (0.0733 µm per pixel).
+- Proposed pipeline additions for the robustness results (not yet built): in step 40 the paired comparison of the
+  oscillation chambers with the controls of their structure and the control-trend classification for R(t) and
+  R(p) (tables `40_<metric>_<readout>_osc_vs_controls.csv` and `_control_trend.csv`, figures with the controls
+  in the layout of Figure 5); a table `51_osc_vs_controls.csv` with the same paired comparison for the endpoint,
+  budding rate, µ_bud, µ_area and immigration (per oscillation type and strain). Until then the numbers of 3.4,
+  3.5 and Tables 8 and 9 come from `docs/scratch/robust.py` / `robust2.py` on the final-run tables.

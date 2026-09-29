@@ -80,7 +80,8 @@ the tracker and the filters. One static recording that duplicated another stage 
 The curated single-cell data were organised by biosensor strain, oscillation type and cycle period. One
 microfluidic structure carried one cycle period with five oscillation chambers, three constant-feast (PosCtrl) and
 three to four constant-famine (NegCtrl) chambers distributed over several arrays; the array index and the chamber
-position were taken from the file names. A physical chip carried two or three structures, was inoculated from
+position were taken from the file names. On every array the oscillation chambers occupied the positions A3 to
+A12, the feast controls A1 and A2 and the famine controls A13 and A14. A physical chip carried two or three structures, was inoculated from
 one preculture and was imaged on one day; it is referred to as a culture. For the static cultivations, chip W109
 carried three structures with four chambers per medium and chip W65 one structure with five chambers in complex
 and four in minimal medium. All readouts were aggregated hierarchically from cells to chambers (mean per chamber),
@@ -139,7 +140,7 @@ does not enter it.
 The robustness metrics R(t) and R(p) were adapted from Trivellin et al. (2022) and Blöbaum et al. (2024).
 Temporal robustness R(t) quantifies the stability of a readout over time, at the population level as the
 variation of the chamber mean over the frames and at the single-cell level as the variation of a cell's value
-over its frames; population robustness R(p) quantifies the cell-to-cell heterogeneity of a readout within a
+over its frames (cells tracked for at least ten frames); population robustness R(p) quantifies the cell-to-cell heterogeneity of a readout within a
 chamber at each time point. Both were applied to the cell area, the eccentricity and the sensor ratios, R(p) also
 to µ_area. For the pullulan knockout strain, the agreement of the control chambers within a structure was
 quantified as the coefficient of variation of the chamber-median area over the three feast (or famine) chambers,
@@ -166,6 +167,9 @@ less than twice the chamber standard deviation of the controls, and degenerate s
 trend test of the score. Within cultures that carried two or three periods, the change from the shortest to the
 longest period was recorded for the oscillation chambers, their controls and the difference.
 
+The oscillation chambers of a structure were compared with the mean of its two controls, paired over the
+structures of all series, by the Wilcoxon signed-rank test, and the ratio of the two was reported per oscillation
+type and strain; the robustness metrics were classified against the period in the same way as the readouts.
 Feast and famine controls were compared over structures by the Wilcoxon signed-rank test. The two media of a
 static chip and the growth parameters of the BioLector cultivations were compared by Welch's t-test over chambers
 and wells, respectively. The consistency of the control chambers across the structures of a series was tested by
