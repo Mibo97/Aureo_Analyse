@@ -34,9 +34,23 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from plot_style import INK, STRAIN_COLOR_OTHER, SURFACE, finish, panel_title, strain_color, tint
+
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+def _group_palette(df: pd.DataFrame, group_col: str, groups: Sequence) -> dict:
+    """Farbe je Gruppe: Staemme in ihrer Stammfarbe; andere Gruppen (statisch: Medium) als
+    Toene der einen Stammfarbe der Tabelle, letzte Gruppe voll, davor heller."""
+    if group_col == "biosensor":
+        return {g: strain_color(g) for g in groups}
+    strains = df["biosensor"].dropna().unique() if "biosensor" in df.columns else []
+    base = strain_color(strains[0]) if len(strains) == 1 else STRAIN_COLOR_OTHER
+    n = len(groups)
+    return {g: (base if i == n - 1 else tint(base, 0.55 * (n - 1 - i) / max(n - 1, 1))) for i, g in enumerate(groups)}
+
 
 try:
     from statannotations.Annotator import Annotator
@@ -94,7 +108,7 @@ def plot_violin_with_significance(
     if pairs is None:
         pairs = list(itertools.combinations(groups, 2))
 
-    fig, axes = plt.subplots(1, len(facets), figsize=(4 * len(facets), 5), squeeze=False, sharey=True)
+    fig, axes = plt.subplots(1, len(facets), figsize=(2.8 * len(facets) + 0.4, 3.4), squeeze=False, sharey=True)
     axes = axes[0]
 
     for ax, facet in zip(axes, facets):
@@ -103,12 +117,12 @@ def plot_violin_with_significance(
         sns.violinplot(
             data=sub, x=group_col, y=value_col, order=groups,
             hue=group_col, hue_order=groups, legend=False,
-            ax=ax, palette="Set2", inner="quartile", cut=0,
+            ax=ax, palette=_group_palette(sub, group_col, groups), inner="quartile", cut=0, linewidth=0.8,
         )
 
         if show_mean:
             means = sub.groupby(group_col)[value_col].mean().reindex(groups)
-            ax.scatter(range(len(groups)), means.values, color="red", zorder=5, s=30)
+            ax.scatter(range(len(groups)), means.values, color=INK, edgecolor=SURFACE, linewidth=0.8, zorder=5, s=26)
 
         # Nur Paare annotieren, für die in DIESER Facette tatsächlich beide
         # Gruppen mit >= 2 Werten vorhanden sind (sonst bricht der Test ab)
@@ -133,7 +147,7 @@ def plot_violin_with_significance(
             pass  # bereits beim Modul-Import gewarnt
 
         if facet is not None:
-            ax.set_title(str(facet), fontsize=11, fontweight="bold")
+            panel_title(ax, str(facet))
         ax.set_xlabel("")
         ax.set_ylabel(ylabel or value_col)
         ax.tick_params(axis="x", rotation=30)
@@ -144,17 +158,9 @@ def plot_violin_with_significance(
     # ueber Replikate (siehe Modul-Docstring und config.METHOD_CAVEATS). Das
     # gehoert AUF die Abbildung: sie sieht sonst aus wie ein Test, der sie
     # nicht ist.
-    fig.text(
-        0.5, -0.015,
-        "Significance stars: Mann-Whitney-U over individual cells/mother cells, NOT over "
-        "biological replicates —\nthe p-value scales with cell count and is descriptive only. "
-        "The distributions, not the stars, are the content.",
-        ha="center", fontsize=8,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    # Die Sternchen sind ein Mann-Whitney-U ueber Zellen bzw. Muetter, nicht ueber Replikate -
+    # das steht in der Bildunterschrift der Arbeit und in config.METHOD_CAVEATS.
+    finish(fig, out_path, logger)
 
 
 def plot_panel_a(
@@ -190,9 +196,17 @@ def plot_panel_a(
 
     facets = sorted(cells[facet_col].dropna().unique())
     groups = group_order if group_order is not None else sorted(cells[group_col].dropna().unique())
-    pairs = list(itertools.combinations(groups, 2))
+    if group_col == "biosensor":
+        from plot_style import ordered_strains
+        groups = ordered_strains(groups)
+    # Nur die Paare gegen den Wildtyp (bzw. Nachbarn, wenn es keinen WT gibt): zehn Klammern ueber fuenf
+    # Violinen drueckten die Verteilungen ins untere Drittel der Abbildung.
+    if "WT" in groups and len(groups) > 2:
+        pairs = [(g, "WT") for g in groups if g != "WT"]
+    else:
+        pairs = list(zip(groups[:-1], groups[1:])) if len(groups) > 2 else list(itertools.combinations(groups, 2))
 
-    fig, axes = plt.subplots(n_panels, len(facets), figsize=(4 * len(facets), 4.5 * n_panels), squeeze=False)
+    fig, axes = plt.subplots(n_panels, len(facets), figsize=(2.8 * len(facets) + 0.4, 3.0 * n_panels), squeeze=False)
 
     row = 0
     panel_specs = []
@@ -216,10 +230,10 @@ def plot_panel_a(
             sns.violinplot(
                 data=sub, x=group_col, y=value_col, order=groups,
                 hue=group_col, hue_order=groups, legend=False,
-                ax=ax, palette="Set2", inner="quartile", cut=0,
+                ax=ax, palette=_group_palette(sub, group_col, groups), inner="quartile", cut=0, linewidth=0.8,
             )
             means = sub.groupby(group_col)[value_col].mean().reindex(groups)
-            ax.scatter(range(len(groups)), means.values, color="red", zorder=5, s=30)
+            ax.scatter(range(len(groups)), means.values, color=INK, edgecolor=SURFACE, linewidth=0.8, zorder=5, s=26)
 
             valid_pairs = [
                 (g1, g2) for g1, g2 in pairs
@@ -235,7 +249,7 @@ def plot_panel_a(
                     logger.warning("Signifikanz-Annotation fehlgeschlagen für %s/%s (%s): %s", value_col, facet, type(e).__name__, e)
 
             if row == 0:
-                ax.set_title(str(facet), fontsize=11, fontweight="bold")
+                panel_title(ax, str(facet))
             ax.set_xlabel("")
             ax.set_ylabel(label if col_idx == 0 else "")
             ax.tick_params(axis="x", rotation=30)
@@ -247,14 +261,6 @@ def plot_panel_a(
     # ueber Replikate (siehe Modul-Docstring und config.METHOD_CAVEATS). Das
     # gehoert AUF die Abbildung: sie sieht sonst aus wie ein Test, der sie
     # nicht ist.
-    fig.text(
-        0.5, -0.015,
-        "Significance stars: Mann-Whitney-U over individual cells/mother cells, NOT over "
-        "biological replicates —\nthe p-value scales with cell count and is descriptive only. "
-        "The distributions, not the stars, are the content.",
-        ha="center", fontsize=8,
-    )
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    # Die Sternchen sind ein Mann-Whitney-U ueber Zellen bzw. Muetter, nicht ueber Replikate -
+    # das steht in der Bildunterschrift der Arbeit und in config.METHOD_CAVEATS.
+    finish(fig, out_path, logger)

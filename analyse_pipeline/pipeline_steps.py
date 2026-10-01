@@ -53,6 +53,8 @@ from config import (
     FLUX_CONFIG,
     MU_MAX_THRESHOLD,
     ROBUSTNESS_VALUE_COLS,
+    ROBUSTNESS_MIN_FRAMES_SINGLE_CELL,
+    ROBUSTNESS_MIN_INTERVALS_MU_EVENT,
     ENDPOINT_LAST_FRACTION,
     ENDPOINT_VALUE_COLS,
     STATIC_SATURATION_LEVEL,
@@ -78,6 +80,7 @@ from lineage import classify_mother_bud, compute_budding_ratio, identify_mothers
 from mother_trajectories import plot_stable_mother_per_group, build_lineage_tree, summarise_lineage_depth
 from budding_ratio_timeseries import compute_budding_ratio_timeseries, aggregate_budding_ratio_over_replicates
 from growth_rate import compute_specific_growth_rate, summarise_growth_rate, classify_condition_type
+from growth_from_budding import compute_growth_from_budding, plot_mu_bud_vs_mu_area
 from area_growth import compute_area_growth_rate, summarise_area_growth, plot_mu_event_vs_mu_area
 from robustness import (
     compute_rt_population,
@@ -86,6 +89,12 @@ from robustness import (
     aggregate_robustness_over_replicates,
 )
 from control_consistency import test_control_consistency_across_freq, plot_control_consistency
+from osc_vs_controls import (
+    per_structure as osc_per_structure,
+    summarise as osc_summarise,
+    effect_vs_period as osc_effect_vs_period,
+    plot_osc_vs_controls,
+)
 from queen_controls import (
     prepare_sensor_controls,
     summarise_sensor_controls,
@@ -268,11 +277,24 @@ class PipelineContext:
         return self._lazy("mothers", lambda: identify_mothers(self.cells_lineage, LINEAGE_PARAMS))
 
     @property
-    def mu_table(self) -> pd.DataFrame:
-        return self._lazy("mu_table", lambda: compute_specific_growth_rate(
-            self.lineage_events, self.cells_lineage,
-            min_per_frame=MIN_PER_FRAME, mu_max_threshold=MU_MAX_THRESHOLD,
+    def budding_ratio_tables(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """(per_mother, per_experiment) aus lineage.compute_budding_ratio(): Schritt 20 schreibt beide,
+        Schritt 40 braucht per_mother fuer R(p) der Knospungsrate je Mutter - einmal rechnen."""
+        return self._lazy("budding_ratio_tables", lambda: compute_budding_ratio(
+            self.lineage_events, self.cells_lineage, self.mothers, min_per_frame=MIN_PER_FRAME,
         ))
+
+    @property
+    def mu_table(self) -> pd.DataFrame:
+        def compute() -> pd.DataFrame:
+            if self.lineage_events.empty:
+                logger.warning("Keine Budding-Events - µ_event (11_) entfaellt fuer diesen Zweig.")
+                return pd.DataFrame()
+            return compute_specific_growth_rate(
+                self.lineage_events, self.cells_lineage,
+                min_per_frame=MIN_PER_FRAME, mu_max_threshold=MU_MAX_THRESHOLD,
+            )
+        return self._lazy("mu_table", compute)
 
     @property
     def mu_summary(self) -> pd.DataFrame:
@@ -456,16 +478,20 @@ def step_10_growth(ctx: PipelineContext) -> None:
 
             # Kontrollen bleiben IM Plot (Marker-Form = Kontrollart): ohne sie
             # ist ein Periodentrend nicht von einem Struktureffekt zu unterscheiden.
+            # Statischer Zweig: jede Kammer als Punkt neben dem Mittelwert (W65-Streuung).
+            area_points = None
+            if ctx.x_col == "medium" and "condition_type" in area_rep.columns:
+                key = [c for c in ["biosensor", "osc_type", "osc_freq", "condition"] if c in area_chamber.columns]
+                area_points = area_chamber.merge(area_rep[key + ["condition_type"]].drop_duplicates(key),
+                                                 on=key, how="left")
             plot_point_errorbar(
                 area_rep_summary, value_col="mean", sd_col="sem",
                 out_path=output_dir / "12_area_growth_rate_all.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
                 style_col="condition_type" if "condition_type" in area_rep_summary.columns else None,
-                x_order=freq_order,
+                x_order=freq_order, points=area_points,
                 ylabel="µ_area, all cells [h⁻¹]",
-                title="µ_area over all cells, oscillation and control chambers — mean ± SEM "
-                      "(error unit per table: error_unit)\n"
-                      "(no mother/bud filter, so independent of the lineage heuristic)",
+                title="µ_area over all cells, oscillation and control chambers, mean ± SEM over chambers",
             )
 
             area_trend = spearman_against_period(area_rep)
@@ -592,11 +618,10 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                 summary, value_col="mean", sd_col="sem",
                 out_path=output_dir / f"13_endpoint_vs_{ctx.x_col}_{value_col}.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-                x_order=ctx.freq_order,
+                x_order=ctx.freq_order, points=per_chamber, points_col="value",
                 ylabel=f"{pretty_label(value_col)} (endpoint)",
-                title=f"{value_col}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]})\n"
-                      "mean ± SEM; error unit per chip family (error_unit: chips, or chambers of one chip)"
-                      if frame_window else f"{value_col}: endpoint, mean ± SEM (error unit per table)",
+                title=f"{pretty_label(value_col)}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]}), mean ± SEM over chambers"
+                      if frame_window else f"{pretty_label(value_col)}: endpoint, mean ± SEM over chambers",
             )
 
     if not all_summary:
@@ -691,11 +716,84 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
             summary, value_col="mean", sd_col="sem",
             out_path=output_dir / f"21_budding_rate_vs_{ctx.x_col}.pdf",
             x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-            x_order=ctx.freq_order, ylabel="buds per mother-hour (sparse-phase window)",
-            title="Budding rate in the sparse-phase window, mean ± SEM "
-                  "(error unit per chip family: chips, or chambers of one chip)",
+            x_order=ctx.freq_order, points=per_experiment, points_col=value_col,
+            ylabel="buds per mother-hour (sparse-phase window)",
+            title="budding rate in the sparse-phase window, mean ± SEM over chambers",
         )
     logger.info("Knospungsrate gespeichert: 21_budding_rate_per_chip.csv / _summary.csv (+ Plots)")
+
+
+def _growth_from_budding_outputs(ctx: PipelineContext) -> None:
+    """Spezifische Wachstumsrate der Population aus den Knospungen (growth_from_budding.py):
+    Geburten je Zellstunde im Sparse-Phase-Fenster, daneben die Einwanderung (neue Tracks ohne
+    Elternmaske je Zellstunde). Dieselbe Chip-Logik und dieselben Tabellen wie Schritt 21
+    (per_chamber, per_chip, summary, spearman, bracket, control_trend, within_culture, Abbildung
+    gegen die Periode) unter dem Praefix 24_, plus ein Scatter gegen µ_area je Chip."""
+    output_dir = ctx.output_dir
+    per_chamber = compute_growth_from_budding(ctx.cells_lineage, ctx.lineage_events, MIN_PER_FRAME)
+    if per_chamber.empty:
+        logger.warning("Wachstumsrate aus Knospungen: keine Kammern im Fenster - 24_* uebersprungen.")
+        return
+    per_chamber.to_csv(output_dir / "24_growth_from_budding_per_chamber.csv", index=False)
+    for value_col, stem, ylabel, title in (
+        ("mu_bud", "24_growth_from_budding", "µ_bud [h⁻¹]\n(births per cell-hour, sparse window)",
+         "specific growth rate from budding vs cycle period — one chip per period"),
+        ("immigration_per_cell_h", "24_immigration", "washed-in cells per cell-hour\n(new tracks without a parent mask)",
+         "immigration into the chambers vs cycle period — one chip per period"),
+    ):
+        if per_chamber[value_col].isna().all():
+            logger.info("%s: Spalte '%s' leer (kein link_type in den Tabellen) - uebersprungen.", stem, value_col)
+            continue
+        per_chip, summary = summarise_per_replicate(per_chamber.dropna(subset=[value_col]), value_col)
+        if summary.empty:
+            continue
+        per_chip.to_csv(output_dir / f"{stem}_per_chip.csv", index=False)
+        summary.to_csv(output_dir / f"{stem}_summary.csv", index=False)
+        if ctx.x_col == "osc_freq":
+            trend = spearman_against_period(per_chip)
+            score = bracket_normalise(per_chip)
+            score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
+            trends = [trend] if not trend.empty else []
+            if not score_trend.empty:
+                trends.append(score_trend.assign(value_col=f"{value_col}__bracket_score"))
+            if trends:
+                pd.concat(trends, ignore_index=True).to_csv(output_dir / f"{stem}_spearman.csv", index=False)
+            if not score.empty:
+                score.to_csv(output_dir / f"{stem}_bracket_score.csv", index=False)
+            ctrl_trend = control_trend_check(per_chip)
+            if not ctrl_trend.empty:
+                ctrl_trend.to_csv(output_dir / f"{stem}_control_trend.csv", index=False)
+                logger.info("Tabelle gespeichert: %s_control_trend.csv\n%s", stem,
+                            ctrl_trend[["biosensor", "osc_type", "rho_osc", "rho_ctrl_strongest",
+                                        "rho_osc_minus_ctrl", "verdict"]].round(2).to_string(index=False))
+            within = within_culture_trend(per_chip)
+            if not within.empty:
+                within.to_csv(output_dir / f"{stem}_within_culture.csv", index=False)
+            for osc_type in sorted(per_chip["osc_type"].dropna().unique()):
+                sel = per_chip["osc_type"] == osc_type
+                plot_endpoint_vs_period(
+                    per_chip[sel], output_dir / f"{stem}_vs_period_{osc_type}.pdf", value_col=value_col,
+                    trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
+                    score=score[score["osc_type"] == osc_type] if not score.empty else None,
+                    score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
+                    ylabel=ylabel, title=title,
+                )
+        else:
+            plot_point_errorbar(
+                summary, value_col="mean", sd_col="sem", out_path=output_dir / f"{stem}_vs_{ctx.x_col}.pdf",
+                x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL, x_order=ctx.freq_order,
+                points=per_chamber.dropna(subset=[value_col]), points_col=value_col,
+                ylabel=ylabel.replace("\n", " "),
+                title=title.split(" vs ")[0] + ", mean ± SEM (error unit per chip family)",
+            )
+        logger.info("Wachstumsrate aus Knospungen gespeichert: %s_per_chip.csv / _summary.csv (+ Plots)", stem)
+
+    # µ_bud gegen µ_area je Chip: Population gegen Einzelzelle.
+    area_table = ctx.area_table
+    if not area_table.empty and "mu_area" in area_table.columns:
+        area_chip, _ = summarise_per_replicate(area_table, "mu_area")
+        bud_chip, _ = summarise_per_replicate(per_chamber.dropna(subset=["mu_bud"]), "mu_bud")
+        plot_mu_bud_vs_mu_area(bud_chip, area_chip, output_dir / "24_mu_bud_vs_mu_area.pdf")
 
 
 def step_20_lineage(ctx: PipelineContext) -> None:
@@ -721,13 +819,15 @@ def step_20_lineage(ctx: PipelineContext) -> None:
 
     # -- Budding Ratio "pro Mutter über die gesamte Beobachtungsdauer"
     #    (NICHT die Paper-Eq.-3-Zeitreihe, siehe weiter unten dafür)
-    per_mother, per_experiment = compute_budding_ratio(lineage_events, cells, mothers, min_per_frame=MIN_PER_FRAME)
+    per_mother, per_experiment = ctx.budding_ratio_tables
     if not per_mother.empty:
         per_mother.to_csv(output_dir / "21_budding_ratio_per_mother.csv", index=False)
         per_experiment.to_csv(output_dir / "21_budding_ratio_per_experiment.csv", index=False)
         logger.info("Tabellen gespeichert: 21_budding_ratio_per_mother.csv / _per_experiment.csv")
         # Die Lineage-Abbildung: Knospungsrate gegen die Periode, mit eigenen Kontrollen.
         _lineage_rate_outputs(ctx, per_experiment)
+        # Spezifische Wachstumsrate der Population aus den Knospungen (24_*).
+        _growth_from_budding_outputs(ctx)
 
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
@@ -806,6 +906,150 @@ def step_30_sensors(ctx: PipelineContext) -> None:
 
 
 
+_ROBUSTNESS_META = ["biosensor", "osc_type", "osc_freq", "condition", "replicate", "chamber", "chip",
+                    "chip_family", "medium", "date", "culture"]
+
+
+def _chamber_mean(table: pd.DataFrame, col: str, min_count_col: Optional[str] = None,
+                  min_count: int = 0) -> pd.DataFrame:
+    """Kammer-Mittel eines Robustheitsmasses (Spalte col) aus einer Tabelle je Zelle, je Mutter oder je
+    Kammer x Frame: eine Zeile je exp_id mit 'value', 'n_values' und den Metadaten der Kammer. Optional
+    nur Zeilen mit min_count_col >= min_count (z.B. Zellen mit genuegend Frames)."""
+    if table is None or table.empty or col not in table.columns or "exp_id" not in table.columns:
+        return pd.DataFrame()
+    t = table.dropna(subset=[col])
+    if min_count_col and min_count_col in t.columns:
+        t = t[t[min_count_col] >= min_count]
+    if t.empty:
+        return pd.DataFrame()
+    out = t.groupby("exp_id")[col].agg(value="mean", n_values="size").reset_index()
+    meta = [c for c in _ROBUSTNESS_META if c in t.columns]
+    return out.merge(t[["exp_id"] + meta].drop_duplicates("exp_id"), on="exp_id", how="left")
+
+
+def _robustness_period_outputs(ctx: PipelineContext, per_chamber: pd.DataFrame, stem: str, label: str,
+                               ylabel: str) -> None:
+    """Ein Robustheitsmass je Kammer (Spalte 'value', aus _chamber_mean()) durch dieselbe Chip-Logik wie die
+    Readouts der Schritte 13/21/24: {stem}_per_chip.csv und _summary.csv, Spearman, Bracket-Score,
+    Kontroll-Trend (eine Zeile je Serie, verdict), within_culture, Abbildung gegen die Periode mit den
+    Kontrollen der Struktur; im statischen Zweig Punkt+Fehlerbalken ueber das Medium. value_col in den
+    Tabellen = label (z.B. 'R(t) population area'), damit 50_robustness_control_trend_summary die Masse
+    auseinanderhaelt.
+
+    Vorbehalt fuer R(t) gegen die Periode: ein Frame tastet eine Oszillation unter dem Nyquist-Limit bei
+    zufaelliger Phase ab, der Alias-Beitrag zur zeitlichen Varianz ist bei der laengsten Periode am
+    groessten. Ein R(t)-Trend der Oszillationskammern ALLEIN ist deshalb nicht interpretierbar; gegen die
+    Kontrollen (die kein Aliasing haben) bleibt er lesbar, und ein 'period effect' von R(t) in Richtung
+    sinkender Robustheit mit der Periode kann ein Alias-Artefakt sein - so steht es in der Datengeschichte."""
+    output_dir = ctx.output_dir
+    if per_chamber is None or per_chamber.empty or per_chamber["value"].isna().all():
+        logger.info("%s: keine Kammerwerte - uebersprungen.", stem)
+        return
+    per_chip, summary = summarise_per_replicate(per_chamber.dropna(subset=["value"]), "value")
+    if summary.empty:
+        return
+    per_chip = per_chip.assign(value_col=label)
+    summary = summary.assign(value_col=label)
+    per_chip.to_csv(output_dir / f"{stem}_per_chip.csv", index=False)
+    summary.to_csv(output_dir / f"{stem}_summary.csv", index=False)
+    if ctx.x_col == "osc_freq":
+        trend = spearman_against_period(per_chip)
+        score = bracket_normalise(per_chip)
+        score_trend = spearman_against_period(score) if not score.empty else pd.DataFrame()
+        trends = [trend] if not trend.empty else []
+        if not score_trend.empty:
+            trends.append(score_trend.assign(value_col=f"{label}__bracket_score"))
+        if trends:
+            pd.concat(trends, ignore_index=True).to_csv(output_dir / f"{stem}_spearman.csv", index=False)
+        if not score.empty:
+            score.to_csv(output_dir / f"{stem}_bracket_score.csv", index=False)
+        ctrl_trend = control_trend_check(per_chip)
+        if not ctrl_trend.empty:
+            ctrl_trend.to_csv(output_dir / f"{stem}_control_trend.csv", index=False)
+        within = within_culture_trend(per_chip)
+        if not within.empty:
+            within.to_csv(output_dir / f"{stem}_within_culture.csv", index=False)
+        for osc_type in sorted(per_chip["osc_type"].dropna().unique()):
+            sel = per_chip["osc_type"] == osc_type
+            plot_endpoint_vs_period(
+                per_chip[sel], output_dir / f"{stem}_vs_period_{osc_type}.pdf", value_col=label,
+                trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
+                score=score[score["osc_type"] == osc_type] if not score.empty else None,
+                score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
+                ylabel=ylabel, title=f"{label} vs cycle period — one structure per period, with its controls",
+            )
+    else:
+        plot_point_errorbar(
+            summary, value_col="mean", sd_col="sem", out_path=output_dir / f"{stem}_vs_{ctx.x_col}.pdf",
+            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL, x_order=ctx.freq_order,
+            points=per_chamber.dropna(subset=["value"]), points_col="value",
+            ylabel=ylabel.replace("\n", " "), title=f"{label}, mean ± SEM over chambers",
+        )
+    logger.info("Robustheitsmass gespeichert: %s_per_chip.csv / _summary.csv (+ Plots)", stem)
+
+
+def _osc_vs_controls_outputs(ctx: PipelineContext) -> None:
+    """Oszillationskammern gegen die Kontrollen IHRER Struktur, gepaart ueber Strukturen (osc_vs_controls.py):
+    liest die Chip-Tabellen der Schritte 12, 13, 21, 24 und 40 aus dem Ausgabeordner und schreibt
+    51_osc_vs_controls_per_structure.csv, 51_osc_vs_controls.csv (Zusammenfassung je Readout, gesamt / je
+    osc_type / je Stamm), 51_osc_vs_controls_vs_period.csv (haengt der Effekt von der Periode ab?) und drei
+    Abbildungen (Readouts, Robustheitsmasse, Sensor-Ratios)."""
+    output_dir = ctx.output_dir
+    parts = []
+
+    def read(name: str) -> pd.DataFrame:
+        path = output_dir / name
+        if not path.exists():
+            return pd.DataFrame()
+        try:
+            return pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            return pd.DataFrame()
+
+    ep = read("13_endpoint_per_chip.csv")
+    if not ep.empty and "value_col" in ep.columns:
+        for vc, sub in ep.groupby("value_col"):
+            parts.append(osc_per_structure(sub, readout=str(vc), mode="ratio"))
+    for name, readout in (("12_area_growth_rate_per_chip.csv", "mu_area"),
+                          ("21_budding_rate_per_chip.csv", "budding_rate_per_h"),
+                          ("24_growth_from_budding_per_chip.csv", "mu_bud"),
+                          ("24_immigration_per_chip.csv", "immigration_per_cell_h")):
+        t = read(name)
+        if not t.empty:
+            parts.append(osc_per_structure(t, readout=readout, mode="ratio"))
+    for path in sorted(output_dir.glob("40_*_per_chip.csv")):
+        t = read(path.name)
+        if not t.empty and "value_col" in t.columns:
+            parts.append(osc_per_structure(t, readout=str(t["value_col"].iloc[0]), mode="diff"))
+    parts = [p for p in parts if p is not None and not p.empty]
+    if not parts:
+        logger.info("51_osc_vs_controls: keine Chip-Tabellen mit Oszillation und Kontrollen - uebersprungen.")
+        return
+    per_struct = pd.concat(parts, ignore_index=True)
+    per_struct.to_csv(output_dir / "51_osc_vs_controls_per_structure.csv", index=False)
+    summary = osc_summarise(per_struct)
+    summary.to_csv(output_dir / "51_osc_vs_controls.csv", index=False)
+    vs_period = osc_effect_vs_period(per_struct)
+    if not vs_period.empty:
+        vs_period.to_csv(output_dir / "51_osc_vs_controls_vs_period.csv", index=False)
+    labels = {"area": "endpoint area", "eccentricity": "endpoint eccentricity", "mu_area": "µ_area",
+              "budding_rate_per_h": "buds per mother-hour", "mu_bud": "µ_bud", "immigration_per_cell_h": "immigration"}
+    plot_osc_vs_controls(per_struct, output_dir / "51_osc_vs_controls.pdf",
+                         readouts=["budding_rate_per_h", "mu_bud", "area", "mu_area", "eccentricity", "immigration_per_cell_h"],
+                         labels=labels, title="oscillation chambers relative to the controls of their structure")
+    plot_osc_vs_controls(per_struct, output_dir / "51_osc_vs_controls_robustness.pdf",
+                         readouts=["R(t) population area", "R(t) single cell area", "R(p) area", "R(p) mu_area",
+                                   "R(p) budding rate per mother", "R(t) single cell mu_event"],
+                         title="robustness metrics: oscillation chambers minus the controls of their structure")
+    sensor_readouts = [r for r in per_struct["readout"].unique() if str(r).startswith("ratio_")]
+    if sensor_readouts:
+        plot_osc_vs_controls(per_struct, output_dir / "51_osc_vs_controls_sensors.pdf", readouts=sorted(sensor_readouts),
+                             title="sensor ratios: oscillation chambers relative to the controls of their structure")
+    head = summary[summary["scope"] == "all"]
+    logger.info("Oszillation gegen Kontrollen gespeichert: 51_osc_vs_controls*.csv/.pdf\n%s",
+                head[["readout", "n_structures", "n_osc_above_ctrl", "wilcoxon_p", "effect_median"]].round(3).to_string(index=False))
+
+
 def step_40_robustness(ctx: PipelineContext) -> None:
     """Robustness R(t)/R(p)."""
     cells = ctx.cells
@@ -822,14 +1066,16 @@ def step_40_robustness(ctx: PipelineContext) -> None:
     #     ratio_*-Spalten (Sektion 30) - dadurch fließen die Sensor-Daten
     #     hier in die zusammenfassende Auswertung mit ein.
     #
-    #     Zusätzlich (siehe unten, nach der Haupt-Schleife): µ_event und
-    #     µ_area aus Sektion 10, JEWEILS NUR IN DER SINNVOLLEN VARIANTE
-    #     (µ_event -> R(t) Einzelzelle, µ_area -> R(p)) - die jeweils
-    #     andere Variante ist mit der Datenstruktur dieser Tabellen nicht
-    #     sauber definierbar, siehe Kommentare dort.
+    #     Jedes Mass wird je Kammer gemittelt (R(t) Population: schon je
+    #     Kammer; R(t) Einzelzelle: Zellen mit >= ROBUSTNESS_MIN_FRAMES_
+    #     SINGLE_CELL Frames; R(p): ueber die Frames) und geht dann durch
+    #     dieselbe Chip-Logik wie die Readouts (_robustness_period_outputs:
+    #     per_chip, Spearman, Bracket, Kontroll-Trend, Abbildung mit den
+    #     Kontrollen der Struktur) - das Material fuer die Robustheitsfrage
+    #     der Arbeit. Dazu µ_area (R(p)), µ_event (R(t) Einzelzelle) und die
+    #     Knospungsrate je Mutter (R(p)): die beiden letzten tragen die
+    #     Robustheit von µ_bud, das je Kammer nur einen Wert hat.
     # ==================================================================
-    # dict.fromkeys() statt set(): erhält die Reihenfolge und entfernt
-    # Duplikate, falls eine Spalte versehentlich in beiden Listen auftaucht.
     robustness_value_cols = list(dict.fromkeys(ROBUSTNESS_VALUE_COLS + ratio_cols))
     logger.info("Robustness R(t)/R(p) wird berechnet für: %s", robustness_value_cols)
 
@@ -837,6 +1083,8 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         if value_col not in cells.columns:
             logger.warning("Robustness: Spalte '%s' nicht in den Daten - übersprungen.", value_col)
             continue
+        # Achsentitel ohne Einheit: R ist dimensionslos.
+        label = {"area": "cell area", "eccentricity": "eccentricity"}.get(value_col, value_col)
 
         rt_pop = compute_rt_population(cells, value_col)
         rt_pop.to_csv(output_dir / f"40_Rt_population_{value_col}.csv", index=False)
@@ -853,55 +1101,27 @@ def step_40_robustness(ctx: PipelineContext) -> None:
 
         rt_pop_agg = aggregate_robustness_over_replicates(rt_pop, "R_t_population")
         rt_pop_agg.to_csv(output_dir / f"40_Rt_population_{value_col}_aggregated.csv", index=False)
-
         rp_agg = aggregate_robustness_over_replicates(rp, "R_p")
         rp_agg.to_csv(output_dir / f"40_Rp_{value_col}_aggregated.csv", index=False)
 
-        # Kontrollen raus aus den 'normalen' R(t)/R(p)-Plots - die laufen
-        # jetzt separat über die control_consistency-Plots weiter unten.
-        rt_pop_agg_plot = exclude_controls(rt_pop_agg)
-        rp_agg_plot = exclude_controls(rp_agg)
-
-        plot_point_errorbar(
-            rt_pop_agg_plot, value_col="mean", out_path=output_dir / f"40_Rt_population_{value_col}.pdf",
-            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-            x_order=freq_order,
-            ylabel=f"R(t) — {value_col}", title=f"R(t) population level — {value_col}",
+        # Je Mass die Chip-Logik mit den Kontrollen der Struktur (ersetzt die frueheren Punkt+Fehlerbalken-
+        # Abbildungen ohne Kontrollen und den R(p)-Spearman).
+        _robustness_period_outputs(
+            ctx, _chamber_mean(rt_pop, "R_t_population"), f"40_Rt_population_{value_col}",
+            f"R(t) population {value_col}", f"R(t), population level\n{label}",
         )
-        plot_point_errorbar(
-            rp_agg_plot, value_col="mean", out_path=output_dir / f"40_Rp_{value_col}.pdf",
-            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-            x_order=freq_order,
-            ylabel=f"R(p) — {value_col}", title=f"R(p) — {value_col}",
+        _robustness_period_outputs(
+            ctx, _chamber_mean(rt_cell, "R_t_single_cell", "n_timepoints", ROBUSTNESS_MIN_FRAMES_SINGLE_CELL),
+            f"40_Rt_single_cell_{value_col}", f"R(t) single cell {value_col}",
+            f"R(t), single-cell level\n{label} (cells ≥ {ROBUSTNESS_MIN_FRAMES_SINGLE_CELL} frames)",
+        )
+        _robustness_period_outputs(
+            ctx, _chamber_mean(rp, "R_p"), f"40_Rp_{value_col}", f"R(p) {value_col}", f"R(p)\n{label}",
         )
         plot_rt_vs_rp_quadrant(
-            rt_pop_agg_plot, rp_agg_plot, output_dir / f"40_Rt_vs_Rp_{value_col}.pdf",
+            exclude_controls(rt_pop_agg), exclude_controls(rp_agg), output_dir / f"40_Rt_vs_Rp_{value_col}.pdf",
             label_col=ctx.x_col, facet_col=PANEL_A_GROUP_COL,
         )
-
-        # Trendtest gegen die Periode - NUR fuer R(p), absichtlich nicht fuer R(t).
-        #
-        # R(t) ist die Varianz UEBER DIE ZEIT. Ein Frame tastet eine
-        # Oszillation unter dem Nyquist-Limit bei zufaelliger Phase ab, und der
-        # Alias-Beitrag ist bei der LAENGSTEN Periode am groessten (24 min bei
-        # 10 min/Frame = 2.4 Abtastungen pro Zyklus) - also in derselben
-        # Richtung wie der erwartete biologische Effekt. Ein R(t)-Trend gegen
-        # die Periode laesst sich deshalb nicht von einem Alias-Artefakt
-        # unterscheiden, und ein p-Wert dazu wuerde genau diese Verwechslung
-        # nur amtlich aussehen lassen.
-        #
-        # R(p) ist die Varianz UEBER DIE ZELLEN innerhalb eines Frames. Alle
-        # Zellen einer Kammer sehen dieselbe Medienphase, die Phase traegt zur
-        # Streuung zwischen ihnen also nichts bei - R(p) ist gegen das
-        # Aliasing robust und damit die Groesse, bei der ein Trendtest zulaessig
-        # ist.
-        rp_per_replicate, _ = summarise_per_replicate(rp, "R_p")
-        rp_trend = spearman_against_period(rp_per_replicate)
-        if not rp_trend.empty:
-            rp_trend = rp_trend.assign(value_col=value_col)
-            rp_trend.to_csv(output_dir / f"40_Rp_{value_col}_spearman.csv", index=False)
-            logger.info("Tabelle gespeichert: 40_Rp_%s_spearman.csv\n%s",
-                        value_col, rp_trend.to_string(index=False))
 
         # Kontroll-Konsistenz für R(t)/R(p), analog zur Wachstumsrate oben.
         if ctx.run_control_consistency:
@@ -912,7 +1132,6 @@ def step_40_robustness(ctx: PipelineContext) -> None:
                 rt_pop_agg, value_col="mean", out_path=output_dir / f"40_control_consistency_Rt_population_{value_col}.pdf",
                 x_order=freq_order, ylabel=f"R(t) — {value_col} (controls)",
             )
-
             rp_control_test = test_control_consistency_across_freq(rp, value_col="R_p")
             if not rp_control_test.empty:
                 rp_control_test.to_csv(output_dir / f"40_control_consistency_Rp_{value_col}_kruskal.csv", index=False)
@@ -923,17 +1142,11 @@ def step_40_robustness(ctx: PipelineContext) -> None:
 
         logger.info("Robustness R(t)/R(p) für '%s' berechnet und gespeichert.", value_col)
 
-    # -- µ_event -> R(t) Einzelzelle: wie stabil ist die Reproduktionsrate
-    #    EINER Mutter über ihre eigenen Budding-Intervalle?
-    #    mu_table hat KEINE 'frame'-Spalte (nur frame_start/frame_end pro
-    #    Intervall) und ist damit NICHT mit compute_rt_population()/
-    #    compute_rp() kompatibel - die brauchen eine gemeinsame Zeitachse
-    #    über mehrere Zellen hinweg, die es bei Event-Daten mit ihren pro
-    #    Mutter unterschiedlichen Intervall-Zeitpunkten nicht sinnvoll gibt
-    #    (Intervall-Enden verschiedener Mütter fallen kaum je zusammen).
-    #    compute_rt_single_cell() braucht dagegen KEINE 'frame'-Spalte,
-    #    nur mehrere Werte PRO ZELLE - das ist hier gegeben (mehrere
-    #    Intervalle pro Mutter), daher funktioniert NUR diese Variante.
+    # -- µ_event -> R(t) Einzelzelle: wie stabil ist der Knospungsrhythmus EINER Mutter ueber ihre
+    #    eigenen Intervalle? mu_table hat keine gemeinsame Zeitachse ueber Muetter (nur frame_start/
+    #    frame_end je Intervall), darum nur die Einzelzell-Variante; Kammer-Mittel aus Muettern mit
+    #    >= ROBUSTNESS_MIN_INTERVALS_MU_EVENT Intervallen. µ_event ist eine Knospungsfrequenz, keine
+    #    Wachstumsrate (growth_from_budding.py) - als Stabilitaetsmass des Rhythmus ist es brauchbar.
     if not mu_table.empty:
         mu_valid = mu_table[~mu_table["mu_is_artefact"]]
         rt_cell_mu = compute_rt_single_cell(mu_valid, value_col="mu", cell_id_col="mother_cell_uid")
@@ -944,63 +1157,53 @@ def step_40_robustness(ctx: PipelineContext) -> None:
         )
         rt_cell_mu_agg = aggregate_robustness_over_replicates(rt_cell_mu, "R_t_single_cell")
         rt_cell_mu_agg.to_csv(output_dir / "40_Rt_single_cell_mu_event_aggregated.csv", index=False)
+        _robustness_period_outputs(
+            ctx, _chamber_mean(rt_cell_mu, "R_t_single_cell", "n_timepoints", ROBUSTNESS_MIN_INTERVALS_MU_EVENT),
+            "40_Rt_single_cell_mu_event", "R(t) single cell mu_event",
+            f"R(t), single-cell level\nµ_event (mothers ≥ {ROBUSTNESS_MIN_INTERVALS_MU_EVENT} intervals)",
+        )
         logger.info("R(t) Einzelzelle für µ_event berechnet und gespeichert (%d Mütter).", len(rt_cell_mu))
     else:
         logger.warning("mu_table ist leer - R(t) Einzelzelle für µ_event wird übersprungen.")
 
-    # -- µ_area -> R(p): wie homogen ist die flächenbasierte Wachstumsrate
-    #    ÜBER DIE ZELLEN einer Kammer?
-    #    area_table hat pro Zelle nur EINEN Wert (der ganze Track wurde
-    #    bereits zu einer Steigung verdichtet) - eine Zeitachse gibt es
-    #    hier nicht mehr, R(t) ist für µ_area daher NICHT definierbar
-    #    (weder Populations- noch Einzelzell-Variante: beide bräuchten
-    #    mehrere Zeitpunkte pro Zelle bzw. pro Kammer).
-    #    compute_rp() gruppiert technisch nach exp_id x frame - da wir
-    #    keine Zeit haben, setzen wir 'frame' konstant auf 0. Dadurch
-    #    entspricht jede Kammer genau einer Gruppe, und R(p) misst wie
-    #    beabsichtigt die Homogenität ÜBER DIE ZELLEN einer Kammer (statt
-    #    über Zeitpunkte). Nur zuverlässige Fits (fit_is_reliable) gehen
-    #    ein - unzuverlässige Fits würden R(p) sonst mit Rauschen aus
-    #    schlecht bestimmten Steigungen aufblähen. Mutter- und Knospen-
-    #    Tracks werden NICHT getrennt (analog zu 'area'/'eccentricity'
-    #    oben, die ebenfalls nicht nach cell_type filtern).
+    # -- Knospungsrate je Mutter -> R(p): wie heterogen ist die reproduktive Leistung der Muetter EINER
+    #    Kammer (Knospen je Mutterstunde im Sparse-Phase-Fenster, 21_budding_ratio_per_mother.csv)? Ein
+    #    Wert je Mutter, 'frame' konstant 0, damit compute_rp() ueber die Muetter der Kammer streut. Die
+    #    Rate je Mutter ist ein Zaehler ueber die Beobachtungszeit; Poisson-Zaehlrauschen traegt zu sigma
+    #    bei - das Mass ist zwischen Kammern aehnlicher Beobachtungsdauer vergleichbar, kein Absolutwert.
+    per_mother, _ = ctx.budding_ratio_tables
+    if not per_mother.empty and "budding_rate_per_h" in per_mother.columns:
+        pm = per_mother.dropna(subset=["budding_rate_per_h"]).copy()
+        pm["frame"] = 0
+        rp_bud = compute_rp(pm, value_col="budding_rate_per_h")
+        rp_bud.to_csv(output_dir / "40_Rp_budding_rate_mother.csv", index=False)
+        rp_bud_agg = aggregate_robustness_over_replicates(rp_bud, "R_p")
+        rp_bud_agg.to_csv(output_dir / "40_Rp_budding_rate_mother_aggregated.csv", index=False)
+        _robustness_period_outputs(
+            ctx, _chamber_mean(rp_bud, "R_p"), "40_Rp_budding_rate_mother", "R(p) budding rate per mother",
+            "R(p)\nbuds per mother-hour, across the mothers of a chamber",
+        )
+    else:
+        logger.warning("Keine Knospungsrate je Mutter - R(p) der Knospungsrate wird übersprungen.")
+
+    # -- µ_area -> R(p): wie homogen ist die flächenbasierte Wachstumsrate ÜBER DIE ZELLEN einer Kammer?
+    #    area_table hat pro Zelle EINEN Wert (keine Zeitachse, R(t) nicht definierbar); 'frame' konstant 0,
+    #    damit jede Kammer eine Gruppe ist. Nur zuverlässige Fits (fit_is_reliable); Mutter- und
+    #    Knospen-Tracks nicht getrennt (wie 'area'/'eccentricity' oben).
     if not area_table.empty:
         area_reliable = area_table[area_table["fit_is_reliable"]].copy()
         area_reliable["frame"] = 0
         rp_mu_area = compute_rp(area_reliable, value_col="mu_area")
         rp_mu_area.to_csv(output_dir / "40_Rp_mu_area.csv", index=False)
-
         rp_mu_area_agg = aggregate_robustness_over_replicates(rp_mu_area, "R_p")
         rp_mu_area_agg.to_csv(output_dir / "40_Rp_mu_area_aggregated.csv", index=False)
-
-        plot_point_errorbar(
-            exclude_controls(rp_mu_area_agg), value_col="mean", out_path=output_dir / "40_Rp_mu_area.pdf",
-            x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-            x_order=freq_order,
-            ylabel="R(p) — µ_area", title="R(p) — µ_area (homogeneity across cells)",
+        _robustness_period_outputs(
+            ctx, _chamber_mean(rp_mu_area, "R_p"), "40_Rp_mu_area", "R(p) mu_area",
+            "R(p)\nµ_area (homogeneity across cells)",
         )
-
-        # Trendtest gegen die Periode, siehe Begruendung oben (R(p), nicht R(t)).
-        rp_mu_area_rep, _ = summarise_per_replicate(rp_mu_area, "R_p")
-        rp_mu_area_trend = spearman_against_period(rp_mu_area_rep)
-        if not rp_mu_area_trend.empty:
-            rp_mu_area_trend = rp_mu_area_trend.assign(value_col="mu_area")
-            rp_mu_area_trend.to_csv(output_dir / "40_Rp_mu_area_spearman.csv", index=False)
-            logger.info("Tabelle gespeichert: 40_Rp_mu_area_spearman.csv\n%s",
-                        rp_mu_area_trend.to_string(index=False))
-
-        if ctx.run_control_consistency:
-            rp_mu_area_control_test = test_control_consistency_across_freq(rp_mu_area, value_col="R_p")
-            if not rp_mu_area_control_test.empty:
-                rp_mu_area_control_test.to_csv(output_dir / "40_control_consistency_Rp_mu_area_kruskal.csv", index=False)
-            plot_control_consistency(
-                rp_mu_area_agg, value_col="mean", out_path=output_dir / "40_control_consistency_Rp_mu_area.pdf",
-                x_order=freq_order, ylabel="R(p) — µ_area (controls)",
-            )
-        logger.info("R(p) für µ_area berechnet und gespeichert (%d zuverlässige Tracks).", len(area_reliable))
+        logger.info("R(p) für µ_area berechnet und gespeichert (%d Kammern).", len(rp_mu_area))
     else:
         logger.warning("area_table ist leer - R(p) für µ_area wird übersprungen.")
-
 
 
 def step_50_summary(ctx: PipelineContext) -> None:
@@ -1021,7 +1224,7 @@ def step_50_summary(ctx: PipelineContext) -> None:
     if ctx.x_col == "osc_freq":
         parts = []
         for name in ("13_endpoint_control_trend.csv", "12_area_growth_rate_control_trend.csv",
-                     "21_budding_rate_control_trend.csv"):
+                     "21_budding_rate_control_trend.csv", "24_growth_from_budding_control_trend.csv"):
             path = output_dir / name
             if path.exists():
                 try:
@@ -1036,6 +1239,31 @@ def step_50_summary(ctx: PipelineContext) -> None:
             plot_control_trend_summary(all_trends, output_dir / "50_control_trend_summary.pdf")
             counts = all_trends["verdict"].astype(str).str.split(":").str[0].value_counts().to_dict()
             logger.info("Kontroll-Trend-Zusammenfassung gespeichert: 50_control_trend_summary.csv/.pdf - %s", counts)
+
+        # -- Dieselbe Zusammenfassung fuer die Robustheitsmasse R(t)/R(p) (Schritt 40, 40_*_control_trend.csv):
+        #    getrennt von den Readouts, damit die 58 Zeilen der Readout-Zusammenfassung stehen bleiben.
+        rparts = []
+        for path in sorted(output_dir.glob("40_*_control_trend.csv")):
+            try:
+                part = pd.read_csv(path)
+            except pd.errors.EmptyDataError:
+                continue
+            if not part.empty:
+                rparts.append(part)
+        if rparts:
+            r_trends = pd.concat(rparts, ignore_index=True)
+            r_trends.to_csv(output_dir / "50_robustness_control_trend_summary.csv", index=False)
+            # In der Abbildung nur die Art des Masses als Marker (R(t) Population / R(t) Einzelzelle / R(p)),
+            # sonst gaebe es 21 Markerformen; die CSV behaelt die vollen Bezeichnungen.
+            kind = r_trends["value_col"].astype(str).str.extract(r"^(R\(t\) population|R\(t\) single cell|R\(p\))")[0]
+            plot_control_trend_summary(r_trends.assign(value_col=kind.fillna(r_trends["value_col"])),
+                                       output_dir / "50_robustness_control_trend_summary.pdf")
+            counts = r_trends["verdict"].astype(str).str.split(":").str[0].value_counts().to_dict()
+            logger.info("Kontroll-Trend-Zusammenfassung der Robustheitsmasse gespeichert: "
+                        "50_robustness_control_trend_summary.csv/.pdf - %s", counts)
+
+        # -- Oszillation gegen die Kontrollen der eigenen Struktur, gepaart ueber Strukturen (51_*).
+        _osc_vs_controls_outputs(ctx)
 
 
 
@@ -1127,12 +1355,12 @@ def step_95_sensor_controls(ctx: PipelineContext) -> None:
             plot_sensor_control_timeseries(
                 control_time, output_dir / f"{output_stem}_timeseries.pdf",
                 sensor_label=sensor_label,
-                preconditioning_end_min=OSCILLATION_START_MIN,
+                preconditioning_end_min=OSCILLATION_START_MIN, strain=biosensor,
             )
             plot_sensor_control_comparison(
                 control_summary, output_dir / f"{output_stem}_comparison.pdf",
                 sensor_label=sensor_label, analysis_start_min=analysis_start_min,
-                control_labels=CONTROL_CONCENTRATION_LABELS.get(osc_type),
+                control_labels=CONTROL_CONCENTRATION_LABELS.get(osc_type), strain=biosensor,
             )
 
             # A flat ratio can arise because both raw channels shift together
@@ -1154,7 +1382,7 @@ def step_95_sensor_controls(ctx: PipelineContext) -> None:
                 channel_a_time, channel_b_time, output_dir / f"{output_stem}_raw_channels.pdf",
                 sensor_label=sensor_label, channel_a_label=sensor_cfg.channel_a,
                 channel_b_label=sensor_cfg.channel_b,
-                preconditioning_end_min=OSCILLATION_START_MIN,
+                preconditioning_end_min=OSCILLATION_START_MIN, strain=biosensor,
             )
 
             chamber_summary = summarise_sensor_controls_by_chamber(
@@ -1164,7 +1392,7 @@ def step_95_sensor_controls(ctx: PipelineContext) -> None:
                 chamber_summary.to_csv(output_dir / f"{output_stem}_control_chambers.csv", index=False)
                 plot_control_chamber_comparison(
                     chamber_summary, output_dir / f"{output_stem}_control_chambers.pdf",
-                    sensor_label=sensor_label,
+                    sensor_label=sensor_label, strain=biosensor,
                 )
 
     logger.info("=== Fertig! Alle Plots & Tabellen in: %s ===", output_dir)

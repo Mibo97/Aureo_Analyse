@@ -102,7 +102,9 @@ Optional, aber genutzt: `eccentricity`, `solidity`, `mean_<Kanal>`, `filename`.
 > Auf re-getrackten Tabellen (`v11_retracked`) kommt die Mutter einer
 > Knospe aus der Maskenberuehrung (`lineage.classify_mother_bud_measured`, Spalte `method`), die manuelle
 > QC-Tabelle wird auf die neuen IDs uebersetzt (`qc_exclusions_retracked.csv`), und `cell_filter.py`
-> entfernt Spuren, die keine Zellen sind (`00_cell_filter.csv`). Ergebnisse: `docs/tracking_plan.md`, 6d.
+> entfernt Spuren, die keine Zellen sind (`00_cell_filter.csv`): zu kurz, zu klein, und auf v12-Tabellen
+> ohne Phasenkontrast (tote Zellen und Truemmer, `CELL_MIN_PHASE_CV_REL`, relativ zur Struktur). Ergebnisse: `docs/tracking_plan.md`,
+> 6d-6h; die Zahlen des vollen v12-Laufs stehen in `docs/data_story.md`.
 > Werkzeuge zum Re-Tracking aus den gespeicherten Masken, zum Segmentierungs-Sweep und fuer
 > Slurm-Array-Jobs: [`imaging/README.md`](imaging/README.md); Plan: [`docs/tracking_plan.md`](docs/tracking_plan.md).
 
@@ -173,7 +175,8 @@ Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
 | `qc_exclusions.py` | Nicht-destruktives manuelles QC: Track-Merges & Exclusions |
 | `sensors.py` | Ratiometrische Sensoren → `ratio_*`-Spalten (`SENSOR_CONFIG`) |
 | `lineage.py` | Mutter/Bud-Heuristik, Budding Ratio pro Mutter |
-| `relink.py` | Gap Closing und Sparse-Phase-Fenster gegen die Track-Fragmentierung |
+| `relink.py` | Gap Closing und Sparse-Phase-Fenster gegen die Track-Fragmentierung; neue Tracks gegen die Objektdichte (`00_new_objects_vs_density.*`) |
+| `osc_vs_controls.py` | Oszillationskammern gegen die Kontrollen ihrer eigenen Struktur, gepaart über Strukturen (`51_osc_vs_controls*`) |
 | `growth_rate.py` | µ_event aus Budding-Intervallen (Eq. 2) |
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
 | `budding_ratio_timeseries.py` | Budding Ratio als Zeitreihe (Eq. 3) |
@@ -183,6 +186,8 @@ Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
 | `queen_controls.py` | PosCtrl-vs-NegCtrl-Validierung der Sensoren selbst |
 | `pko_comparison.py` | **WT gegen PKO**: Kammer-Übereinstimmung, Kontroll-Bracket, Zell-Ausbeute |
 | `analysis.py`, `summary_plots.py`, `violin_plots.py`, `mother_trajectories.py` | Plots & gemeinsame Helfer |
+| `plot_style.py` | EIN Aussehen fuer alle Abbildungen: Farbe = Stamm (`config.STRAIN_COLORS`), Kontrollarten als Marker/Fuellung, Perioden als Hell-Dunkel-Rampe, keine Erklaertexte in der Abbildung |
+| `growth_from_budding.py` | Spezifische Wachstumsrate der Population aus den Knospungen: Geburten je Zellstunde im Sparse-Phase-Fenster (`24_*`), daneben die Einwanderung (neue Tracks ohne Elternmaske) |
 | `inspect_lineage.py` | Interaktive Kalibrierung der Lineage-Parameter |
 | `validate_lineage.py` | **Quantitative** Validierung der Mutter/Bud-Heuristik (alle Kammern) |
 | `plot_qc_lineage_overlay.py` | **Visuelle** Validierung: Events ins QC-TIFF zeichnen (eine Kammer) |
@@ -194,13 +199,14 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 
 | Präfix | Inhalt |
 | --- | --- |
-| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_chip_run_order.csv` = wurden die Perioden einer Serie in Datumsreihenfolge gefahren (dann ist ein Periodentrend nicht von einer Tagesdrift zu trennen)?; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing |
+| `00_` | Übersicht / Sanity-Check; `00_chip_overview.csv` = eine Zeile pro **Chip**; `00_chip_run_order.csv` = wurden die Perioden einer Serie in Datumsreihenfolge gefahren (dann ist ein Periodentrend nicht von einer Tagesdrift zu trennen)?; `00_track_fragmentation.csv` / `00_track_relinks.csv` = Track-Fragmentierung und automatisches Gap Closing; `00_new_objects_vs_density.csv/.pdf` = neue Tracks je Frame gegen Objekte je Frame, je Kammer und Block von `DENSITY_BLOCK_FRAMES` Frames, getrennt nach berührender Maske (`link_type`) - die Begründung des Sparse-Phase-Fensters |
 | `10_`–`12_` | Zellmorphologie & Wachstum (Fläche, µ_event, µ_area) |
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
-| `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
-| `50_` | Zusammenfassungstabelle; `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`) |
+| `40_` | Robustheit R(t)/R(p) (Fläche, Exzentrizität, Sensor-Ratios; R(p) von µ_area und der Knospungsrate je Mutter, R(t) von µ_event je Mutter): je Maß das Kammer-Mittel durch dieselbe Chip-Logik wie `13_`/`21_`/`24_` (`_per_chip.csv`, `_summary.csv`, `_spearman.csv`, `_bracket_score.csv`, `_control_trend.csv`, `_within_culture.csv`, `_vs_period_<osc_type>.pdf` mit den Kontrollen der Struktur); dazu die rohen Tabellen je Kammer/Zelle, `_aggregated.csv` und die Kontroll-Konsistenz. R(t) Einzelzelle nur aus Zellen mit ≥ `ROBUSTNESS_MIN_FRAMES_SINGLE_CELL` Frames, µ_event aus Müttern mit ≥ `ROBUSTNESS_MIN_INTERVALS_MU_EVENT` Intervallen |
+| `24_` | Wachstumsrate aus Knospungen: `24_growth_from_budding_*` (µ_bud = Geburten je Zellstunde im Sparse-Phase-Fenster; dieselben Tabellen und dieselbe Abbildung wie `21_`), `24_immigration_*` (angespuelte Zellen je Zellstunde), `24_mu_bud_vs_mu_area.pdf` (Population gegen Einzelzelle). `11_specific_growth_rate*` bleibt als Interbud-Rate, ist aber keine Wachstumsrate (siehe `growth_from_budding.py`) |
+| `50_` | Zusammenfassungstabelle; `50_robustness_control_trend_summary.csv/.pdf` = dieselbe Kontroll-Trend-Zusammenfassung für die Robustheitsmaße (aus `40_*_control_trend.csv`); `51_osc_vs_controls_per_structure.csv` / `51_osc_vs_controls.csv` / `51_osc_vs_controls_vs_period.csv` / `51_osc_vs_controls*.pdf` = Oszillationskammern gegen die Kontrollen ihrer Struktur, gepaart über Strukturen (Wilcoxon; Verhältnis bzw. Differenz je Readout und Robustheitsmaß, gesamt, je Oszillationstyp und Stamm; hängt der Effekt von der Periode ab?); `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`, `24_`) |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
 | `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |
@@ -263,7 +269,7 @@ Endfenster, dann Kammer → Chip → Bedingung (`experiment_units.summarise_hier
 | `13_endpoint_bracket_score.csv` | pro Chip: `(osc − NegCtrl) / (PosCtrl − NegCtrl)`, 0 = wie Starvation, 1 = wie Feast, plus `bracket_degenerate` |
 | `13_endpoint_spearman.csv` | Spearman ρ gegen die Periode auf Chip-Mittelwerten, `n_chips` = Perioden |
 | `13_endpoint_vs_period_<spalte>_<osc_type>.pdf` | pro Periode der Chip-Wert mit **seinen** Kontrollen als Marker, gepooltes Kontrollband dahinter, Bracket-Score darunter; eine Facette pro Stamm |
-| `static/13_endpoint_vs_medium_<spalte>.pdf` | statisch: Medium × Chip-Familie, Fehler über Chips |
+| `static/13_endpoint_vs_medium_<spalte>.pdf` | statisch: Medium × Chip-Familie, Fehler über Kammern, jede Kammer als Punkt neben dem Mittelwert (ebenso `static/12_area_growth_rate_all.pdf`, `static/21_budding_rate_vs_medium.pdf`, `static/24_*_vs_medium.pdf`) |
 
 **Bracket-Score.** Jede Periode ist ein eigener Chip; ihre Kontrollen liegen
 auf demselben Chip und tragen denselben Chip-Effekt. Der Score entfernt ihn.
@@ -401,7 +407,12 @@ Deshalb:
    Median-Tracklänge, neue Tracks je Objekt und Frame, Anteil der
    Objekt-Frames in Tracks ≥ 10 Frames — vor und nach dem Gap Closing, je
    Kammer. Diese Tabelle gehört in die Arbeit, sobald Lineage-Ergebnisse
-   gezeigt werden.
+   gezeigt werden. `00_new_objects_vs_density.csv/.pdf` löst dieselbe Zahl
+   nach der Dichte auf: je Kammer und Block von `DENSITY_BLOCK_FRAMES`
+   Frames die neuen Tracks je Frame gegen die Objekte je Frame, getrennt
+   nach berührender Maske (`link_type` `new_touching`/`split`) und ohne
+   (`new`). Im dichten Feld wächst die Zahl der berührenden neuen Tracks
+   proportional zur Objektzahl (Fragmente, keine Knospen).
 
 Im QC-Batch bleiben im Fenster 136 Events in 11 Kammern (manuelles QC: 128,
 beides zusammen: 116), 118 davon mit einer über ≥ 30 Frames verfolgten Mutter

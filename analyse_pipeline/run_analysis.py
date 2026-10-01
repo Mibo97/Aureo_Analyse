@@ -60,8 +60,10 @@ from config import (
     RESULTS_PATTERN,
     RESULTS_SUBDIR,
     FLAG_EXCLUDE_ROWS,
+    EXCLUDED_CHAMBERS,
     CELL_MIN_FRAMES,
     CELL_MIN_MAX_AREA_PX,
+    CELL_MIN_PHASE_CV_REL,
     DATA_ROOT,
     OUTPUT_DIR,
     OUTPUT_DIR_STATIC,
@@ -81,6 +83,7 @@ from config import (
     LINEAGE_PARAMS,
     BUD_MAX_AREA_FRACTION_FALLBACK,
     BUD_SIZE_PLAUSIBLE_RANGE,
+    DENSITY_BLOCK_FRAMES,
     LINEAGE_SPARSE_MAX_OBJECTS,
     LINEAGE_SPARSE_SMOOTH_FRAMES,
     LINEAGE_SPARSE_MIN_FRAMES,
@@ -89,7 +92,7 @@ from config import (
     RELINK_MAX_AREA_RATIO,
     log_active_configuration,
 )
-from data_loading import load_all_results
+from data_loading import drop_excluded_chambers, load_all_results
 from qc_exclusions import (
     init_qc_exclusions,
     read_qc_exclusions,
@@ -109,12 +112,16 @@ from pko_comparison import run_pko_comparison
 from experiment_units import add_experiment_units, chip_overview, run_order_check
 from bud_size import run_bud_size_threshold
 from cell_filter import flag_cells
+from plot_style import apply_style
+apply_style()   # EIN Aussehen fuer alle Abbildungen (plot_style.py, config.STRAIN_COLORS)
 from relink import (
     gap_close_tracks,
     track_fragmentation,
     detect_sparse_window,
     flag_lineage_window,
     plot_lineage_window,
+    new_objects_vs_density,
+    plot_new_objects_vs_density,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -155,6 +162,33 @@ def _gap_close_and_report(cells: pd.DataFrame, out_dir: Path, stage_before: str,
         frag_before["new_tracks_per_object_frame"].median(), frag_after["new_tracks_per_object_frame"].median(),
     )
     return cells, relinks, relink_stats
+
+
+def _density_report(cells: pd.DataFrame, out_dir: Path) -> None:
+    """Neue Tracks gegen die Objektdichte je Kammer und Block (relink.new_objects_vs_density()):
+    00_new_objects_vs_density.csv/.pdf. Zeigt ueber alle Kammern, dass im dichten Feld jeder
+    neue Track eine beruehrende Maske hat - die Begruendung des Sparse-Phase-Fensters."""
+    table = new_objects_vs_density(cells, block_frames=DENSITY_BLOCK_FRAMES)
+    if table.empty:
+        return
+    table.to_csv(out_dir / "00_new_objects_vs_density.csv", index=False)
+    plot_new_objects_vs_density(table, out_dir / "00_new_objects_vs_density.pdf",
+                                max_objects=LINEAGE_SPARSE_MAX_OBJECTS, block_frames=DENSITY_BLOCK_FRAMES)
+    dense = table["objects_per_frame"] >= LINEAGE_SPARSE_MAX_OBJECTS
+    if table["new_tracks_touching"].notna().any():
+        def share(sel):
+            tot = table.loc[sel, "new_tracks_total"].sum()
+            return 100.0 * table.loc[sel, "new_tracks_touching"].sum() / tot if tot else float("nan")
+        logger.info(
+            "Tabelle gespeichert: 00_new_objects_vs_density.csv (%d Kammern, Bloecke von %d Frames). "
+            "Neue Tracks mit beruehrender Maske: %.0f %% der neuen Tracks in Bloecken ueber der "
+            "Sparse-Grenze (%d Objekte), %.0f %% darunter.",
+            table["exp_id"].nunique(), DENSITY_BLOCK_FRAMES, share(dense), LINEAGE_SPARSE_MAX_OBJECTS,
+            share(~dense),
+        )
+    else:
+        logger.info("Tabelle gespeichert: 00_new_objects_vs_density.csv (%d Kammern; ohne link_type nur "
+                    "die Gesamtzahl neuer Tracks).", table["exp_id"].nunique())
 
 
 def _flag_sparse_window_and_report(cells: pd.DataFrame, out_dir: Path, plot: bool) -> pd.DataFrame:
@@ -318,6 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------
     cells = load_all_results(DATA_ROOT, cache_path=CACHE_PATH, force_reload=FORCE_RELOAD,
                              filename_pattern=RESULTS_PATTERN, results_subdir=RESULTS_SUBDIR)
+    cells = drop_excluded_chambers(cells, EXCLUDED_CHAMBERS)   # z.B. eine zweimal aufgenommene Kammer
     # Urspruengliche Track-ID festhalten: manuelle Merges benennen track_id um, parent_track_id einer
     # re-getrackten Tabelle zeigt aber weiter auf die urspruengliche ID (lineage.classify_mother_bud_measured).
     cells["track_id_orig"] = cells["track_id"]
@@ -394,8 +429,9 @@ def main(argv: list[str] | None = None) -> int:
     cells = apply_track_merges(cells, exclusions)
 
     cells = apply_qc_exclusions(cells, exclusions, mode="remove")
-    # Zellfilter (cell_filter.py): Schmutz, Halo-Stuecke, Flackern von einem Frame - nach dem manuellen QC.
-    cells, cell_filter_report = flag_cells(cells, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+    # Zellfilter (cell_filter.py): Schmutz, Halo-Stuecke, Flackern von einem Frame - nach dem manuellen QC;
+    # auf v12-Tabellen zusaetzlich tote Zellen/Truemmer ohne Phasenkontrast (CELL_MIN_PHASE_CV_REL).
+    cells, cell_filter_report = flag_cells(cells, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX, CELL_MIN_PHASE_CV_REL)
     if not cell_filter_report.empty:
         cell_filter_report.to_csv(OUTPUT_DIR / "00_cell_filter.csv", index=False)
     cells = cells[cells["is_cell"]].drop(columns="is_cell")
@@ -433,6 +469,12 @@ def main(argv: list[str] | None = None) -> int:
     cells = _flag_sparse_window_and_report(cells, OUTPUT_DIR, plot=True)
     cells, relinks, relink_stats = _gap_close_and_report(cells, OUTPUT_DIR, stage_before="after manual QC",
                                                           skip=has_parent)
+    # Neue Tracks gegen die Objektdichte (Block-Tabelle von docs/data_story.md 2.2 als
+    # Abbildung ueber alle Kammern): im dichten Feld beruehrt jeder neue Track eine Maske.
+    try:
+        _density_report(cells, OUTPUT_DIR)
+    except Exception:
+        logger.exception("00_new_objects_vs_density: Tabelle/Abbildung uebersprungen")
 
     # ------------------------------------------------------------------
     # 2c. Groessenkriterium der Mutter/Bud-Heuristik: EINE Schwelle aus
@@ -647,7 +689,7 @@ def main(argv: list[str] | None = None) -> int:
         raw = add_time_column(cells_raw, MIN_PER_FRAME)
         raw = add_experiment_units(raw, STATIC_CHIP_LABELS, static_medium_prefix=STATIC_MEDIUM_PREFIX,
                                    static_single_chip_families=STATIC_SINGLE_CHIP_FAMILIES)
-        raw, raw_filter_report = flag_cells(raw, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+        raw, raw_filter_report = flag_cells(raw, CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX, CELL_MIN_PHASE_CV_REL)
         if not raw_filter_report.empty:
             (OUTPUT_DIR / "no_qc").mkdir(parents=True, exist_ok=True)
             raw_filter_report.to_csv(OUTPUT_DIR / "no_qc" / "00_cell_filter.csv", index=False)

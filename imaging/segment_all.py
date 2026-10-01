@@ -19,11 +19,26 @@ HERE = Path(__file__).resolve().parent
 
 
 def find_config(config_dir: Path, pattern: str, strain: str, osc: str, period: str) -> Path | None:
+    """Experiment-YAML finden: erst das Namensmuster, dann immer lockerere Suchen nach Stamm, Periode und
+    Oszillationstyp im Dateinamen (Gross/Klein egal). Fuer statische Experimente ('Static', Periode z.B.
+    'static_W65') reicht Stamm + letztes Stueck der Periode ('W65', 'omlp', 'ypd') + 'static'."""
     cand = config_dir / pattern.format(strain=strain, osc=osc, osc_upper=osc.upper(), osc_lower=osc.lower(), period=period)
     if cand.exists():
         return cand
-    hits = sorted(p for p in config_dir.glob("*.y*ml") if strain.lower() in p.name.lower() and f"{period}" in p.name and osc.lower() in p.name.lower())
-    return hits[0] if hits else None
+    files = sorted(p for p in config_dir.glob("*.y*ml"))
+    def has(p, *parts):
+        n = p.name.lower(); return all(x.lower() in n for x in parts)
+    tail = period.split("_")[-1]
+    passes = [(strain, period, osc), (strain, tail, osc)]
+    if osc.lower() == "static":   # nur hier darf der Oszillationstyp im Namen fehlen - sonst wuerde z.B.
+        passes += [(strain, period), (strain, tail)]   # eine fehlende pH-YAML durch die Glc-YAML ersetzt
+    for parts in passes:
+        hits = [p for p in files if has(p, *parts)]
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:   # mehrdeutig: den kuerzesten Namen nehmen, meist der exakteste
+            return sorted(hits, key=lambda p: len(p.name))[0]
+    return None
 
 
 def movies_of(data_root: Path):

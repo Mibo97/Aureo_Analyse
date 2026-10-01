@@ -162,10 +162,22 @@ STATIC_MEDIUM_ORDER = ["omlp", "ypd"]
 # Chip-Familien, bei denen ALLE 'replicate' auf EINEM Chip aus EINER Vorkultur
 # liegen: 'replicate' ist dort die Kammer, die Einheit ist der eine Chip, und
 # die Fehlerbalken sind Kammer-Fehlerbalken (n = 1 Kultur). W65 laut Laborbuch.
-# Fuer W109 (Ordner static_omlp/static_ypd, je 4 'replicate' an einem Tag) ist
-# offen, ob es ein Chip oder vier sind - solange nicht hier eingetragen, gilt
-# jedes 'replicate' als eigener Chip.
-STATIC_SINGLE_CHIP_FAMILIES = {"W65"}
+# W109 ebenso (Laborbuch: EIN Chip mit drei Strukturen; die je 4 'replicate' in
+# static_omlp/static_ypd sind Kammern dieses Chips, verteilt ueber die
+# Strukturen). Die beiden Medienordner bleiben getrennte Chip-Labels
+# (W109_static_omlp / W109_static_ypd), die Einheit ist in beiden die Kammer.
+# Eine Familie, die hier NICHT steht, zaehlt jedes 'replicate' als eigenen Chip.
+STATIC_SINGLE_CHIP_FAMILIES = {"W65", "W109"}
+
+# Kammern, die NICHT in die Auswertung gehen: exp_id -> Grund (data_loading.drop_excluded_chambers,
+# direkt nach dem Einlesen, vor jedem Schritt). exp_id =
+# "<biosensor>__<osc_type>__<osc_freq>__<condition>__<replicate>__<chamber>" (data_loading.py).
+# W65 minimal: Rep1 und Rep5 sind laut Laborbuch dieselbe Stage-Position, also EINE Kammer, zweimal
+# aufgenommen (110/109 Spuren, 37/35 Objekte, dieselbe Riesenzelle mit ~51,000 px2, die in
+# Frame 85-88 Blastokonidien ausstoesst). Rep5 faellt, Rep1 bleibt; W65 minimal hat damit 4 Kammern.
+EXCLUDED_CHAMBERS: dict[str, str] = {
+    "WT__Static__static_W65__St.omlp__Rep5__ChamA0": "same stage position as Rep1 (one chamber recorded twice)",
+}
 
 # --- PKO: dritter, unabhaengiger Zweig ----------------------------------------
 # Der PKO-Stamm produziert kein Pullulan und dient der Pruefung, ob die
@@ -196,6 +208,18 @@ OSCILLATION_START_MIN = 120.0
 # Gruppen auf der x-Achse (im Paper: der Hefe-Stamm)? Auf "strain" umstellen,
 # sobald eine echte Stamm-Spalte aus der Bildverarbeitung kommt.
 PANEL_A_GROUP_COL = "biosensor"
+
+# Farben der Staemme in ALLEN Abbildungen (plot_style.py). Kontrollarten bekommen keine eigene
+# Farbe, sondern Marker und Fuellung (Oszillation: Kreis gefuellt, Feast-Kontrolle: Dreieck hoch,
+# Famine-Kontrolle: Dreieck runter, hohl); Perioden eine Hell-Dunkel-Rampe der Stammfarbe;
+# statisch: komplexes Medium gefuellt, Minimalmedium hohl. PKO und Unbekanntes: neutrales Grau.
+# Die fuenf Farben bestehen den Farbsehschwaeche-Check (schwaechstes Paar BSG/BSO); Gelb, Gruen
+# und Rosa liegen unter 3:1 Kontrast auf Weiss, deshalb tragen Marker einen dunklen Rand.
+STRAIN_COLORS: dict[str, str] = {
+    "WT": "#2a78d6", "BSA": "#eb6834", "BSO": "#1baf7a", "BSG": "#eda100", "BSPH": "#e87ba4",
+}
+STRAIN_COLOR_OTHER = "#6e6e6e"
+STRAIN_ORDER = ["WT", "BSA", "BSO", "BSG", "BSPH", "PKO"]
 PANEL_A_FACET_COL = "osc_type"
 
 # Panel A fuer die STATISCHEN Daten: dort ist 'biosensor' die falsche Gruppe.
@@ -266,6 +290,20 @@ LINEAGE_PARAMS = LineageParams(
 CELL_MIN_FRAMES = 2
 CELL_MIN_MAX_AREA_PX = 1500.0
 
+# Kontrastregel (nur Tabellen der Pipeline v12 mit phase_mean/phase_std): tote Zellen und
+# Zelltruemmer verlieren im Phasenkontrast ihren Kontrast. Je Spur der Median von
+# phase_std / phase_mean, die Schwelle RELATIV zum Median der groessenbestandenen Spuren derselben
+# Struktur (Aufnahmesitzung biosensor/osc_type/osc_freq). Auf dem truemmerreichen Chip BSG/pH/6
+# ist der Kontrast zweigipflig (Moden 0.05 und 0.28), auf WT/pH/6 eingipflig bei 0.2-0.3 - dort
+# entfernt 0.45 x Median dieselben 44 bzw. 2 Spuren wie die frueher feste Schwelle 0.12. Fest ging
+# nicht: die W109-Filme sind vierfach dunkler aufgenommen (Zellmittel ~480 statt 1,500-2,300
+# Zaehlwerte), alle Zellen liegen dort bei 0.07-0.12, und die feste Schwelle entfernte 59 % ihrer
+# Objekt-Frames, lebende Zellen. Relativ: W109 nichts, W65 statisch 0.3 %. None = aus. Bericht:
+# 00_cell_filter.csv (n_tracks_removed_by_contrast, phase_cv_reference, min_phase_cv je Kammer).
+# Grenze der Regel: eine Struktur, deren Zellen MEHRHEITLICH tot sind, hat eine Truemmer-Referenz;
+# die Warnung im Log (> 25 % einer Kammer) zeigt solche Faelle.
+CELL_MIN_PHASE_CV_REL: float | None = 0.45
+
 # Groessenkriterium der Mutter/Bud-Heuristik (bud_size.py): eine neu
 # auftauchende Zelle zaehlt nur als Knospe, wenn ihre Flaeche beim ersten
 # Auftreten hoechstens diesen Anteil der Mutterflaeche hat; alles darueber
@@ -297,6 +335,15 @@ BUD_SIZE_PLAUSIBLE_RANGE = (0.15, 0.9)
 LINEAGE_SPARSE_MAX_OBJECTS = 20
 LINEAGE_SPARSE_SMOOTH_FRAMES = 5
 LINEAGE_SPARSE_MIN_FRAMES = 20
+
+# Neue Tracks gegen die Objektdichte (relink.new_objects_vs_density(),
+# 00_new_objects_vs_density.csv/.pdf): je Kammer und Block von
+# DENSITY_BLOCK_FRAMES Frames die Objekte pro Frame und die neu beginnenden
+# Tracks, getrennt nach beruehrender Elternmaske (link_type 'new_touching' /
+# 'split') und ohne ('new'). Im dichten Feld hat jeder neue Track eine
+# beruehrende Maske - Fragmente, keine Knospen; das ist der Grund fuer das
+# Sparse-Phase-Fenster. 22 Frames = die Block-Tabelle in docs/data_story.md 2.2.
+DENSITY_BLOCK_FRAMES = 22
 
 # Gap Closing (relink.py): ein neu beginnender Track wird an einen hoechstens
 # RELINK_MAX_GAP_FRAMES Frames vorher beendeten Track angehaengt, wenn Abstand
@@ -331,6 +378,16 @@ MU_MAX_THRESHOLD = 10.0
 # Die zur Laufzeit erkannten ratio_*-Spalten kommen in run_analysis.py dazu.
 # 'budding_ratio' wird separat aus der Zeitreihe behandelt (Schritt 22).
 ROBUSTNESS_VALUE_COLS = ["area", "eccentricity"]
+# Robustheit je Zelle bzw. Mutter nur aus genuegend Beobachtungen (Schritt 40): R(t) auf Einzelzell-Ebene
+# aus Zellen mit mindestens ROBUSTNESS_MIN_FRAMES_SINGLE_CELL Frames (wie AREA_GROWTH_MIN_FRAMES), R(t) von
+# µ_event aus Muettern mit mindestens ROBUSTNESS_MIN_INTERVALS_MU_EVENT Knospungsintervallen. Die Kammer-
+# Mittel dieser Masse gehen dann durch dieselbe Chip-Logik wie die Readouts (per_chip, Spearman, Bracket,
+# Kontroll-Trend, Abbildung mit den Kontrollen der Struktur) und in den gepaarten Vergleich Oszillation
+# gegen Kontrollen (osc_vs_controls.py, 51_*). µ_bud selbst hat je Kammer einen Wert und damit kein R;
+# seine Robustheit tragen R(p) der Knospungsrate je Mutter (Heterogenitaet der Muetter einer Kammer) und
+# R(t) von µ_event (Stabilitaet des Knospungsrhythmus einer Mutter ueber ihre Intervalle).
+ROBUSTNESS_MIN_FRAMES_SINGLE_CELL = 10
+ROBUSTNESS_MIN_INTERVALS_MU_EVENT = 3
 
 
 # ==============================================================================
@@ -389,7 +446,9 @@ METHOD_CAVEATS: list[str] = [
     "Frame, und die Events sind Fragment-Statistik (00_track_fragmentation.csv). Vorher werden "
     "eindeutige Tracking-Luecken automatisch geschlossen (00_track_relinks.csv).",
     "ZELLFILTER: eine Spur zaehlt nur als Zelle mit >= CELL_MIN_FRAMES Frames und groesster Flaeche "
-    ">= CELL_MIN_MAX_AREA_PX (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
+    ">= CELL_MIN_MAX_AREA_PX sowie (Pipeline v12) Median phase_std/phase_mean >= CELL_MIN_PHASE_CV_REL x "
+    "Median der Struktur, "
+    "tote Zellen und Truemmer haben keinen Phasenkontrast (00_cell_filter.csv); Schmutz, Halo-Stuecke und Flackern von einem Frame "
     "fallen so aus allen Readouts, nach dem manuellen QC.",
     "GEMESSENE ELTERNSCHAFT: auf re-getrackten Tabellen (AUREO_RESULTS_PATTERN=Combined_Results_retracked.*, "
     "imaging/track_labels.py) kommt die Mutter einer Knospe aus der Maskenberuehrung beim ersten Auftauchen "
@@ -431,7 +490,12 @@ def log_active_configuration() -> None:
         if os.environ.get(var):
             logger.warning("  Umgebungsvariable %s ist gesetzt, wird aber nicht mehr gelesen (RESULTS_VERSION entscheidet).", var)
     logger.info("  FLAG_EXCLUDE_ROWS: %s (nur v12-Tabellen)", ", ".join(FLAG_EXCLUDE_ROWS))
-    logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2", CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX)
+    for exp_id, why in EXCLUDED_CHAMBERS.items():
+        logger.info("  EXCLUDED_CHAMBERS: %s - %s", exp_id, why)
+    logger.info("  CELL filter:      >= %d Frames, groesste Flaeche >= %.0f px2, Kontrast (phase_std/phase_mean) >= %s",
+                CELL_MIN_FRAMES, CELL_MIN_MAX_AREA_PX,
+                "aus" if CELL_MIN_PHASE_CV_REL is None
+                else f"{CELL_MIN_PHASE_CV_REL:.2f} x Median der Struktur (nur v12-Tabellen)")
     logger.info("  LINEAGE_PARAMS:   bud_min_frames=%d, use_measured_parent=%s",
                 LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
     if OSC_FREQ_IS_PERIOD_IN_MINUTES:

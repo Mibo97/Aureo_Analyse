@@ -312,10 +312,223 @@ the GPUs; `merge_results.py` builds `Combined_Results.csv`. The analysis selects
 parent; the manual QC file, which names v11 IDs, is not applied to v12 tables. Tested end to end here with a
 stubbed Cellpose on a synthetic movie.
 
+## 6g. Checkpoint 5: the full run on the v12 tables
+
+547 of 565 chambers came through v12 (18 movies still to segment or merge). Compared with the v11 tables:
+
+| | v11 original | v11, new analysis | v12 |
+| --- | --- | --- | --- |
+| new tracks per object-frame, median chamber | | 0.093 (QC batch) | 0.070 (Glc 0.080, pH 0.057) |
+| tracks per chamber, median | | 178 | 125 |
+| object-frames per chamber, median | | 1,235 | 1,168 |
+| cell filter: tracks removed / object-frames removed | | 38 % / 7.2 % | 33 % / 5.3 % |
+| control-trend verdicts: no trend / structure / period / not robust | 19 / 18 / 7 / 4 | 21 / 19 / 5 / 3 | 23 / 20 / 3 / 2 |
+| chip-level budding rate, Spearman against v11 original (146 conditions) | | 0.95 | 0.77 (Glc 0.66, pH 0.79) |
+| mean budding rate per mother-hour | 0.36 | 0.30 | 0.31 |
+
+- The three remaining period-effect rows are area BSG/pH, µ_area BSO/Glc and budding rate WT/Glc, each
+  a different readout and strain, none recurring. The count fell with every improvement of the tracking,
+  7 → 5 → 3.
+- The per-series Spearman of the budding rate against the period does not survive the change of tracking:
+  across the ten series it correlates at 0.05 between v11 and v12, while the chip-level rates themselves
+  correlate at 0.77–0.82. Which series looked like a period trend was decided by the tracker, not by the
+  cells. That is the methods argument for treating the budding rate per structure as the readout and its
+  trend against the period as noise.
+- BSG pH 6 min keeps losing 60–80 % of its object-frames to the cell filter under both segmentations; the
+  small objects there are dead-cell debris (confirmed by eye), so the filter does what it should.
+
 Earlier note, now done: the QC batch re-tracked on the cluster (`track.sbatch` on one experiment), scored with
 `analyse_pipeline/diagnose_tracking.py` and `validate_lineage.py` against the manual QC, plus the sweep
 table and overlays. Pipeline v12 (flags instead of drops, raw label stacks, `--file`) follows once the
 setting is chosen.
+
+## 6h. Checkpoint 6: the complete v12 run (565 chambers) and the dead-cell rule
+
+All 565 chambers, the 18 static ones included, are through pipeline v12 and the analysis
+(`analysis_output_v12`, `RESULTS_VERSION = "v12"`, no environment variables). The numbers of checkpoint 5
+barely moved with the last 18 movies: new tracks per object-frame 0.070 in the median chamber (q10 0.048,
+q90 0.111; Glc 0.080, pH 0.057), median track 5 frames, 78 % of the object-frames in tracks of 10 frames or
+more; the cell filter removes 34 % of the tracks and 6.2 % of the object-frames (median chamber 5.3 %,
+BSG/pH/6 52 %); 11,351 budding events in 530 chambers, 74 % of them with the mother from the mask contact;
+control-trend verdicts 23 no trend / 20 structure effect / 3 period effect / 2 not robust. `docs/data_story.md`
+is rewritten on these tables; the earlier numbers stay only where they are marked as v11.
+
+Two things changed on the analysis side with the measured parent:
+
+- **The size criterion is active.** In the v11 tables the ratio of bud area to mother area at first detection
+  had one broad mode and the criterion was switched off. With the parent from the mask contact the
+  distribution is bimodal (modes 0.07 and 0.45, antimode 0.32, valley depth 0.25) and `bud_size.py` applies
+  the global threshold: 2,160 of 13,938 candidates (15.5 %) are rejected as mother-sized objects that appear
+  next to a mother, washed-in cells and masks split in two. Per strain and oscillation type the valley is too
+  shallow in 11 of 12 groups, so the one global threshold stays (`20_bud_size_threshold.csv`).
+- **Dead cells and debris lose their phase contrast.** On the two v12 tables uploaded for this purpose,
+  BSG/pH/6 (debris-rich by eye) and WT/pH/6, the track median of `phase_std / phase_mean` is bimodal in
+  BSG/pH/6 (modes 0.05 and 0.28, valley 0.11–0.16, 71 % of the tracks in the low mode) and unimodal at
+  0.2–0.3 in WT/pH/6; objects with a median area of 3,000 px² or more never fall below 0.18 (5 % quantile) in
+  either table, although the illumination differs by a factor of 1.8 between the two experiments (the ratio
+  cancels it). Most low-contrast objects are already removed by the size rule; what the contrast rule adds
+  is the persistent debris that passes it: on BSG/pH/6 44 tracks with 1,432 object-frames, 20 % of the
+  object-frames that survive the size rule, round (circularity 0.91), shrinking (area ratio last/first 0.74),
+  1,300–1,700 px², tracked for a median of 31 frames, 70 % of them with a touching "bud" that the lineage
+  would have counted; concentrated in three chambers (NegCtrl Rep1/Rep2, Osc Rep3 with 27 % of its frames).
+  On WT/pH/6 it removes 4 tracks and 30 object-frames (0.1 %). Implemented as a third rule of
+  `cell_filter.py`: `CELL_MIN_PHASE_CV = 0.12` (made relative to the structure in 6k), applied only when the phase columns exist, reported per
+  chamber in `00_cell_filter.csv` (`n_tracks_removed_by_contrast`, `n_object_frames_removed_by_contrast`).
+  A chamber whose objects all sit below the threshold (all dead, or focus lost) drops out entirely, which the
+  report makes visible. The v12 outputs quoted in the data story predate the rule; the next analysis run
+  applies it. Physically the rule reads the loss of the refractive-index difference of a lysed cell; a dying
+  cell that keeps its contrast is not caught, and nothing in these tables distinguishes dead from dormant
+  cells that still have contrast.
+
+## 6i. Checkpoint 7: second v12 run (contrast rule, validation), W65/W109, growth rate from budding, restyle
+
+**Second run** (564 chambers: W65 minimal Rep5 dropped, see below; contrast rule active). The contrast
+rule removed 1,951 tracks and 13,321 object-frames (1.3 %) over the whole run, but unevenly: 49 chambers
+lose more than 5 % of their object-frames and 17 more than 20 %, and the heaviest losses are the W109 static
+chambers (minimal medium Rep1 to Rep4: 46, 39, 49 and 68 %; complex medium Rep2 and Rep4: 65 and 53 %), far
+beyond anything the two calibration chips showed. The W109 numbers moved accordingly (minimal-medium area
+5,489 → 8,199 px², budding rate 0.33 → 0.13 per mother-hour; complex medium 0.05 → 0.009). Open: are those
+chambers full of dead cells, or do the W109 movies have a different phase contrast so that live cells fall
+below 0.12? That needs the W109 `Combined_Results.csv` tables; until then the static section is provisional.
+The control-trend verdicts moved from 23/20/3/2 to 26/18/2/2: area BSG/pH, area WT/pH and µ_area WT/pH went
+from ρ −0.8 to −0.4, one rank swap in a four-period series each.
+
+**Validation on v12** (`lineage_validation/`): the detection rate of the mother assignment differs between
+the structures of a series in 4 of 10 series (Kruskal p < 0.05; v11: 7 of 10) and trends with the period in
+no consistent direction (BSA/Glc −0.77, BSPH/Glc −0.77, BSG/pH −0.80, BSPH/pH +0.80, BSO/Glc +0.60);
+median assignment rate 0.67 per chamber, median distance over search radius 0.93, 4 % ambiguous candidates.
+
+**W65 minimal medium**: Rep1 and Rep5 are the same stage position recorded twice (110 and 109 tracks, 37 and
+35 objects, the same 51,000 px² cell); Rep5 is dropped through `config.EXCLUDED_CHAMBERS`, four chambers
+remain. The overlay of frames 85 to 88 shows the lower of the two swollen cells releasing a ring of ten
+blastoconidia within three frames (tracks 3 to 14): synchronous multipolar budding, the thesis illustration
+of a swollen cell turning into blastoconidia.
+
+**W109** is one chip with three structures (lab book), so it joins `STATIC_SINGLE_CHIP_FAMILIES`: the four
+movies per medium are four distinct chambers of that chip (186, 225, 369 and 410 tracks in minimal medium,
+no duplicates), the unit is the chamber and n is one culture for both static families.
+
+**Growth rate from budding** (`growth_from_budding.py`, outputs `24_*`): µ_bud = births per cell-hour in the
+sparse window, births = accepted budding events, cell-hours = cells present per frame summed over the window
+times 10 min. In balanced growth each birth adds one cell, so the ratio is the specific growth rate of the
+population; bursts count every bud and no interval is needed. The interbud table `11_specific_growth_rate`
+stays but is an interbud rate, not µ (medians of 1.6 to 2.9 h⁻¹ per condition; its summary table had been
+empty because of a pandas groupby default, fixed). Alongside: immigration = new tracks without a parent mask
+per cell-hour. Check on the WT/pH/6 v12 table: µ_bud 0.09 to 0.22 h⁻¹ in the oscillation chambers (doubling
+3 to 7 h), immigration 0.15 to 0.28 per cell-hour, i.e. washed-in cells arrive faster than cells are born.
+Same tables and figure as the budding rate (per chamber, per chip, summary, Spearman, bracket, control trend,
+within culture, vs period), a row in `50_control_trend_summary`, and `24_mu_bud_vs_mu_area.pdf`.
+
+**Restyle** (`plot_style.py`, `config.STRAIN_COLORS`): colour = strain everywhere (WT #2a78d6, BSA #eb6834,
+BSO #1baf7a, BSG #eda100, BSPH #e87ba4, PKO grey); controls by marker and fill in the strain colour
+(oscillation filled circle, feast control filled up-triangle, famine control hollow down-triangle), periods
+as a light-to-dark ramp of the strain hue, static media by fill; white background, faint horizontal grid,
+two spines, 8 to 9 pt text, dark marker edges (yellow, green and pink are below 3:1 contrast on white),
+editable PDF text. The five colours pass the colour-vision check (weakest pair BSG/BSO, ΔE 9.1); the old
+control red clashed with BSA orange (ΔE 5.9), hence markers instead of colours for the controls. The
+explanatory footers inside the figures are gone; they belong in the captions. Rendered on the synthetic data.
+
+## 6j. Checkpoint 8: third run (W109 one chip, growth rate from budding)
+
+Same tables as the second run (cell filter and events identical), W109 as one chip (two structure groups of
+four chambers, unit = chamber) and the `24_` family. Full run: 11,211 births in 49,657 cell-hours over 535
+chambers; µ_bud median 0.21 per cell-hour (q10 0.10, q90 0.37), doubling time 3.3 h; immigration median 0.19
+per cell-hour and above the birth rate in 37 % of the chambers. Chamber type without effect (oscillation 0.22,
+famine control 0.20, feast control 0.19; bracket degenerate on 42 of 49 structures), Glc series 0.22 to 0.30
+against pH series 0.14 to 0.18. Control-trend rows for µ_bud: 4 structure effects, 6 no trend, no period
+effect; the summary now has 58 rows, 32 / 22 / 2 / 2. µ_bud against µ_area per chip and chamber type:
+Spearman −0.4 (n = 146). Static: W109 minimal 0.11, complex 0.01 (the complex-medium chambers keep cells in
+only 83, 28, 77 and 19 frames after the contrast rule, two without any event: the W109 question of 6i
+stands); W65 0.11 and 0.14. PKO famine controls 0.32 to 0.44, feast controls 0.05 to 0.17.
+`docs/data_story.md` carries these numbers (2.8, 4, 5, 7).
+
+The restyled figures were checked on the real data (172 PDFs of this run). Fixed after that check: a bracket
+score beyond the axis is drawn as a triangle at the panel edge with its value printed instead of a line leaving
+the panel; the Spearman text sits in the panel title, not on the data; the violin figure compares each strain
+against WT only (four brackets instead of ten); the point figures and the validation figure show only the
+periods present in each facet; the size-criterion figure keeps its group legend below the panels; the sensor
+time course keeps its "2 h" mark inside the axes; the sparse-window figure carries a strain legend.
+
+## 6k. The contrast rule made relative (W109 resolved)
+
+The W109 minimal-medium table shows a different recording, not dead cells: cell mean about 480 counts
+(background about 455) against 1,500 to 2,300 on every other chip, and with that little signal above the
+camera offset the ratio phase_std / phase_mean of every live cell lies at 0.07 to 0.12, unimodal at 0.095 in
+all four chambers and at every size (tracks of 3,000 px² or more: median 0.095, 86 % below 0.12). The fixed
+threshold of 0.12 removed 59 % of the size-passing object-frames there. W65 static (the other uploaded table)
+looks like the calibration chips (reference 0.31, 0.2 % below 0.12).
+
+Rule now: a track is low-contrast when its ratio is below `CELL_MIN_PHASE_CV_REL` = 0.45 times the median of
+the size-passing tracks of the same structure (biosensor/osc_type/osc_freq, i.e. one imaging session). On the
+four tables: BSG/pH/6 threshold 0.122, the same 44 tracks (20 % of the size-passing frames) as before;
+WT/pH/6 0.109, 2 tracks; W65 static 0.139, 13 tracks (0.3 %); W109 0.043, none. The reference and the
+effective threshold stand per chamber in `00_cell_filter.csv`; the log still warns when a chamber loses more
+than a quarter of its frames, which is where a debris-dominated reference would show. The oscillation series
+are unaffected by the change (same tracks removed), so the third-run numbers of the data story stand; only the
+W109 static values return to the first-run numbers with the next run.
+
+## 6l. Checkpoint 9: final run with the relative contrast rule
+
+564 chambers. The contrast rule now removes 432 tracks and 0.6 % of all object-frames (fixed threshold:
+1,951 and 1.3 %); 6 chambers lose more than 20 % (17 before), W109 nothing (structure references 0.095 and
+0.127 against 0.19 to 0.35 elsewhere). W109 static is back at the first-run values: minimal medium 5,489 px²
+against complex 19,105 (Welch p 0.004 over four chambers each), budding 0.33 against 0.05 per mother-hour,
+µ_bud 0.18 against 0.03 per cell-hour. Because the relative threshold differs from 0.12 wherever a structure's
+reference is far from 0.27, a few oscillation rows moved as well: verdicts 31 / 23 / 2 / 2 (was 32 / 22 / 2 / 2),
+the two period effects unchanged (µ_area BSO/Glc, budding rate WT/Glc); µ_bud median 0.21 per cell-hour,
+immigration 0.19, 11,361 births in 49,764 cell-hours; events 11,361. `docs/data_story.md` carries the final
+numbers throughout; the figure fixes of 6j are in the PDFs of this run.
+
+## 6m. Two figure additions (2026-09-29)
+
+**Per-chamber points on the static figures.** `plot_point_errorbar()` (summary_plots.py) takes a chamber-level
+table (`points`, value in `points_col`) and draws each chamber as a small point beside its mean, fanned out
+over the dodge position in order of value, marker and fill as the mean (complex medium filled, minimal hollow),
+tinted; legend entry "single chambers". The static branch passes the chamber tables of steps 12 (µ_area over
+all cells), 13 (endpoint), 21 (budding rate) and 24 (µ_bud, immigration). The oscillation figures are
+unchanged (they have their own layout in `plot_endpoint_vs_period()`).
+
+**The block table of 2.2 as a figure.** `relink.new_objects_vs_density()` counts per chamber and block of
+`DENSITY_BLOCK_FRAMES` = 22 frames the objects per frame (median), the tracks that begin in the block (the
+first frame of the chamber not counted), split by `link_type` into touching a tracked mask or split from one
+(`new_touching`, `split`) and touching nothing (`new`), with rates per frame and per object-frame;
+`plot_new_objects_vs_density()` draws one point per chamber and block, median and quartiles per density
+class (powers of two, classes with at least five blocks), and the sparse limit; the right panel is the
+touching rate per object and frame. `run_analysis.py` writes `00_new_objects_vs_density.csv/.pdf` for the
+main run, after the fragmentation table; without `link_type` (v11 tables) only the total is drawn.
+
+Checked on the four v12 tables at hand (35 chambers): the WT/pH/6 block means reproduce the table of
+`docs/data_story.md` 2.2 exactly (block 0 differs only by the convention that tracks present in the first
+frame are not new: 2.5 instead of 4.4 free new tracks). Touching new tracks per object and frame sit at 0.04
+to 0.06 between 8 and 256 objects per frame (proportional to the density), free new tracks saturate at about two
+per frame; above 20 objects per frame 55 to 63 % of the new tracks touch a mask on WT/pH/6, BSG/pH/6 and
+W65, 35 % on W109. The synthetic run (no `link_type`) passes with the total-only variant.
+
+## 6n. Robustness outputs in the pipeline (2026-10-01)
+
+The thesis question (introduction 1.4) is robustness under oscillation; `docs/data_story.md` 5b carries the two
+readings. Now in the pipeline: step 40 averages every robustness metric per chamber (R(t) population; R(t) single
+cell from cells with ≥ `ROBUSTNESS_MIN_FRAMES_SINGLE_CELL` = 10 frames; R(p) over the frames; R(p) of µ_area;
+R(t) of µ_event from mothers with ≥ `ROBUSTNESS_MIN_INTERVALS_MU_EVENT` = 3 intervals; new: R(p) of the budding
+rate per mother across the mothers of a chamber, from `21_budding_ratio_per_mother.csv`) and runs it through the
+chip logic of the readouts (`_robustness_period_outputs()`: `40_<metric>_<readout>_per_chip.csv`, `_summary`,
+`_spearman`, `_bracket_score`, `_control_trend`, `_within_culture`, `_vs_period_<osc_type>.pdf` with the controls
+of the structure; static: point and error bar over the medium with the chamber points). The control-less
+point-and-errorbar figures `40_Rt_population_<v>.pdf` / `40_Rp_<v>.pdf` are gone; `_aggregated.csv`, the raw
+tables and the control-consistency outputs stay. Step 50 collects `40_*_control_trend.csv` into
+`50_robustness_control_trend_summary.csv/.pdf` and writes the paired comparison of the oscillation chambers with
+the controls of their own structure for all readouts and metrics (`osc_vs_controls.py`:
+`51_osc_vs_controls_per_structure.csv`, `51_osc_vs_controls.csv` with Wilcoxon over structures, ratio or
+difference, per oscillation type and strain, `51_osc_vs_controls_vs_period.csv`, and three figures). The
+budding-ratio tables are cached on the context (`budding_ratio_tables`) so steps 20 and 40 compute them once.
+
+Checked with `docs/scratch/robust3.py`, the new functions on the saved tables of the final run: the numbers of
+the results chapter reproduce exactly (area ratio 1.079, budding rate 1.147, R(t) population area −0.127 /
+−0.096 / −0.123, ...). The two budding metrics: R(p) of the budding rate per mother shows no difference between
+oscillation and control chambers (−2.02 against −1.98 / −1.92, Wilcoxon p 0.95), R(t) of µ_event is lower under
+Glc oscillation (−1.11 against −1.13 / −1.00, below the control mean on 29 of 47 structures, p 0.022). Over all
+114 metric x series combinations: 60 no trend, 35 structure effects, 10 not robust, 9 period effects, five of them
+BSA/Glc. Synthetic run (no link_type, no sensor ratios in the static branch) exit 0.
 
 ## 7. Order and checkpoints
 

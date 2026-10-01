@@ -76,8 +76,10 @@ from growth_rate import classify_condition_type
 
 logger = logging.getLogger(__name__)
 
+from plot_style import (INK, INK_SOFT, SURFACE, control_handles, edge_color, finish, legend_below, marker_kwargs,
+                        panel_title, strain_color, tint)
+
 CONTROL_ORDER = ["NegCtrl", "PosCtrl"]
-CONTROL_COLORS = {"NegCtrl": "#4C78A8", "PosCtrl": "#E45756"}
 GROUP_PRODUCER = "producer"
 GROUP_PKO = "PKO"
 GROUP_COLORS = {GROUP_PRODUCER: "#6E6E6E", GROUP_PKO: "#54A24B"}
@@ -267,11 +269,14 @@ def _strain_order(df: pd.DataFrame) -> list[str]:
 
 
 def _panel(ax, df, value_col, strain_order, matched_chips, ylabel, title, by_control=True, seed=0):
-    """Ein Panel: pro Stamm die Chips als Punkte - passende Periode gefuellt, Rest blass."""
+    """Ein Panel: pro Stamm die Chips als Punkte in der Stammfarbe (PKO grau), Kontrollart als
+    Marker/Fuellung; passende Periode gross und voll, uebrige Chips klein und blass, ihre
+    10-90 %-Spanne als duenner Balken."""
     rng = np.random.default_rng(seed)
     controls = CONTROL_ORDER if by_control and "condition_type" in df.columns else [None]
     for x, strain in enumerate(strain_order):
         sub_s = df[df["biosensor"].astype(str) == strain]
+        color = strain_color(strain)
         for offset, ct in zip(np.linspace(-0.18, 0.18, len(controls)), controls):
             sub = sub_s if ct is None else sub_s[sub_s["condition_type"] == ct]
             sub = sub.dropna(subset=[value_col])
@@ -279,22 +284,20 @@ def _panel(ax, df, value_col, strain_order, matched_chips, ylabel, title, by_con
                 continue
             is_pko = (sub["pullulan"] == GROUP_PKO)
             matched = sub["chip"].isin(matched_chips) | is_pko
-            color = CONTROL_COLORS[ct] if ct is not None else GROUP_COLORS[GROUP_PRODUCER]
-            for sel, alpha, size, z in ((~matched, 0.28, 18, 2), (matched, 0.95, 46, 4)):
+            for sel, alpha, size, z in ((~matched, 0.35, 16, 2), (matched, 1.0, 40, 4)):
                 part = sub[sel]
                 if part.empty:
                     continue
                 jitter = rng.uniform(-0.05, 0.05, size=len(part))
-                col = GROUP_COLORS[GROUP_PKO] if (ct is None and part["pullulan"].eq(GROUP_PKO).all()) else color
-                ax.scatter(np.full(len(part), x + offset) + jitter, part[value_col], s=size, alpha=alpha,
-                           color=col, edgecolor="white", linewidth=0.5, zorder=z)
+                kw = marker_kwargs(ct if ct is not None else "Oscillation", color, size=size)
+                kw.pop("zorder", None)
+                ax.scatter(np.full(len(part), x + offset) + jitter, part[value_col], alpha=alpha, zorder=z, **kw)
             bg = sub[~matched][value_col]
             if len(bg) >= 2:  # Spanne der Hintergrund-Chips als duenner Balken
                 ax.plot([x + offset, x + offset], [bg.quantile(0.1), bg.quantile(0.9)],
-                        color=color, alpha=0.35, linewidth=3, solid_capstyle="butt", zorder=1)
-    ax.set_xticks(range(len(strain_order))); ax.set_xticklabels(strain_order, rotation=25, ha="right")
-    ax.set_ylabel(ylabel, fontsize=9); ax.set_title(title, fontsize=10, loc="left")
-    ax.grid(axis="y", alpha=0.25, linewidth=0.6)
+                        color=tint(color, 0.35), alpha=0.6, linewidth=3, solid_capstyle="butt", zorder=1)
+    ax.set_xticks(range(len(strain_order))); ax.set_xticklabels(strain_order)
+    ax.set_ylabel(ylabel); panel_title(ax, title)
 
 
 def plot_pko_control_agreement(
@@ -306,42 +309,33 @@ def plot_pko_control_agreement(
 ) -> None:
     panels = []
     if agreement is not None and not agreement.empty:
-        panels.append((agreement, "chamber_cv", "CV of chamber median area\n(3 control chambers, one chip)",
-                       "a) Do nominally identical control chambers on one chip agree?", True))
-        panels.append((agreement, "temporal_cv", "Detrended temporal CV\n(residuals around linear trend, chip mean)",
-                       "b) Are the control chambers stable over the run (beyond their growth trend)?", True))
+        panels.append((agreement, "chamber_cv", "CV of chamber median area\n(3 control chambers, one structure)",
+                       "a) do nominally identical control chambers of one structure agree?", True))
+        panels.append((agreement, "temporal_cv", "detrended temporal CV\n(residuals around the linear trend)",
+                       "b) are the control chambers stable over the run?", True))
     if bracket is not None and not bracket.empty:
-        panels.append((bracket, "bracket_delta", "PosCtrl vs NegCtrl\nCliff's δ on µ_area",
-                       "c) Does the control bracket separate at all?", False))
+        panels.append((bracket, "bracket_delta", "feast vs famine control\nCliff's δ on µ_area",
+                       "c) does the control bracket separate at all?", False))
     if not panels:
         logger.warning("plot_pko_control_agreement(): keine Daten - uebersprungen.")
         return
     strain_order = _strain_order(pd.concat([p[0] for p in panels], ignore_index=True))
-    fig, axes = plt.subplots(len(panels), 1, figsize=(1.35 * len(strain_order) + 3.6, 3.3 * len(panels)),
+    fig, axes = plt.subplots(len(panels), 1, figsize=(0.95 * len(strain_order) + 2.6, 2.4 * len(panels) + 0.4),
                              squeeze=False, sharex=True)
     for ax, (df, col, ylab, title, by_ct) in zip(axes[:, 0], panels):
         _panel(ax, df, col, strain_order, matched_chips, ylab, title, by_control=by_ct)
         if col == "bracket_delta":
-            ax.axhline(0.0, color="black", linewidth=0.9, linestyle="--", alpha=0.7)
-    axes[-1, 0].set_xlabel("Strain (pullulan producers, WT last; PKO right)")
+            ax.axhline(0.0, color=INK, linewidth=0.8, linestyle="--", alpha=0.7)
+    axes[-1, 0].set_xlabel("strain (pullulan producers; PKO right)")
     from matplotlib.lines import Line2D
-    handles = [Line2D([], [], marker="o", linestyle="", color=CONTROL_COLORS["NegCtrl"], label="NegCtrl"),
-               Line2D([], [], marker="o", linestyle="", color=CONTROL_COLORS["PosCtrl"], label="PosCtrl"),
-               Line2D([], [], marker="o", linestyle="", color="#555555", markersize=8,
-                      label=f"chip at the matched period ({', '.join(periods or [])} min) — primary comparison"),
-               Line2D([], [], marker="o", linestyle="", color="#555555", alpha=0.3, markersize=5,
-                      label="other chips of that strain (all periods) — backdrop; bar = 10–90 % range")]
-    fig.legend(handles=handles, loc="lower center", ncol=2, frameon=False, fontsize=8, bbox_to_anchor=(0.5, -0.02))
-    fig.suptitle("Pullulan producers vs PKO: control-chamber behaviour, one point per chip", y=0.995)
-    fig.text(0.5, -0.09,
-             "Each point is one chip (= one period batch, one culture). PKO is a single chip, so there is no "
-             "test — read where it falls relative to the producers.\nControl chambers are constant-medium, so "
-             "every producer chip is a valid comparator regardless of its period.",
-             ha="center", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=180)
-    plt.close(fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+    handles = control_handles(INK_SOFT, which=("PosCtrl", "NegCtrl"))
+    handles += [Line2D([], [], marker="o", linestyle="", color=INK_SOFT, markersize=7,
+                       label=f"structure at the matched period ({', '.join(periods or [])} min)"),
+                Line2D([], [], marker="o", linestyle="", color=INK_SOFT, alpha=0.35, markersize=4.5,
+                       label="other structures of that strain; bar = 10–90 % range")]
+    legend_below(fig, handles, ncol=2, y=0.0)
+    fig.suptitle("pullulan producers vs PKO: control-chamber behaviour, one point per structure", fontsize=9.5, y=1.0)
+    finish(fig, out_path, logger)
 
 
 # ==============================================================================

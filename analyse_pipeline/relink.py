@@ -32,6 +32,8 @@ von WT/pH/6 (11 Kammern, 9 063 Tracks, 503 QC-Zeilen):
 AUSGABEN (run_analysis.py)
 --------------------------
     00_track_fragmentation.csv  Kennzahlen je Kammer und Stufe (nach QC / nach Gap Closing)
+    00_new_objects_vs_density.csv/.pdf  neue Tracks gegen die Objektdichte, je Kammer und Block
+                                (new_objects_vs_density(), plot_new_objects_vs_density())
     00_track_relinks.csv        eine Zeile pro automatischer Verknuepfung
     20_lineage_window.csv       Fenster je Kammer (Ende, Laenge, ob auswertbar)
     20_lineage_window.pdf       Objekte pro Frame ueber die Zeit, Fensterlaengen
@@ -92,6 +94,139 @@ def track_fragmentation(cells: pd.DataFrame, long_track_frames: int = 10, stage:
             "share_objectframes_in_long_tracks": float(g["cell_uid"].isin(long_uids).mean()),
         })
     return pd.DataFrame(rows)
+
+
+def new_objects_vs_density(cells: pd.DataFrame, block_frames: int = 22) -> pd.DataFrame:
+    """Neu beginnende Tracks gegen die Objektdichte, je Kammer und Block von block_frames
+    Frames (die Block-Tabelle von docs/data_story.md 2.2, fuer alle Kammern).
+
+    Je Block: objects_per_frame (Median der Objekte je Frame), new_tracks_total (Tracks, die
+    im Block beginnen; der erste Frame der Kammer zaehlt nicht, dort beginnt jeder Track),
+    davon new_tracks_touching (die Maske beruehrt beim ersten Auftreten eine getrackte Maske
+    oder faellt aus einer heraus: link_type 'new_touching' / 'split') und new_tracks_free
+    (link_type 'new', beruehrt nichts). Dazu dieselben Zahlen je Frame nach dem Kammerstart
+    (*_per_frame) und je Objekt und Frame (*_per_object_frame). Ohne link_type
+    (v11-Tabellen) bleiben die getrennten Spalten NaN.
+
+    Im dichten Feld beruehrt jeder neue Track eine Maske: Fragmente aus Beruehren, Teilen und
+    Wiedervereinigen, keine Knospen - der Grund fuer das Sparse-Phase-Fenster
+    (detect_sparse_window()).
+    """
+    _check(cells, "new_objects_vs_density()")
+    if cells.empty:
+        return pd.DataFrame()
+    has_lt = "link_type" in cells.columns
+    cols = ["exp_id", "cell_uid", "frame"] + (["link_type"] if has_lt else [])
+    df = cells[cols].copy()
+    start_of = df.groupby("exp_id")["frame"].min()
+    df["start"] = df["exp_id"].map(start_of)
+    df["block"] = ((df["frame"] - df["start"]) // block_frames).astype(int)
+
+    per_frame = df.groupby(["exp_id", "block", "frame"]).size().rename("n").reset_index()
+    per_frame["after_start"] = per_frame["frame"] > per_frame["exp_id"].map(start_of)
+    keys = ["exp_id", "block"]
+    dens = per_frame.groupby(keys).agg(
+        frame_lo=("frame", "min"), frame_hi=("frame", "max"), n_frames=("frame", "size"),
+        objects_per_frame=("n", "median"),
+    ).reset_index()
+    after = per_frame[per_frame["after_start"]].groupby(keys).agg(
+        frames_after_start=("frame", "size"), object_frames_after_start=("n", "sum"),
+    ).reset_index()
+    dens = dens.merge(after, on=keys, how="left")
+    dens[["frames_after_start", "object_frames_after_start"]] = (
+        dens[["frames_after_start", "object_frames_after_start"]].fillna(0).astype(int))
+
+    agg = {"exp_id": ("exp_id", "first"), "first_frame": ("frame", "first"), "start": ("start", "first")}
+    if has_lt:
+        agg["link_type"] = ("link_type", "first")
+    first = df.sort_values("frame").groupby("cell_uid", sort=False).agg(**agg).reset_index()
+    first = first[first["first_frame"] > first["start"]].copy()
+    first["block"] = ((first["first_frame"] - first["start"]) // block_frames).astype(int)
+    out = dens.merge(first.groupby(keys).size().rename("new_tracks_total").reset_index(), on=keys, how="left")
+    out["new_tracks_total"] = out["new_tracks_total"].fillna(0).astype(int)
+    if has_lt:
+        lt = first["link_type"].astype(str)
+        touching = first[lt.isin(["new_touching", "split"])].groupby(keys).size().rename("new_tracks_touching")
+        free = first[lt == "new"].groupby(keys).size().rename("new_tracks_free")
+        out = (out.merge(touching.reset_index(), on=keys, how="left")
+                  .merge(free.reset_index(), on=keys, how="left"))
+        out["new_tracks_touching"] = out["new_tracks_touching"].fillna(0).astype(int)
+        out["new_tracks_free"] = out["new_tracks_free"].fillna(0).astype(int)
+    else:
+        out["new_tracks_touching"] = np.nan
+        out["new_tracks_free"] = np.nan
+    frames = out["frames_after_start"].where(out["frames_after_start"] > 0)
+    obj_frames = out["object_frames_after_start"].where(out["object_frames_after_start"] > 0)
+    for kind in ("total", "touching", "free"):
+        out[f"new_tracks_{kind}_per_frame"] = out[f"new_tracks_{kind}"] / frames
+        out[f"new_tracks_{kind}_per_object_frame"] = out[f"new_tracks_{kind}"] / obj_frames
+    meta = [c for c in ["biosensor", "osc_type", "osc_freq", "condition", "chip", "chip_family", "medium"]
+            if c in cells.columns]
+    if meta:
+        out = out.merge(cells[["exp_id"] + meta].drop_duplicates("exp_id"), on="exp_id", how="left")
+    return out
+
+
+def plot_new_objects_vs_density(table: pd.DataFrame, out_path, max_objects: int, block_frames: int) -> None:
+    """Links: neue Tracks je Frame gegen die Objekte je Frame, ein Punkt je Kammer und Block -
+    mit beruehrender Maske dunkel, ohne hell; Linie und Band = Median und Quartile je
+    Dichteklasse (Zweierpotenzen, ab 5 Bloecken). Rechts: neue beruehrende Tracks je Objekt
+    und Frame gegen die Dichte, also was der Tracker je Objekt an Fragmenten erzeugt.
+    Senkrechte Linie = Sparse-Grenze (max_objects)."""
+    from plot_style import INK, INK_MUTED, SURFACE, dedupe_handles, finish, legend_below, panel_title
+    if table is None or table.empty or "objects_per_frame" not in table.columns:
+        return
+    t = table[table["objects_per_frame"] > 0].copy()
+    if t.empty:
+        return
+    has_lt = t["new_tracks_touching"].notna().any()
+    left = ([("new_tracks_touching_per_frame", "new track touching a tracked mask, or split from one", INK, True),
+             ("new_tracks_free_per_frame", "new track touching nothing", INK_MUTED, False)] if has_lt
+            else [("new_tracks_total_per_frame", "new tracks (tables without link_type)", INK, True)])
+    right_col = "new_tracks_touching_per_object_frame" if has_lt else "new_tracks_total_per_object_frame"
+    n_edges = int(np.ceil(np.log2(max(float(t["objects_per_frame"].max()), 2.0)))) + 2
+    edges = 2.0 ** np.arange(0, n_edges)
+    t["dbin"] = pd.cut(t["objects_per_frame"], bins=edges, right=False)
+    rng = np.random.default_rng(0)
+
+    def binned(ax, col, color, filled, label):
+        ok = t[col].notna()
+        x_jit = t.loc[ok, "objects_per_frame"] * 2.0 ** rng.uniform(-0.06, 0.06, int(ok.sum()))
+        ax.scatter(x_jit, t.loc[ok, col], marker="o", s=5, facecolor=color if filled else SURFACE,
+                   edgecolor=color, linewidth=0.35, alpha=0.2, zorder=2)
+        g = t.loc[ok].groupby("dbin", observed=True)[col]
+        med, q25, q75, n = g.median(), g.quantile(0.25), g.quantile(0.75), g.size()
+        keep = (n >= 5).to_numpy()
+        if not keep.any():
+            return
+        x = np.array([np.sqrt(iv.left * iv.right) for iv in med.index[keep]])
+        ax.fill_between(x, q25.to_numpy()[keep], q75.to_numpy()[keep], color=color, alpha=0.15,
+                        linewidth=0, zorder=3)
+        ax.plot(x, med.to_numpy()[keep], color=color, linewidth=1.4, marker="o", markersize=4,
+                markerfacecolor=color if filled else SURFACE, markeredgecolor=color, zorder=4, label=label)
+
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.0, 3.0))
+    for col, label, color, filled in left:
+        binned(ax, col, color, filled, label)
+    ax.set_xscale("log")
+    ax.set_yscale("symlog", linthresh=0.1, linscale=0.5)
+    ax.set_ylim(bottom=0)
+    ax.axvline(max_objects, color=INK, linestyle="--", linewidth=1.0, label=f"sparse limit ({max_objects} objects)")
+    ax.set_xlabel("objects per frame (median of the block)")
+    ax.set_ylabel("new tracks per frame")
+    panel_title(ax, f"{t['exp_id'].nunique()} chambers, blocks of {block_frames} frames")
+
+    binned(ax2, right_col, INK, True, None)
+    ax2.set_xscale("log")
+    ax2.set_yscale("symlog", linthresh=0.01, linscale=0.5)
+    ax2.set_ylim(bottom=0)
+    ax2.axvline(max_objects, color=INK, linestyle="--", linewidth=1.0)
+    ax2.set_xlabel("objects per frame (median of the block)")
+    ax2.set_ylabel("new touching tracks\nper object and frame" if has_lt else "new tracks\nper object and frame")
+    panel_title(ax2, "new touching tracks per object and frame")
+    handles, labels = dedupe_handles([ax])
+    legend_below(fig, handles, labels, ncol=2 if len(handles) > 2 else len(handles), y=0.0)
+    finish(fig, out_path, logger)
 
 
 # ==============================================================================
@@ -281,26 +416,29 @@ def plot_lineage_window(cells: pd.DataFrame, window: pd.DataFrame, out_path, max
                         min_frames: int, max_curves: int = 80, seed: int = 0) -> None:
     """Links: Objekte pro Frame ueber die Zeit (Stichprobe von Kammern), Grenze
     max_objects. Rechts: Verteilung der Fensterlaengen ueber alle Kammern."""
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.2))
+    from plot_style import INK, INK_MUTED, finish, panel_title, strain_color
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.9))
     counts = cells.groupby(["exp_id", "frame"]).size().rename("n").reset_index()
     exp_ids = counts["exp_id"].unique()
+    strain_of = (cells.drop_duplicates("exp_id").set_index("exp_id")["biosensor"].astype(str).to_dict()
+                 if "biosensor" in cells.columns else {})
     rng = np.random.default_rng(seed)
     shown = rng.choice(exp_ids, size=min(max_curves, len(exp_ids)), replace=False) if len(exp_ids) else []
     for e in shown:
         sub = counts[counts["exp_id"] == e]
-        ax.plot(sub["frame"], sub["n"], lw=0.7, alpha=0.5, color="0.3")
-    ax.axhline(max_objects, color="C3", ls="--", lw=1.2, label=f"sparse limit ({max_objects} objects)")
+        ax.plot(sub["frame"], sub["n"], lw=0.6, alpha=0.45, color=strain_color(strain_of.get(e, "_")))
+    ax.axhline(max_objects, color=INK, ls="--", lw=1.0, label=f"sparse limit ({max_objects} objects)")
     ax.set_xlabel("frame"); ax.set_ylabel("objects per frame")
-    ax.set_title(f"objects per frame ({len(shown)} of {len(exp_ids)} chambers shown)", fontsize=10)
-    ax.set_yscale("symlog", linthresh=10); ax.legend(fontsize=8, loc="upper left")
+    panel_title(ax, f"objects per frame, {len(shown)} of {len(exp_ids)} chambers")
+    ax.set_yscale("symlog", linthresh=10); ax.legend(loc="upper left")
     if not window.empty:
-        ax2.hist(window["n_frames"], bins=30, color="0.75", edgecolor="white")
-        ax2.axvline(min_frames, color="C3", ls="--", lw=1.2, label=f"minimum ({min_frames} frames)")
+        ax2.hist(window["n_frames"], bins=30, color="#d9d9d9", edgecolor="white")
+        ax2.axvline(min_frames, color=INK, ls="--", lw=1.0, label=f"minimum ({min_frames} frames)")
         n_ok = int(window["window_ok"].sum())
-        ax2.set_title(f"sparse window length: {n_ok} of {len(window)} chambers usable", fontsize=10)
-        ax2.legend(fontsize=8)
-    ax2.set_xlabel("frames in sparse window"); ax2.set_ylabel("chambers")
-    fig.suptitle("Sparse-phase window for the lineage heuristic", fontsize=10)
-    fig.tight_layout()
-    fig.savefig(out_path, bbox_inches="tight", dpi=180)
-    plt.close(fig)
+        panel_title(ax2, f"window length, {n_ok} of {len(window)} chambers usable")
+        ax2.legend()
+    ax2.set_xlabel("frames in the sparse window"); ax2.set_ylabel("chambers")
+    if strain_of:
+        from plot_style import legend_below, strain_handles
+        legend_below(fig, strain_handles(set(strain_of.values())), ncol=6, y=0.0)
+    finish(fig, out_path)

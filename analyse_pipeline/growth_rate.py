@@ -289,8 +289,10 @@ def summarise_growth_rate(
         group_cols = [c for c in ["biosensor", "osc_type", "osc_freq", "condition",
                                    "medium", "chip_family"] if c in df.columns]
 
+    # dropna=False: 'medium'/'chip_family' sind in den Oszillationszweigen NaN - mit dem
+    # pandas-Default (dropna=True) fielen dort ALLE Gruppen weg und die Tabelle war leer.
     summary = (
-        df.groupby(group_cols)
+        df.groupby(group_cols, dropna=False)
         .agg(
             mean_mu=("mu", "mean"),
             sd_mu=("mu", "std"),

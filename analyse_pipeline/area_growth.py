@@ -514,10 +514,26 @@ def plot_mu_event_vs_mu_area(
     import seaborn as sns
     from scipy.stats import pearsonr, wilcoxon
 
+    if mu_event_summary is None or mu_event_summary.empty or mu_area_summary is None or mu_area_summary.empty:
+        logger.warning("plot_mu_event_vs_mu_area(): µ_event- oder µ_area-Summary leer - kein Plot erzeugt.")
+        return
     if join_cols is None:
         join_cols = [c for c in mu_event_summary.columns
                      if c in mu_area_summary.columns
                      and c not in ("mean_mu", "sd_mu", "mean_mu_area", "sd_mu_area", "n_values")]
+    # Spalten, die auf einer Seite komplett NaN sind (medium/chip_family im Oszillationszweig), tragen
+    # nichts zum Join bei und brechen ihn mit float-gegen-object-Dtypes; die uebrigen als Text angleichen.
+    join_cols = [c for c in join_cols
+                 if not (mu_event_summary[c].isna().all() or mu_area_summary[c].isna().all())]
+    mu_event_summary = mu_event_summary.copy()
+    mu_area_summary = mu_area_summary.copy()
+    for c in join_cols:
+        if mu_event_summary[c].dtype != mu_area_summary[c].dtype:
+            mu_event_summary[c] = mu_event_summary[c].astype(str)
+            mu_area_summary[c] = mu_area_summary[c].astype(str)
+    if not join_cols:
+        logger.warning("plot_mu_event_vs_mu_area(): keine gemeinsamen Join-Spalten - kein Plot erzeugt.")
+        return
 
     merged = mu_event_summary.merge(
         mu_area_summary, on=join_cols, suffixes=("_event", "_area"),
@@ -536,12 +552,14 @@ def plot_mu_event_vs_mu_area(
         logger.warning("plot_mu_event_vs_mu_area(): kein Overlap zwischen µ_event und µ_area - kein Plot erzeugt.")
         return
 
-    facets = sorted(merged[facet_col].dropna().unique()) if facet_col and facet_col in merged.columns else [None]
+    from plot_style import INK_MUTED, INK_SOFT, control_handles, errorbar_kwargs, finish, legend_below, ordered_strains, panel_title, strain_color
+
+    facets = (ordered_strains(merged[facet_col].dropna().unique()) if facet_col == "biosensor"
+              else sorted(merged[facet_col].dropna().unique())) if facet_col and facet_col in merged.columns else [None]
     has_color = bool(color_col) and color_col in merged.columns and merged[color_col].notna().any()
     colors_vals = sorted(merged[color_col].dropna().unique()) if has_color else [None]
-    palette = dict(zip(colors_vals, sns.color_palette("Set2", n_colors=max(len(colors_vals), 1))))
 
-    fig, axes = plt.subplots(1, len(facets), figsize=(5 * len(facets), 5), squeeze=False)
+    fig, axes = plt.subplots(1, len(facets), figsize=(3.0 * len(facets) + 0.4, 3.3), squeeze=False)
     axes = axes[0]
 
     cell_stats = _paired_single_cell_stats(mu_event_table, mu_area_table, facet_col, exclude_artefacts=exclude_artefacts)
@@ -554,22 +572,21 @@ def plot_mu_event_vs_mu_area(
 
     for ax, facet in zip(axes, facets):
         sub = merged[merged[facet_col] == facet] if facet_col and facet_col in merged.columns else merged
+        color = strain_color(facet) if facet_col == "biosensor" else INK_SOFT
         for cv in colors_vals:
             sub_c = sub[sub[color_col] == cv] if has_color else sub
             if sub_c.empty:
                 continue
             xerr = sub_c["sd_mu"] if "sd_mu" in sub_c.columns else None
             yerr = sub_c["sd_mu_area"] if "sd_mu_area" in sub_c.columns else None
-            ax.errorbar(
-                sub_c["mean_mu"], sub_c["mean_mu_area"], xerr=xerr, yerr=yerr,
-                fmt="o", color=palette.get(cv), label=str(cv) if cv is not None else None,
-                markersize=6, alpha=0.8, capsize=2, linewidth=1, elinewidth=1,
-            )
+            kw = errorbar_kwargs(cv if cv is not None else "Oscillation", color)
+            kw.update(linestyle="", alpha=0.85, elinewidth=0.8)
+            ax.errorbar(sub_c["mean_mu"], sub_c["mean_mu_area"], xerr=xerr, yerr=yerr, **kw)
             # Labels (osc_freq) neben die Punkte
             if label_col in sub_c.columns:
                 for _, row in sub_c.iterrows():
                     ax.annotate(str(row[label_col]), (row["mean_mu"], row["mean_mu_area"]),
-                                textcoords="offset points", xytext=(4, 4), fontsize=6)
+                                textcoords="offset points", xytext=(4, 4), fontsize=6, color=INK_SOFT)
 
         # Diagonale: µ_event == µ_area (gekoppeltes Wachstum).
         # Limits VOR dem Zeichnen fixieren und danach explizit erneut setzen,
@@ -577,7 +594,7 @@ def plot_mu_event_vs_mu_area(
         # und die Linie nicht mehr exakt in den Ecken sitzt.
         lims = [min(ax.get_xlim()[0], ax.get_ylim()[0]),
                 max(ax.get_xlim()[1], ax.get_ylim()[1])]
-        ax.plot(lims, lims, "k--", alpha=0.3, linewidth=0.8)
+        ax.plot(lims, lims, color=INK_MUTED, linestyle="--", linewidth=0.8)
         ax.set_xlim(lims)
         ax.set_ylim(lims)
         ax.set_aspect("equal", adjustable="box")
@@ -614,22 +631,13 @@ def plot_mu_event_vs_mu_area(
             title += f"\nr: n/a (n={n_stat} {level_tag} < 3)"
         if "p_wilcoxon" in entry:
             title += f", Wilcoxon p={entry['p_wilcoxon']:.3f}"
-        ax.set_title(title, fontsize=9)
+        panel_title(ax, title)
 
-    if has_color:
-        # Handles/Labels über ALLE Facetten sammeln und deduplizieren, da eine
-        # einzelne Facette nicht zwingend alle color_col-Werte enthält.
-        handles_by_label = {}
-        for ax in axes:
-            h, l = ax.get_legend_handles_labels()
-            for hi, li in zip(h, l):
-                handles_by_label.setdefault(li, hi)
-        fig.legend(handles_by_label.values(), handles_by_label.keys(),
-                   loc="lower center", ncol=len(handles_by_label))
-    fig.suptitle("Reproduction vs. biomass growth", y=1.02)
-    fig.tight_layout()
+    if has_color and color_col == "condition_type":
+        legend_below(fig, control_handles(INK_SOFT, which=[c for c in ("Oscillation", "PosCtrl", "NegCtrl")
+                                                            if c in set(colors_vals)]), ncol=3, y=0.0)
+    fig.suptitle("reproduction (interbud rate) vs biomass growth (µ_area)", fontsize=9.5, y=1.0)
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
+    finish(fig, out_path, logger)
