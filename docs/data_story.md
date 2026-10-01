@@ -431,9 +431,14 @@ middle band; 2 period-effect points and 2 not-robust points remain off the diago
 
 ## 5b. Robustness: the oscillation against constant medium, and R(t) / R(p)
 
-The thesis question is robustness under oscillation (introduction 1.4). Two readings of it, computed on the
-final-run tables with the pipeline's own functions (`docs/scratch/robust.py`, `robust2.py`; to be wired into step 40
-and a new `51_osc_vs_controls.csv`, section 9):
+The thesis question is robustness under oscillation (introduction 1.4). Two readings of it. Since 2026-10-01 the
+pipeline writes both: step 40 runs every robustness metric per chamber through the chip logic of the readouts
+(`40_<metric>_<readout>_per_chip.csv`, `_spearman`, `_bracket_score`, `_control_trend`, `_vs_period_<osc_type>.pdf`
+with the controls of the structure), step 50 collects the verdicts (`50_robustness_control_trend_summary.*`) and
+writes the paired comparison for all readouts and metrics (`51_osc_vs_controls_per_structure.csv`,
+`51_osc_vs_controls.csv`, `51_osc_vs_controls_vs_period.csv`, `51_osc_vs_controls*.pdf`; `osc_vs_controls.py`).
+The numbers below come from `docs/scratch/robust3.py`, the same functions on the final-run tables, until the next
+run:
 
 **Oscillation chambers against the controls of their structure**, paired over the 49 structures (Wilcoxon of the
 oscillation mean against the control mean; ratio Osc / control mean):
@@ -468,13 +473,23 @@ against feast / famine controls, structures with the oscillation chambers less r
 | R(p) | area | −0.671 | −0.571 | −0.613 | 34 | 0.003 | 2 (BSA/Glc, BSPH/pH) |
 | R(p) | eccentricity | −0.048 | −0.041 | −0.042 | 33 | 0.003 | 1 (BSA/Glc) |
 | R(p) | µ_area | −0.333 | −0.412 | −0.453 | 16 | 0.008 | 1 (BSA/Glc) |
+| R(p) | budding rate per mother (across the mothers of a chamber) | −2.018 | −1.984 | −1.921 | 25 | 0.95 | 1 (BSA/Glc) |
+| R(t) single cell (≥ 3 intervals) | µ_event per mother | −1.115 | −1.132 | −0.999 | 29 of 47 | 0.022 | 1 (BSA/Glc) |
 
 Under oscillation the cell area is less stable over time and more heterogeneous across cells, the growth rate more
-homogeneous; the two heterogeneities are unrelated across chambers (ρ 0.06, n 497). Sensors: no difference
-between oscillation and control chambers for any of the four ratios (p 0.06 to 0.92); pHluorin the most robust
-(R −0.01), OxPro the least (R(t) −0.21, R(p) −0.73, values near zero). The control-trend classification over all
-94 robustness combinations: 48 no trend, 30 structure effects, 9 not robust, 7 period effects (three of them
-BSA/Glc: R(p) of area, eccentricity and µ_area), the same picture as the 58 readout rows of section 5.
+homogeneous; the two heterogeneities are unrelated across chambers (ρ 0.06, n 497). µ_bud itself has one value
+per chamber and no R; its robustness is carried by the two budding rows: the mothers of a chamber are as
+heterogeneous in their budding rate under oscillation as under constant medium (p 0.95), the rhythm of the single
+mother is less stable under Glc oscillation (p 0.043; pH 0.28). Sensors: no difference between oscillation and
+control chambers for any of the four ratios (p 0.06 to 0.92); pHluorin the most robust (R −0.01), OxPro the
+least (R(t) −0.21, R(p) −0.73, values near zero). The control-trend classification over all 114 robustness
+combinations (21 metrics x series): 60 no trend, 35 structure effects, 10 not robust, 9 period effects, five of
+them in BSA/Glc (R(p) of area, eccentricity, µ_area and budding rate per mother, R(t) of µ_event: with longer
+periods that series gets more homogeneous in size, growth and budding, more stable in the budding rhythm, and more
+heterogeneous in shape), the same picture as the 58 readout rows of section 5. The R(t) caveat: an R(t) trend of
+the oscillation chambers alone can be an alias artefact (sampling below Nyquist, largest at the longest period);
+against the controls it stays readable, and the one R(t) period effect of the area (WT/Glc) runs towards more
+robustness with the period, against the alias direction.
 
 Static context: R(t) of the area −0.18 in minimal and −0.39 in complex medium (the growing cells), R(p) −0.47 and
 −0.51.
@@ -564,11 +579,8 @@ WT/pH/6), the dead-cell rule (2.7).
 
 Not built, still possible:
 
-- **Robustness outputs (section 5b) as pipeline tables**: in step 40 the paired oscillation-versus-control
-  comparison and the control-trend classification for R(t) and R(p), with figures that carry the controls; a
-  `51_osc_vs_controls.csv` with the paired comparison for endpoint, budding rate, µ_bud, µ_area and immigration.
-  Until then the numbers come from `docs/scratch/robust.py` / `robust2.py` on the final-run tables.
-- **Nothing else pending on the pipeline side.** Every number in this document comes from the final run. The two
+- **Nothing pending on the pipeline side.** The robustness outputs of section 5b (steps 40 and 50, built
+  2026-10-01) appear with the next run, together with the density figure and the per-chamber points. Every number in this document comes from the final run. The two
   figure additions of 2026-09-29, the per-chamber points on the static figures (section 3) and the block table
   of 2.2 as a figure over all chambers (`00_new_objects_vs_density.pdf`), are in the code and appear with the
   next run; the density numbers quoted in 2.2 are from the four tables at hand, not from the full run.

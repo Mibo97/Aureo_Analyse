@@ -142,7 +142,11 @@ Temporal robustness R(t) quantifies the stability of a readout over time, at the
 variation of the chamber mean over the frames and at the single-cell level as the variation of a cell's value
 over its frames (cells tracked for at least ten frames); population robustness R(p) quantifies the cell-to-cell heterogeneity of a readout within a
 chamber at each time point. Both were applied to the cell area, the eccentricity and the sensor ratios, R(p) also
-to µ_area. For the pullulan knockout strain, the agreement of the control chambers within a structure was
+to µ_area. The robustness of budding was quantified at the single-cell level as R(t) of the event-based rate
+µ_event over the budding intervals of a mother (mothers with at least three intervals) and as R(p) of the
+budding rate per mother across the mothers of a chamber. Every robustness metric was averaged per chamber and
+evaluated against the cycle period and against the controls of the structure in the same way as the readouts
+(Section 2.5.6). For the pullulan knockout strain, the agreement of the control chambers within a structure was
 quantified as the coefficient of variation of the chamber-median area over the three feast (or famine) chambers,
 as the temporal coefficient of variation of the frame median after removal of the linear time trend, and as the
 ratio of the feast to the famine level, and was compared with the distribution of the same quantities over the

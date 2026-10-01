@@ -176,6 +176,7 @@ Laborbuch-Referenz und steht in `00_chip_overview.csv`. Die Aufnahmen umfassen
 | `sensors.py` | Ratiometrische Sensoren → `ratio_*`-Spalten (`SENSOR_CONFIG`) |
 | `lineage.py` | Mutter/Bud-Heuristik, Budding Ratio pro Mutter |
 | `relink.py` | Gap Closing und Sparse-Phase-Fenster gegen die Track-Fragmentierung; neue Tracks gegen die Objektdichte (`00_new_objects_vs_density.*`) |
+| `osc_vs_controls.py` | Oszillationskammern gegen die Kontrollen ihrer eigenen Struktur, gepaart über Strukturen (`51_osc_vs_controls*`) |
 | `growth_rate.py` | µ_event aus Budding-Intervallen (Eq. 2) |
 | `area_growth.py` | µ_area aus ln(Fläche)-Fit, plus µ_event-vs-µ_area-Scatter |
 | `budding_ratio_timeseries.py` | Budding Ratio als Zeitreihe (Eq. 3) |
@@ -203,9 +204,9 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `13_` | **Kumulativer Endzustand gegen die Periode** (+ Spearman) |
 | `20_`–`23_` | Lineage: Budding-Events, Budding Ratio, Panel A, Stammbaum — **nur aus dem Sparse-Phase-Fenster** (`20_lineage_window.csv/.pdf`, siehe unten); `21_budding_rate_vs_period_<osc_type>.pdf` = Knospungsrate je Mutter-Stunde gegen die Periode mit eigenen Kontrollen; `20_bud_size_*` (nur direkt in `analysis_output/`) = Größenkriterium der Knospen-Heuristik, eine Schwelle für alle Zweige |
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
-| `40_` | Robustheit R(t)/R(p) inkl. Kontroll-Konsistenz |
+| `40_` | Robustheit R(t)/R(p) (Fläche, Exzentrizität, Sensor-Ratios; R(p) von µ_area und der Knospungsrate je Mutter, R(t) von µ_event je Mutter): je Maß das Kammer-Mittel durch dieselbe Chip-Logik wie `13_`/`21_`/`24_` (`_per_chip.csv`, `_summary.csv`, `_spearman.csv`, `_bracket_score.csv`, `_control_trend.csv`, `_within_culture.csv`, `_vs_period_<osc_type>.pdf` mit den Kontrollen der Struktur); dazu die rohen Tabellen je Kammer/Zelle, `_aggregated.csv` und die Kontroll-Konsistenz. R(t) Einzelzelle nur aus Zellen mit ≥ `ROBUSTNESS_MIN_FRAMES_SINGLE_CELL` Frames, µ_event aus Müttern mit ≥ `ROBUSTNESS_MIN_INTERVALS_MU_EVENT` Intervallen |
 | `24_` | Wachstumsrate aus Knospungen: `24_growth_from_budding_*` (µ_bud = Geburten je Zellstunde im Sparse-Phase-Fenster; dieselben Tabellen und dieselbe Abbildung wie `21_`), `24_immigration_*` (angespuelte Zellen je Zellstunde), `24_mu_bud_vs_mu_area.pdf` (Population gegen Einzelzelle). `11_specific_growth_rate*` bleibt als Interbud-Rate, ist aber keine Wachstumsrate (siehe `growth_from_budding.py`) |
-| `50_` | Zusammenfassungstabelle; `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`, `24_`) |
+| `50_` | Zusammenfassungstabelle; `50_robustness_control_trend_summary.csv/.pdf` = dieselbe Kontroll-Trend-Zusammenfassung für die Robustheitsmaße (aus `40_*_control_trend.csv`); `51_osc_vs_controls_per_structure.csv` / `51_osc_vs_controls.csv` / `51_osc_vs_controls_vs_period.csv` / `51_osc_vs_controls*.pdf` = Oszillationskammern gegen die Kontrollen ihrer Struktur, gepaart über Strukturen (Wilcoxon; Verhältnis bzw. Differenz je Readout und Robustheitsmaß, gesamt, je Oszillationstyp und Stamm; hängt der Effekt von der Periode ab?); `50_control_trend_summary.pdf/.csv` = **die eine Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`, `24_`) |
 | `90_`–`92_` | Anhang: Morphologie-Scatter, Einzelzell- & Mutter-Trajektorien |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
 | `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |

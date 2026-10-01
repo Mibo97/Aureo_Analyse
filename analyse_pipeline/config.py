@@ -378,6 +378,16 @@ MU_MAX_THRESHOLD = 10.0
 # Die zur Laufzeit erkannten ratio_*-Spalten kommen in run_analysis.py dazu.
 # 'budding_ratio' wird separat aus der Zeitreihe behandelt (Schritt 22).
 ROBUSTNESS_VALUE_COLS = ["area", "eccentricity"]
+# Robustheit je Zelle bzw. Mutter nur aus genuegend Beobachtungen (Schritt 40): R(t) auf Einzelzell-Ebene
+# aus Zellen mit mindestens ROBUSTNESS_MIN_FRAMES_SINGLE_CELL Frames (wie AREA_GROWTH_MIN_FRAMES), R(t) von
+# µ_event aus Muettern mit mindestens ROBUSTNESS_MIN_INTERVALS_MU_EVENT Knospungsintervallen. Die Kammer-
+# Mittel dieser Masse gehen dann durch dieselbe Chip-Logik wie die Readouts (per_chip, Spearman, Bracket,
+# Kontroll-Trend, Abbildung mit den Kontrollen der Struktur) und in den gepaarten Vergleich Oszillation
+# gegen Kontrollen (osc_vs_controls.py, 51_*). µ_bud selbst hat je Kammer einen Wert und damit kein R;
+# seine Robustheit tragen R(p) der Knospungsrate je Mutter (Heterogenitaet der Muetter einer Kammer) und
+# R(t) von µ_event (Stabilitaet des Knospungsrhythmus einer Mutter ueber ihre Intervalle).
+ROBUSTNESS_MIN_FRAMES_SINGLE_CELL = 10
+ROBUSTNESS_MIN_INTERVALS_MU_EVENT = 3
 
 
 # ==============================================================================

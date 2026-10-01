@@ -504,6 +504,32 @@ to 0.06 between 8 and 256 objects per frame (proportional to the density), free 
 per frame; above 20 objects per frame 55 to 63 % of the new tracks touch a mask on WT/pH/6, BSG/pH/6 and
 W65, 35 % on W109. The synthetic run (no `link_type`) passes with the total-only variant.
 
+## 6n. Robustness outputs in the pipeline (2026-10-01)
+
+The thesis question (introduction 1.4) is robustness under oscillation; `docs/data_story.md` 5b carries the two
+readings. Now in the pipeline: step 40 averages every robustness metric per chamber (R(t) population; R(t) single
+cell from cells with ≥ `ROBUSTNESS_MIN_FRAMES_SINGLE_CELL` = 10 frames; R(p) over the frames; R(p) of µ_area;
+R(t) of µ_event from mothers with ≥ `ROBUSTNESS_MIN_INTERVALS_MU_EVENT` = 3 intervals; new: R(p) of the budding
+rate per mother across the mothers of a chamber, from `21_budding_ratio_per_mother.csv`) and runs it through the
+chip logic of the readouts (`_robustness_period_outputs()`: `40_<metric>_<readout>_per_chip.csv`, `_summary`,
+`_spearman`, `_bracket_score`, `_control_trend`, `_within_culture`, `_vs_period_<osc_type>.pdf` with the controls
+of the structure; static: point and error bar over the medium with the chamber points). The control-less
+point-and-errorbar figures `40_Rt_population_<v>.pdf` / `40_Rp_<v>.pdf` are gone; `_aggregated.csv`, the raw
+tables and the control-consistency outputs stay. Step 50 collects `40_*_control_trend.csv` into
+`50_robustness_control_trend_summary.csv/.pdf` and writes the paired comparison of the oscillation chambers with
+the controls of their own structure for all readouts and metrics (`osc_vs_controls.py`:
+`51_osc_vs_controls_per_structure.csv`, `51_osc_vs_controls.csv` with Wilcoxon over structures, ratio or
+difference, per oscillation type and strain, `51_osc_vs_controls_vs_period.csv`, and three figures). The
+budding-ratio tables are cached on the context (`budding_ratio_tables`) so steps 20 and 40 compute them once.
+
+Checked with `docs/scratch/robust3.py`, the new functions on the saved tables of the final run: the numbers of
+the results chapter reproduce exactly (area ratio 1.079, budding rate 1.147, R(t) population area −0.127 /
+−0.096 / −0.123, ...). The two budding metrics: R(p) of the budding rate per mother shows no difference between
+oscillation and control chambers (−2.02 against −1.98 / −1.92, Wilcoxon p 0.95), R(t) of µ_event is lower under
+Glc oscillation (−1.11 against −1.13 / −1.00, below the control mean on 29 of 47 structures, p 0.022). Over all
+114 metric x series combinations: 60 no trend, 35 structure effects, 10 not robust, 9 period effects, five of them
+BSA/Glc. Synthetic run (no link_type, no sensor ratios in the static branch) exit 0.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,
