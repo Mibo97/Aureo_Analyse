@@ -539,6 +539,7 @@ n = 1.
 | thesis section | main-text figures | appendix figures | evidence tables |
 | --- | --- | --- | --- |
 | Methods: units and sampling | none (a schematic of chip, structures, arrays and chambers is the author's) | `00_n_tracks_overview_summary.pdf` | `00_chip_overview.csv`, `00_chip_run_order.csv` |
+| 3.2.2 Observed morphology | `90_morphology_scatter.pdf` (one cell = one point, mean area against mean eccentricity, guides at 30 µm² and eccentricity 0.6, share of large round cells in the title; static per chip family and medium) | | `40_Rt_single_cell_area.csv` / `_eccentricity.csv` (per-cell means), `20_bud_size_at_appearance.csv` |
 | Methods: tracking and sparse window | `20_lineage_window.pdf`, `00_new_objects_vs_density.pdf` | `20_bud_size_at_appearance.pdf`, `qc_comparison/70_qc_effect.pdf` and `lineage_validation/lv_02_detection_rate.pdf` (v11 run) | `00_track_fragmentation.csv`, `00_cell_filter.csv`, `20_bud_size_threshold.csv`, `00_new_objects_vs_density.csv` (the block table of 2.2 for all chambers) |
 | 1 Static medium | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf` | `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/10_cell_area_over_time.pdf`, `static/21_panel_a_violin.pdf` | `static/13_endpoint_summary.csv`, `static/13_endpoint_per_chamber.csv`, `static/21_budding_rate_summary.csv` |
 | 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `24_immigration_vs_period_*.pdf`, `24_mu_bud_vs_mu_area.pdf`, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `24_growth_from_budding_spearman.csv`, `12_area_growth_rate_spearman.csv` |
@@ -580,7 +581,10 @@ WT/pH/6), the dead-cell rule (2.7).
 Not built, still possible:
 
 - **Nothing pending on the pipeline side.** The robustness outputs of section 5b (steps 40 and 50, built
-  2026-10-01) appear with the next run, together with the density figure and the per-chamber points. Every number in this document comes from the final run. The two
+  2026-10-01) appear with the next run, together with the density figure, the per-chamber points and the per-cell
+  morphology figure (`90_morphology_scatter.pdf`, rebuilt 2026-10-03 for results section 3.2.2: 22,090 cells of
+  at least 10 frames, median 22 µm², eccentricity 0.75; 5 % large and round; buds 4.7 µm² at first detection on
+  mothers of 71 µm²; no filamentous objects: solidity 0.98, axis ratio > 3 in < 0.3 %). Every number in this document comes from the final run. The two
   figure additions of 2026-09-29, the per-chamber points on the static figures (section 3) and the block table
   of 2.2 as a figure over all chambers (`00_new_objects_vs_density.pdf`), are in the code and appear with the
   next run; the density numbers quoted in 2.2 are from the four tables at hand, not from the full run.

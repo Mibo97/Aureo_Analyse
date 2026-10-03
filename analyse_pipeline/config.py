@@ -118,6 +118,16 @@ if os.environ.get("AUREO_FORCE_RELOAD", "").strip().lower() in ("1", "true", "ye
 # ==============================================================================
 
 MIN_PER_FRAME = 10.0  # Minuten pro Frame
+UM_PER_PX = 0.0733    # Pixelgroesse der v12-Aufnahmen (aus den nd2-Metadaten; 1 px2 = 0.00537 um2)
+
+# Morphologie-Uebersicht (analysis.plot_morphology_scatter, 90_morphology_scatter.pdf): eine Zelle = ein Punkt
+# (Tracks mit >= MORPHOLOGY_MIN_FRAMES Frames), mittlere Flaeche gegen mittlere Exzentrizitaet. Die Hilfslinien
+# bei MORPHOLOGY_LARGE_UM2 und MORPHOLOGY_ROUND_ECC teilen die Ebene nach den Zelltypen von Rensink et al. 2026:
+# klein und laenglich = hefeartige Zellen, gross und rund = geschwollene Zellen; der Anteil gross-runder Zellen
+# steht im Paneltitel. Orientierung, keine Klassifikation.
+MORPHOLOGY_MIN_FRAMES = 10
+MORPHOLOGY_LARGE_UM2 = 30.0
+MORPHOLOGY_ROUND_ECC = 0.6
 
 # WICHTIG ZUR SPALTE 'osc_freq': sie enthaelt trotz ihres Namens die PERIODE
 # der Feast/Famine-Zyklen in MINUTEN (0.75 ... 24), keine Frequenz.

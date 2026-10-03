@@ -97,7 +97,7 @@ rejected. The threshold is determined once from all data and applied everywhere.
 | 30 sensors | channel intensities and ratios over time, after the 2 h preconditioning, as drift over hours (cycles lie below the sampling limit) | `30_*`, `31_*` |
 | 40 robustness | R(t) at population and single-cell level and R(p) for area, eccentricity and the sensor ratios; R(p) of µ_area; R(t) of µ_event per mother; R(p) of the budding rate per mother; each metric per chamber, then the same chip logic, tests and figures as the readouts; control consistency across structures (Kruskal-Wallis) | `40_*` |
 | 50 summary | summary statistics; control-trend summary over all readouts (one point per readout and series, oscillation ρ against control ρ); the same for the robustness metrics; the paired comparison of oscillation chambers with the controls of their own structure for all readouts and metrics | `50_*`, `51_*` |
-| 90 appendix | morphology scatter, single-cell trajectories, one stable mother per group with its budding marks | `90_*` to `92_*` |
+| 90 morphology and appendix | morphology per cell (mean area against mean eccentricity, one point per cell, guide lines for large round cells, share in the title), single-cell trajectories, one stable mother per group with its budding marks | `90_*` to `92_*` |
 | 95 sensor controls | feast against famine control chambers per sensor, per structure and over time (does a sensor respond to feast versus famine at all?) | `95_*` |
 
 ### B6. The three branches and the validation

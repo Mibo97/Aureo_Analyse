@@ -53,6 +53,10 @@ from config import (
     FLUX_CONFIG,
     MU_MAX_THRESHOLD,
     ROBUSTNESS_VALUE_COLS,
+    UM_PER_PX,
+    MORPHOLOGY_MIN_FRAMES,
+    MORPHOLOGY_LARGE_UM2,
+    MORPHOLOGY_ROUND_ECC,
     ROBUSTNESS_MIN_FRAMES_SINGLE_CELL,
     ROBUSTNESS_MIN_INTERVALS_MU_EVENT,
     ENDPOINT_LAST_FRACTION,
@@ -1279,7 +1283,13 @@ def step_90_appendix(ctx: PipelineContext) -> None:
     #     Mutter-Trajektorien - deskriptive Plausibilitäts-Checks ohne
     #     eigene quantitative Kennzahl, siehe Diskussion zur Restrukturierung.
     # ==================================================================
-    plot_morphology_scatter(cells, output_dir / "90_morphology_scatter.pdf")
+    # Morphologie je Zelle (Flaeche gegen Exzentrizitaet): Oszillation je Stamm, statisch je Chip-Familie x Medium.
+    plot_morphology_scatter(
+        cells, output_dir / "90_morphology_scatter.pdf",
+        facet_cols=("biosensor",) if ctx.x_col == "osc_freq" else ("chip_family", "medium"),
+        um_per_px=UM_PER_PX, min_frames=MORPHOLOGY_MIN_FRAMES, large_um2=MORPHOLOGY_LARGE_UM2,
+        round_ecc=MORPHOLOGY_ROUND_ECC,
+    )
 
     # Dieser Plot zeigt 'area', hing aber an intensity_cols - dadurch fehlte er
     # bei den statischen Daten komplett (Wildtyp, keine Fluoreszenzkanäle).
