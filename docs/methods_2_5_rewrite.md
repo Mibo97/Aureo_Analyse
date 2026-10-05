@@ -77,8 +77,10 @@ the tracker and the filters. One static recording that duplicated another stage 
 
 ### 2.5.3 Experimental Units and Aggregation
 
-The curated single-cell data were organised by biosensor strain, oscillation type and cycle period. One
-microfluidic structure carried one cycle period with five oscillation chambers, three constant-feast (PosCtrl) and
+The curated single-cell data were organised by biosensor strain, oscillation type and switching interval. The
+interval between two medium switches (0.75 to 24 min) is the half-half-cycle period; a full feast/famine cycle lasted
+twice as long. It is referred to as the period of a structure. One microfluidic structure carried one period
+with five oscillation chambers, three constant-feast (PosCtrl) and
 three to four constant-famine (NegCtrl) chambers distributed over several arrays; the array index and the chamber
 position were taken from the file names. On every array the oscillation chambers occupied the positions A3 to
 A12, the feast controls A1 and A2 and the famine controls A13 and A14. A physical chip carried two or three structures, was inoculated from
@@ -87,7 +89,7 @@ carried three structures with four chambers per medium and chip W65 one structur
 and four in minimal medium. All readouts were aggregated hierarchically from cells to chambers (mean per chamber),
 from chambers to structures (mean over chambers, with the standard deviation and standard error over chambers)
 and from structures to conditions. Because the chambers of a structure were technical replicates of one culture,
-every comparison between cycle periods was a comparison between structures with n equal to the number of periods,
+every comparison between periods was a comparison between structures with n equal to the number of periods,
 and every error bar of the oscillation data is a chamber error bar of one structure. Comparisons between the two
 media of a static chip were made over the chambers of that chip.
 
@@ -145,7 +147,7 @@ chamber at each time point. Both were applied to the cell area, the eccentricity
 to µ_area. The robustness of budding was quantified at the single-cell level as R(t) of the event-based rate
 µ_event over the budding intervals of a mother (mothers with at least three intervals) and as R(p) of the
 budding rate per mother across the mothers of a chamber. Every robustness metric was averaged per chamber and
-evaluated against the cycle period and against the controls of the structure in the same way as the readouts
+evaluated against the half-cycle period and against the controls of the structure in the same way as the readouts
 (Section 2.5.6). For the pullulan knockout strain, the agreement of the control chambers within a structure was
 quantified as the coefficient of variation of the chamber-median area over the three feast (or famine) chambers,
 as the temporal coefficient of variation of the frame median after removal of the linear time trend, and as the
@@ -155,7 +157,7 @@ structures of the pullulan-producing strains.
 ### 2.5.6 Statistical Analysis
 
 All aggregations, tests and figures were produced within the Python pipeline (pandas, NumPy, SciPy,
-Matplotlib). Trends against the cycle period were quantified by the Spearman rank correlation ρ over the
+Matplotlib). Trends against the half-cycle period were quantified by the Spearman rank correlation ρ over the
 structures of a series, with n equal to the number of periods (four to six); ρ is reported as an effect size, since
 with six periods a |ρ| of 0.83 is required for p < 0.05. To separate an effect of the period from an effect of
 the structure, the constant-medium control chambers of the same structures, which cannot respond to the period,

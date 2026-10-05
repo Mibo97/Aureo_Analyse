@@ -220,19 +220,21 @@ Statische Daten und PKO-Daten landen in denselben Präfixen unter
 
 ## Abtastung: die Oszillation ist eine Behandlung, keine Messgröße
 
-Die Spalte `osc_freq` enthält trotz ihres Namens die **Periode in Minuten**
-(0.75 … 24), keine Frequenz. Bei `MIN_PER_FRAME = 10` liegt die kürzeste
-auflösbare Periode (Nyquist) bei **20 min** — fünf der sechs Bedingungen liegen
-darunter, die sechste nur knapp darüber:
+Die Spalte `osc_freq` enthält trotz ihres Namens das **Schaltintervall des
+Mediums in Minuten** (0.75 … 24), also die **Halbzyklus-Periode**, keine Frequenz;
+eine volle Feast/Famine-Periode ist doppelt so lang (1.5 … 48 min). Bei
+`MIN_PER_FRAME = 10` liegt die kürzeste auflösbare volle Periode (Nyquist) bei
+**20 min** — vier der sechs Intervalle liegen darunter, 12 min ist grenzwertig,
+24 min aufgelöst:
 
-| Periode | Zyklen pro Frame | Zyklen in 20 h Oszillation | auflösbar? |
-| --- | --- | --- | --- |
-| 0.75 min | 13.3 | 1600 | nein |
-| 1.5 min | 6.7 | 800 | nein |
-| 3 min | 3.3 | 400 | nein |
-| 6 min | 1.7 | 200 | nein |
-| 12 min | 0.8 | 100 | nein |
-| 24 min | 0.4 | 50 | grenzwertig (2.4 Frames/Zyklus) |
+| Schaltintervall (Halbzyklus) | volle Periode | Zyklen pro Frame | Zyklen in 20 h Oszillation | auflösbar? |
+| --- | --- | --- | --- | --- |
+| 0.75 min | 1.5 min | 6.7 | 800 | nein |
+| 1.5 min | 3 min | 3.3 | 400 | nein |
+| 3 min | 6 min | 1.7 | 200 | nein |
+| 6 min | 12 min | 0.8 | 100 | nein |
+| 12 min | 24 min | 0.4 | 50 | grenzwertig (2.4 Frames/Zyklus) |
+| 24 min | 48 min | 0.2 | 25 | ja (4.8 Frames/Zyklus) |
 
 Daraus folgen zwei Dinge, die in die Methodenbeschreibung gehören:
 
@@ -547,10 +549,11 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
   gesamten übergebenen Datensatz gebildet — R-Werte aus `analysis_output/`,
   `static/`, `pko/` und `no_qc/` dürfen **nicht** gegeneinander gelesen werden.
   Der PKO-Vergleich benutzt deshalb gewöhnliche Kammer-Statistiken statt R.
-* R(t) ist für die **oszillierenden** Bedingungen alias-konfundiert (der
-  Alias-Beitrag wächst mit der Periode, in Richtung des erwarteten Effekts)
-  und bekommt dort keinen Trendtest; für Konstant-Medium-Kontrollen ist R(t)
-  sauber.
+* R(t) ist für die **oszillierenden** Bedingungen vom Zyklus mitbestimmt, und
+  zwar je Intervall verschieden (Zufallsphase bei ≤ 6 min, Nyquist-nah bei
+  12 min, aufgelöster Zyklus bei 24 min); ein R(t)-Trend der Oszillationskammern
+  allein ist deshalb nicht interpretierbar, gegen die Kontrollen derselben
+  Struktur (konstantes Medium, kein Zyklus) bleibt er lesbar (`40_*_control_trend.csv`).
 * `fit_is_reliable` (R² ≥ 0.5) verzerrt flache Bedingungen (NegCtrl) nach
   oben — der Filter behält dort nur Tracks, in denen Rauschen wie ein Trend
   aussieht. `compute_control_bracket()` und `12_area_growth_rate_all.pdf`

@@ -558,6 +558,19 @@ control lines, no bracket-score row. The bracket score and its trend stay in `*_
 area, µ_area, eccentricity, budding rate, µ_bud) and `50_control_trend_summary_sensors.pdf` (the four sensor
 ratios), from the unchanged `50_control_trend_summary.csv`. Synthetic run exit 0.
 
+## 6q. The period is the half-cycle (2026-10-05)
+
+`osc_freq` (0.75 to 24 min) is the switching interval of the medium, i.e. the half-cycle period; a full
+feast/famine cycle lasts twice as long. Nothing numeric changes (every test is monotone in the period), but the
+labels now say "half-cycle period [min]", the figure titles "one structure per interval", and the sampling
+statement is corrected: at 10 min per frame the full periods of the intervals 0.75 to 6 min (1.5 to 12 min) lie
+below the Nyquist limit of 20 min, 12 min is marginal (24 min, 2.4 frames per cycle) and 24 min is resolved
+(48 min, 4.8 frames per cycle), so four of six Glc and three of four pH intervals are unresolved, not five and
+three. `config.py` logs unresolved and marginal intervals separately. The R(t) alias caveat is restated: the
+cycle's contribution to the temporal variance differs per interval (random phase, Nyquist-near, resolved), so
+an R(t) trend of the oscillation chambers alone is not interpretable; against the controls it is. Results
+chapter 3.2.1 and 3.4, methods rewrite 2.5.3, data story 1.1 and 1.3, README and overview updated.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

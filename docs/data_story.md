@@ -41,7 +41,7 @@ one culture, does not repeat it.
 | organism, imaging | *Aureobasidium pullulans*, microfluidic chambers, one frame per 10 min, 133 frames in the standard run (about 22 h; 13 to 136 in the tables, one chamber broke off after 13 frames); 0.0733 µm per px, a blastoconidium of 20 µm² is 3,700 px² |
 | segmentation, tracking | Cellpose `cpsam`, flow 0.4, cell probability 0 (`imaging/pipeline_template_v12.yaml`); tracking on the raw labels before any filtering, the mother of a new object from the mask it touches (`imaging/cellpose_pipeline_v12.py`, `imaging/track_labels.py`) |
 | strains | WT and four biosensor strains: BSA (`ratio_Queen-2m`), BSG (`ratio_GlyRNA`), BSO (`ratio_OxPro`), BSPH (`ratio_pHluorin`); PKO = no pullulan |
-| oscillation types | Glc and pH switching; periods 0.75, 1.5, 3, 6, 12, 24 min (Glc; WT lacks 24) and 0.75, 1.5, 6, 24 min (pH) |
+| oscillation types | Glc and pH switching; the "period" of a structure is the switching interval of the medium, i.e. the half-cycle period (`osc_freq`): 0.75, 1.5, 3, 6, 12, 24 min (Glc; WT lacks 24) and 0.75, 1.5, 6, 24 min (pH); a full feast/famine cycle lasts twice as long (1.5 to 48 min) |
 | one structure | one period; 5 oscillation chambers, 3 constant-feast (PosCtrl) and 3 (sometimes 4) constant-famine (NegCtrl) chambers on several arrays; `replicate` is the array index, `chamber` the position (A1/A2 feast, A13/A14 famine, A3 to A12 switching) |
 | one physical chip | 2 or 3 structures = 2 or 3 periods, one pre-culture, one day (`culture`) |
 | oscillation and PKO total | 50 structures, 547 chambers (8 to 12 per structure), 20 cultures |
@@ -69,11 +69,14 @@ The pipeline calls a structure `chip` in every table and figure. `culture` is th
 
 ### 1.3 The sampling limit
 
-Ten-minute frames resolve periods of 20 min and longer. Five of the six Glc periods and three of the four pH
-periods lie below that. Single cycles are not observable; apparent periodicity in the time series is an
-alias. The pipeline therefore reads only cumulative quantities: the endpoint of a chamber (`13_`), the budding
-rate over the sparse window (`21_`), and the robustness R(p) (`40_Rp_*`). The time series (`10_`, `30_`,
-`31_`) are shown as drift over hours, never as cycles. (`config.py` logs the unresolved periods at every run.)
+Ten-minute frames resolve full periods of 20 min and longer. A full feast/famine cycle is twice the switching
+interval, so the intervals 0.75 to 6 min (full periods 1.5 to 12 min), four of the six Glc intervals and three of
+the four pH intervals, lie below that; the 12-min interval is at the limit (full period 24 min, 2.4 frames per
+cycle) and the 24-min interval is resolved (48 min, 4.8 frames per cycle). For the short intervals single cycles
+are not observable, and apparent periodicity in their time series is an alias. The pipeline therefore reads
+cumulative quantities for all intervals alike: the endpoint of a chamber (`13_`), the budding rate over the sparse
+window (`21_`), µ_bud (`24_`) and the robustness metrics (`40_`). The time series (`10_`, `30_`, `31_`) are shown
+as drift over hours, never as cycles. (`config.py` logs the unresolved and marginal intervals at every run.)
 
 ---
 
@@ -488,10 +491,11 @@ least (R(t) −0.21, R(p) −0.73, values near zero). The control-trend classifi
 combinations (21 metrics x series): 60 no trend, 35 structure effects, 10 not robust, 9 period effects, five of
 them in BSA/Glc (R(p) of area, eccentricity, µ_area and budding rate per mother, R(t) of µ_event: with longer
 periods that series gets more homogeneous in size, growth and budding, more stable in the budding rhythm, and more
-heterogeneous in shape), the same picture as the 58 readout rows of section 5. The R(t) caveat: an R(t) trend of
-the oscillation chambers alone can be an alias artefact (sampling below Nyquist, largest at the longest period);
-against the controls it stays readable, and the one R(t) period effect of the area (WT/Glc) runs towards more
-robustness with the period, against the alias direction.
+heterogeneous in shape), the same picture as the 58 readout rows of section 5. The R(t) caveat: the cycle itself
+contributes to the temporal variance of the oscillation chambers, and differently per interval (a random phase of
+the cycle at intervals up to 6 min, near the Nyquist limit at 12 min, a resolved cycle at 24 min), so an R(t)
+trend of the oscillation chambers alone is not interpretable; against the controls, which see no cycle, it stays
+readable.
 
 Static context: R(t) of the area −0.18 in minimal and −0.39 in complex medium (the growing cells), R(p) −0.47 and
 −0.51.
@@ -517,7 +521,7 @@ to the period.
   `95_..._control_chambers.pdf` (every control chamber within every structure), `95_..._timeseries.pdf`,
   `95_..._raw_channels.pdf`, with `95_..._summary_per_replicate.csv`: no clear difference for any sensor.
 - Appendix: `30_<channel>_over_time_<osc_type>.pdf`, `31_ratio_<sensor>_over_time_<osc_type>.pdf` (drift over
-  hours; cycles are below the sampling limit), `40_Rp_ratio_*.pdf`, `40_Rt_population_ratio_*.pdf`.
+  hours; single cycles are not resolved for intervals up to 6 min), `40_Rp_ratio_*.pdf`, `40_Rt_population_ratio_*.pdf`.
 
 ---
 

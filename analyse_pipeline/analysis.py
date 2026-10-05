@@ -268,7 +268,7 @@ def plot_n_tracks_overview(
             if j == 0:
                 ax.set_ylabel("number of tracks")
             if i == len(osc_types) - 1:
-                ax.set_xlabel("cycle period [min]")
+                ax.set_xlabel("half-cycle period [min]")
 
     handles = [Patch(label=ctrl_labels.get(ct, ct), **_fill(ct, INK_SOFT)) for ct in ctrl_types]
     legend_below(fig, handles, ncol=len(handles), y=0.0)
@@ -437,7 +437,7 @@ def plot_metric_over_time_by_frequency(
     if ref_agg is not None:
         handles += [Line2D([], [], color=INK_SOFT, linewidth=1.3, linestyle=CONTROL_LINESTYLES[ct],
                            label=CONTROL_LABELS[ct]) for ct in ("PosCtrl", "NegCtrl")]
-    title = ("cycle period [min] (light = short, dark = long; hue = strain)" if by_period else x_col.replace("_", " "))
+    title = ("half-cycle period [min] (light = short, dark = long; hue = strain)" if by_period else x_col.replace("_", " "))
     legend_below(fig, handles, ncol=min(len(handles), 8), y=0.0, title=title)
     fig.suptitle(f"{ylabel or value_col} over time; band = ± SEM over {band_unit}", fontsize=9.5, y=1.0)
     finish(fig, out_path, logger)

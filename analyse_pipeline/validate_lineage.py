@@ -535,7 +535,7 @@ def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
         ax.set_xticks(range(len(order_f)))
         ax.set_xticklabels([str(o) for o in order_f], rotation=30 if len(order_f) > 4 else 0)
         ax.set_ylim(0, 1.02)
-        ax.set_xlabel("cycle period [min]" if str(facet).lower() != "static" else "chip family / medium")
+        ax.set_xlabel("half-cycle period [min]" if str(facet).lower() != "static" else "chip family / medium")
         if ax is axes[0]:
             ax.set_ylabel("assigned bud candidates (fraction)")
         panel_title(ax, str(facet) if facet else "all data")

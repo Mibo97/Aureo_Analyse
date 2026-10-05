@@ -206,7 +206,7 @@ def dedupe_handles(axes) -> tuple[list, list]:
     return list(seen.values()), list(seen.keys())
 
 
-AXIS_LABELS = {"osc_freq": "cycle period [min]", "medium": "medium", "chip_family": "chip family",
+AXIS_LABELS = {"osc_freq": "half-cycle period [min]", "medium": "medium", "chip_family": "chip family",
                "biosensor": "strain", "condition_type": "chamber type"}
 
 

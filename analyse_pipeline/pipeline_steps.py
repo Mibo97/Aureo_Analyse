@@ -516,17 +516,17 @@ def step_10_growth(ctx: PipelineContext) -> None:
 
 
 def step_13_endpoint(ctx: PipelineContext) -> None:
-    """Kumulativer Endzustand gegen die Zyklusperiode (+ Spearman-Trendtest)."""
+    """Kumulativer Endzustand gegen die Halbzyklus-Periode (+ Spearman-Trendtest)."""
     cells = ctx.cells
     output_dir = ctx.output_dir
 
     # ==================================================================
     # 13. Kumulativer Endzustand gegen die Periode
     #
-    # Die einzige Auswertungsform, die bei dieser Abtastung interpretierbar
-    # ist: einzelne Zyklen liegen unter dem Nyquist-Limit (siehe config.py),
-    # ein Zyklusverlauf ist also nicht beobachtbar - die Wirkung ueber
-    # Stunden dagegen schon. Vorher gab es dafuer keine Abbildung: 10_/30_/31_
+    # Die Auswertungsform, die bei dieser Abtastung fuer ALLE Intervalle
+    # interpretierbar ist: die kurzen Zyklen (Schaltintervall <= 6 min) liegen
+    # unter dem Nyquist-Limit (siehe config.py), ein Zyklusverlauf ist dort
+    # nicht beobachtbar - die Wirkung ueber Stunden dagegen schon. Vorher gab es dafuer keine Abbildung: 10_/30_/31_
     # sind Zeitreihen, 40_ sind Varianzmasse, und 50_summary_statistics.csv
     # bekommt nur intensity_cols uebergeben, sieht die ratio_*-Spalten also
     # nie. Fuer die Sensor-Daten ist das hier die erste kumulative Auswertung
@@ -713,7 +713,7 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
                 score=score[score["osc_type"] == osc_type] if not score.empty else None,
                 score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
                 ylabel="buds per mother-hour\n(sparse-phase window)",
-                title="budding rate in the sparse-phase window vs cycle period — one chip per period",
+                title="budding rate in the sparse-phase window vs half-cycle period — one structure per interval",
             )
     else:
         plot_point_errorbar(
@@ -741,9 +741,9 @@ def _growth_from_budding_outputs(ctx: PipelineContext) -> None:
     per_chamber.to_csv(output_dir / "24_growth_from_budding_per_chamber.csv", index=False)
     for value_col, stem, ylabel, title in (
         ("mu_bud", "24_growth_from_budding", "µ_bud [h⁻¹]\n(births per cell-hour, sparse window)",
-         "specific growth rate from budding vs cycle period — one chip per period"),
+         "specific growth rate from budding vs half-cycle period — one structure per interval"),
         ("immigration_per_cell_h", "24_immigration", "washed-in cells per cell-hour\n(new tracks without a parent mask)",
-         "immigration into the chambers vs cycle period — one chip per period"),
+         "immigration into the chambers vs half-cycle period — one structure per interval"),
     ):
         if per_chamber[value_col].isna().all():
             logger.info("%s: Spalte '%s' leer (kein link_type in den Tabellen) - uebersprungen.", stem, value_col)
@@ -940,11 +940,12 @@ def _robustness_period_outputs(ctx: PipelineContext, per_chamber: pd.DataFrame, 
     Tabellen = label (z.B. 'R(t) population area'), damit 50_robustness_control_trend_summary die Masse
     auseinanderhaelt.
 
-    Vorbehalt fuer R(t) gegen die Periode: ein Frame tastet eine Oszillation unter dem Nyquist-Limit bei
-    zufaelliger Phase ab, der Alias-Beitrag zur zeitlichen Varianz ist bei der laengsten Periode am
-    groessten. Ein R(t)-Trend der Oszillationskammern ALLEIN ist deshalb nicht interpretierbar; gegen die
-    Kontrollen (die kein Aliasing haben) bleibt er lesbar, und ein 'period effect' von R(t) in Richtung
-    sinkender Robustheit mit der Periode kann ein Alias-Artefakt sein - so steht es in der Datengeschichte."""
+    Vorbehalt fuer R(t) gegen die Periode: der Beitrag des Zyklus zur zeitlichen Varianz haengt vom
+    Schaltintervall ab - bei Intervallen bis 6 min trifft ein Frame eine zufaellige Phase des Zyklus, bei
+    12 min liegt die volle Periode (24 min) am Nyquist-Limit, bei 24 min (volle Periode 48 min, 4.8 Frames je
+    Zyklus) wird der Zyklus aufgeloest. Ein R(t)-Trend der Oszillationskammern ALLEIN ist deshalb nicht
+    interpretierbar; gegen die Kontrollen (die keinen Zyklus sehen) bleibt er lesbar - so steht es in der
+    Datengeschichte."""
     output_dir = ctx.output_dir
     if per_chamber is None or per_chamber.empty or per_chamber["value"].isna().all():
         logger.info("%s: keine Kammerwerte - uebersprungen.", stem)
@@ -980,7 +981,7 @@ def _robustness_period_outputs(ctx: PipelineContext, per_chamber: pd.DataFrame, 
                 trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
                 score=score[score["osc_type"] == osc_type] if not score.empty else None,
                 score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
-                ylabel=ylabel, title=f"{label} vs cycle period — one structure per period, with its controls",
+                ylabel=ylabel, title=f"{label} vs half-cycle period — one structure per interval, with its controls",
             )
     else:
         plot_point_errorbar(

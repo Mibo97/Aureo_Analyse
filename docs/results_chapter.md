@@ -18,7 +18,7 @@ formed the poles of the feast/famine oscillations, measured in a conventional mi
 microfluidic data set and the limit that the cell density set to single-cell tracking are described next, because
 they define which single-cell readouts could be evaluated and over which part of a cultivation (3.2). The
 comparison of complex and minimal medium under static conditions follows (3.3), then the oscillation
-experiments: growth, morphology and their robustness against the cycle period (3.4), the biosensor readouts
+experiments: growth, morphology and their robustness against the half-cycle period (3.4), the biosensor readouts
 (3.5), and the
 behaviour of the constant-medium control chambers on the same structures (3.6). The chapter closes with the
 pullulan knockout strain (3.7).
@@ -111,21 +111,23 @@ and y_max column change to OD₆₀₀.]*
 
 ### 3.2.1 Size of the data set
 
-The oscillation experiments comprised 50 microfluidic structures, each carrying one cycle period with five
-oscillation chambers and its own constant-feast (PosCtrl) and constant-famine (NegCtrl) chambers, on 20 physical
-chips (Table 4). Every structure was one period of one strain and one oscillation type; a physical chip carried
-two or three structures and was inoculated from one preculture on one day. The five oscillation chambers of a
+The oscillation experiments comprised 50 microfluidic structures, each carrying one switching interval of the
+medium with five oscillation chambers and its own constant-feast (PosCtrl) and constant-famine (NegCtrl) chambers, on 20 physical
+chips (Table 4). Every structure was one interval of one strain and one oscillation type; a physical chip carried
+two or three structures and was inoculated from one preculture on one day. The interval is the half-cycle
+period: the medium was switched every 0.75 to 24 min, so a full feast/famine cycle lasted 1.5 to 48 min. It is
+called the period of a structure below. The five oscillation chambers of a
 period therefore were technical replicates of one culture, and every comparison between periods was a comparison
 between structures. The static cultivations comprised 17 chambers on two chips. Images were acquired every
 10 min for 22 h (133 frames in the standard run; one chamber broke off after 13 frames), with a pixel size of
 0.0733 µm, so that a blastoconidium of 20 µm² covered about 3,700 px².
 
-**Table 4: The microfluidic data set.** One structure carries one cycle period; a culture is one physical chip
+**Table 4: The microfluidic data set.** One structure carries one switching interval (half-cycle period); a culture is one physical chip
 inoculated from one preculture on one day. Cell tracks are counted after the cell filter (Section 2.5.2). Budding
 events are the accepted mother-bud assignments in the sparse-phase window (Section 2.5.4).
 [`00_chip_overview.csv`, `00_cell_filter.csv`, `20_budding_events.csv`]
 
-| strain | oscillation type | periods (min) | structures | chambers | cultures |
+| strain | oscillation type | half-cycle periods (min) | structures | chambers | cultures |
 | --- | --- | --- | --- | --- | --- |
 | WT | Glc | 0.75, 1.5, 3, 6, 12 | 5 | 55 | 2 |
 | WT | pH | 0.75, 1.5, 6, 24 | 4 | 44 | 2 |
@@ -326,9 +328,13 @@ as a small point beside the mean, complex medium filled and minimal medium hollo
 [`static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf`,
 `static/24_growth_from_budding_vs_medium.pdf`; the per-chamber points appear with the next pipeline run]
 
-## 3.4 Oscillations: growth, morphology and their robustness against the cycle period
+## 3.4 Oscillations: growth, morphology and their robustness against the half-cycle period
 
-Robustness under oscillation was read in three ways: from the stability of the readouts across the cycle periods
+The half-cycle periods of 0.75 to 6 min are shorter than the 10-min frame interval, so single cycles are not
+resolved there; the 12-min half-cycle (full period 24 min) is at the sampling limit and the 24-min half-cycle
+(48 min) is resolved with 4.8 frames per cycle. All readouts below are therefore cumulative over hours and do
+not describe the course of a cycle. Robustness under oscillation was read in three ways: from the stability of
+the readouts across the half-cycle periods
 against the trends of the constant-medium controls, from the comparison of the oscillation chambers with the
 controls of their own structure, and from the temporal and population robustness metrics R(t) and R(p)
 (Section 2.5.5).
@@ -342,7 +348,7 @@ as a test. In addition, every oscillation value was expressed relative to the tw
 bracket score (0 = as under constant famine, 1 = as under constant feast; `*_bracket_score.csv`), which is
 undefined where the two controls did not separate beyond the chamber scatter.
 
-**Figure 6: Readouts of the Glc oscillation series against the cycle period.** (A) Buds per mother-hour in the
+**Figure 6: Readouts of the Glc oscillation series against the half-cycle period.** (A) Buds per mother-hour in the
 sparse-phase window, (B) births per cell-hour (µ_bud) and (C) endpoint cell area, one panel per strain; filled
 circles: oscillation chambers (mean ± SEM over chambers), triangles: feast control (filled, up) and famine control
 (hollow, down) of the same structure. ρ, p and n in the panel titles: Spearman correlation over structures. The pH series are shown in Appendix Figure A5.
@@ -447,7 +453,7 @@ ten series. [`40_<metric>_<readout>_per_chip.csv`, `51_osc_vs_controls.csv`,
 | R(p) | budding rate per mother | −2.018 | −1.984 | −1.921 | 25 | 0.95 | 1 |
 | R(t), single cell | µ_event (interbud rate) | −1.115 | −1.132 | −0.999 | 29 of 47 | 0.022 | 1 |
 
-## 3.5 Biosensor readouts against the cycle period
+## 3.5 Biosensor readouts against the half-cycle period
 
 The four biosensor strains reported their ratiometric signal (sensor over reference channel) at the endpoint of
 every chamber (Figure 7, Appendix Figure A8). The ratios lay at 0.10 to 0.16 for the ATP sensor (BSA,
@@ -465,7 +471,7 @@ the Glc series (+0.89); the QUEEN-2m ratio of BSA showed no trend. In every one 
 chambers of the same structures rose with the period as well (OxPro +0.94 and +1.00, pHluorin +0.89 and +1.00,
 Table 6), with the exception of Gly-RNA, whose trend did not survive the subtraction of its controls (3.6).
 
-**Figure 7: Biosensor ratios of the Glc oscillation series against the cycle period.** (A) OxPro ratio of BSO,
+**Figure 7: Biosensor ratios of the Glc oscillation series against the half-cycle period.** (A) OxPro ratio of BSO,
 (B) sfpHluorin ratio of BSpH; layout as in Figure 6. [`13_endpoint_vs_period_ratio_OxPro_Glc.pdf`,
 `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf`]
 
@@ -507,7 +513,7 @@ against the period, and each of the 58 readout-by-series combinations was classi
 that the oscillation chambers trended (|ρ| ≥ 0.6), that no control type trended in the same direction, and that
 the difference trended as well.
 
-**Table 6: Trends of the oscillation chambers and of their controls against the cycle period.** Spearman ρ
+**Table 6: Trends of the oscillation chambers and of their controls against the half-cycle period.** Spearman ρ
 over structures for all readout-by-series combinations in which the oscillation chambers trended with |ρ| ≥ 0.6;
 "strongest control" is the control type (feast, famine or their mean) with the largest |ρ|; "difference" is
 oscillation chambers minus control mean. Residual: the difference trends in the same direction with |ρ| ≥ 0.6
