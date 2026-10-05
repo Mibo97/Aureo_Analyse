@@ -206,7 +206,7 @@ alphabetische Sortierung im Ordner der inhaltlichen Reihenfolge entspricht:
 | `30_`–`31_` | Sensor-Intensitäten und Ratios über die Zeit |
 | `40_` | Robustheit R(t)/R(p) (Fläche, Exzentrizität, Sensor-Ratios; R(p) von µ_area und der Knospungsrate je Mutter, R(t) von µ_event je Mutter): je Maß das Kammer-Mittel durch dieselbe Chip-Logik wie `13_`/`21_`/`24_` (`_per_chip.csv`, `_summary.csv`, `_spearman.csv`, `_bracket_score.csv`, `_control_trend.csv`, `_within_culture.csv`, `_vs_period_<osc_type>.pdf` mit den Kontrollen der Struktur); dazu die rohen Tabellen je Kammer/Zelle, `_aggregated.csv` und die Kontroll-Konsistenz. R(t) Einzelzelle nur aus Zellen mit ≥ `ROBUSTNESS_MIN_FRAMES_SINGLE_CELL` Frames, µ_event aus Müttern mit ≥ `ROBUSTNESS_MIN_INTERVALS_MU_EVENT` Intervallen |
 | `24_` | Wachstumsrate aus Knospungen: `24_growth_from_budding_*` (µ_bud = Geburten je Zellstunde im Sparse-Phase-Fenster; dieselben Tabellen und dieselbe Abbildung wie `21_`), `24_immigration_*` (angespuelte Zellen je Zellstunde), `24_mu_bud_vs_mu_area.pdf` (Population gegen Einzelzelle). `11_specific_growth_rate*` bleibt als Interbud-Rate, ist aber keine Wachstumsrate (siehe `growth_from_budding.py`) |
-| `50_` | Zusammenfassungstabelle; `50_robustness_control_trend_summary.csv/.pdf` = dieselbe Kontroll-Trend-Zusammenfassung für die Robustheitsmaße (aus `40_*_control_trend.csv`); `51_osc_vs_controls_per_structure.csv` / `51_osc_vs_controls.csv` / `51_osc_vs_controls_vs_period.csv` / `51_osc_vs_controls*.pdf` = Oszillationskammern gegen die Kontrollen ihrer Struktur, gepaart über Strukturen (Wilcoxon; Verhältnis bzw. Differenz je Readout und Robustheitsmaß, gesamt, je Oszillationstyp und Stamm; hängt der Effekt von der Periode ab?); `50_control_trend_summary.csv` mit `50_control_trend_summary_growth.pdf` / `_sensors.pdf` = **die Abbildung zum Kontroll-Trend** (Wachstum/Morphologie und Sensor-Ratios getrennt): je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`, `24_`) |
+| `50_` | Zusammenfassungstabelle; `50_robustness_control_trend_summary.csv/.pdf` = dieselbe Kontroll-Trend-Zusammenfassung für die Robustheitsmaße (aus `40_*_control_trend.csv`); `51_osc_vs_controls_per_structure.csv` / `51_osc_vs_controls.csv` / `51_osc_vs_controls_vs_period.csv` / `51_osc_vs_controls*.pdf` = Oszillationskammern gegen die Kontrollen ihrer Struktur, gepaart über Strukturen (Wilcoxon; Verhältnis bzw. Differenz je Readout und Robustheitsmaß, gesamt, je Oszillationstyp und Stamm; hängt der Effekt von der Periode ab?); `50_control_trend_summary.csv` mit `50_control_trend_summary.pdf` (alle Readouts; `_growth.pdf` / `_sensors.pdf` dieselbe Abbildung geteilt) = **die Abbildung zum Kontroll-Trend**: je Readout und Serie der Spearman der Oszillationskammern gegen den der stärksten Kontrolle derselben Strukturen (aus `12_`, `13_`, `21_`, `24_`) |
 | `90_`–`92_` | `90_morphology_scatter.pdf` = Morphologie je Zelle (mittlere Fläche in µm² gegen mittlere Exzentrizität, Tracks ≥ `MORPHOLOGY_MIN_FRAMES` Frames; Hilfslinien `MORPHOLOGY_LARGE_UM2` / `MORPHOLOGY_ROUND_ECC`, Anteil groß-runder Zellen im Paneltitel; Oszillation je Stamm, statisch je Chip-Familie × Medium); `91_`/`92_` = Einzelzell- und Mutter-Trajektorien (Anhang) |
 | `95_` | Anhang: Sensor-Controls (PosCtrl vs. NegCtrl pro Biosensor) |
 | `60_`–`61_` | **Nur in `pko/`**: Produzenten-gegen-PKO-Vergleich (siehe unten) |
@@ -480,7 +480,7 @@ Erzeugt in `analysis_output/lineage_validation/`:
 | Datei | Frage, die sie beantwortet |
 | --- | --- |
 | `lv_01_d_over_r_distribution.pdf` | Lagen die Buds komfortabel im Suchradius, oder hat die Toleranz sie gerade noch hereingeholt? |
-| `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Bedingungen konstant? Nenner: Kandidaten, die das Größenkriterium bestehen |
+| `lv_02_detection_rate.pdf` + `_per_chamber.csv` | Ist die Erkennungsrate über die Perioden konstant? Nenner: Kandidaten, die das Größenkriterium bestehen; die Abbildung zeigt die Oszillationsserien (Glc, pH), die statischen Chips stehen nur in der Tabelle |
 | `lv_03_detection_rate_kruskal.csv` | Kruskal-Wallis dazu: p < 0.05 = Erkennung mit der Bedingung konfundiert; `spearman_rho_vs_period` = läuft die Erkennung *monoton* mit der Periode (die Richtung, die einen Trend vortäuscht)? |
 | `lv_03_assignment_ambiguity.pdf` | Wie oft kamen mehrere Mütter in Frage (greedy Nearest-Neighbour)? |
 | `lv_04_tolerance_sweep.pdf` | Sitzt `tolerance_px` auf einem Plateau oder auf einer Flanke? |
@@ -540,8 +540,10 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
 * `summarise_growth_rate()` und `summarise_area_growth()` (`11_*_summary.csv`,
   `12_*_summary_*.csv`) aggregieren weiterhin über **einzelne Zellen/Intervalle**
   — `sd_mu`/`sd_mu_area` beschreiben die Streuung über Zellen.
-* Die Mann-Whitney-Sternchen in Panel A laufen über Zellen bzw. Mutterzellen
-  und sind rein deskriptiv; die Abbildung sagt das in der Fußnote.
+* Die Sternchen in Panel A (`21_panel_a_violin.pdf`) sind ein Mann-Whitney-U über **Strukturen**
+  (Median je Struktur und Stamm, jeder Stamm gegen den WT, nur bei ≥ 3 Strukturen je Gruppe); die
+  Violinen selbst zeigen einen Wert je Zelle (Spurmittel, Spuren ≥ 10 Frames) bzw. je Mutter. Ein Test
+  über Zellen hing bei zehntausenden Zellen allein an n.
 * Spearman gegen die Periode läuft auf Chip-Mittelwerten (n = Perioden) und
   ist bei n ≤ 6 eine Effektstärke, kein Test. Die Stämme werden nicht als
   Replikate gepoolt.
@@ -563,7 +565,10 @@ stillschweigend geändert worden — die Entscheidung darüber ist eine fachlich
 
 **Einheiten & Proxys**
 
-* `area` in den Zelltabellen und Plots ist die rohe Cellpose-Fläche in **px²**.
+* `area` in den Zelltabellen ist die rohe Cellpose-Fläche in **px²**; die Abbildungen zeigen die
+  Fläche in **µm²** (`plot_style.AREA_SCALE_UM2` = `UM_PER_PX`², 1 px² = 0.00537 µm²), und die
+  Endpunkt-Tabellen `13_endpoint_*.csv` tragen für die Flächen-Zeilen zusätzlich `*_um2`-Spalten.
+  Schwellen (`CELL_MIN_MAX_AREA_PX` usw.) bleiben in px².
   Nur `area_growth.py` rechnet intern über `PX_TO_UM2` (1 µm = 13.63 px) in µm²
   um — das verschiebt nur den Achsenabschnitt des Fits, nicht µ_area selbst.
 * `eccentricity` ist **nicht** dasselbe wie die Circularity des Referenzpapers

@@ -4,6 +4,24 @@ Checklist for editing the Word file. The reference text for every passage that h
 `docs/results_chapter.md` (draft state of 2026-10-05, half-cycle wording, nine robustness metrics). Figure and
 table numbers below are those of the PDF; "draft" means the numbering of `docs/results_chapter.md`.
 
+## 0. Answers of 2026-10-05 and what followed
+
+| question | answer | done |
+| --- | --- | --- |
+| 1 Figure 5 | A: chip W65, complex medium; B: chip W65, minimal medium, the chamber of 3.3 | caption in the draft; the text sentence "only in the W109 chip in complex medium" contradicts A (W65), see 3.2.2 of the draft |
+| 2 Figure 6 stars | pipeline figure `21_panel_a_violin.pdf`: the stars were a Mann-Whitney U over object-frames (every frame of every cell), so every pair was "****" by n alone | pipeline changed: one value per cell, test over structures (median per structure, ≥ 3 per group), stated on the figure; caption in the draft |
+| 3 Figure 13 | merged, phase contrast, signal 1 (uvGFP for BSA/BSpH, YFP for OxPro, mTurquoise for Gly-RNA), signal 2 (GFP for BSA/BSpH, mCherry for BSO/BSG) | caption in the draft ("YPD" read as YFP) |
+| 4 Figure 15 | keep the combined figure | pipeline writes `50_control_trend_summary.pdf` again (growth readouts first, then sensors); the split pair stays for the appendix |
+| 5 Figure 9 | drop the static panel | `validate_lineage.py` plots the oscillation series only |
+| 6 Table 2 | drop the caption sentences | draft |
+| 7 Rensink | both papers exist | keys kept as they are; check each citation against the right paper |
+| 8 area axes | µm² | every area figure in µm², tables in px² plus `*_um2` columns in `13_endpoint_*.csv` |
+| 9 sensor robustness | drop the sentence in 3.6 | draft; the 3.5 paragraph and Table 9 marked optional |
+
+The draft `docs/results_chapter.md` now carries the thesis numbering (Figures 2 to 17, Tables 1 to 6) and
+captions for Figures 3, 5, 6, 8, 9, 12 and 13; the mapping table in section 2 below is therefore only needed for
+the Word file.
+
 ## 1. Coherence in short
 
 The argument of the chapter is intact and in the right order. What is not coherent yet is the apparatus around

@@ -515,6 +515,13 @@ def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
         order = natural_freq_sort(present)
     facet_col = "osc_type" if "osc_type" in per_chamber.columns else None
     facets = sorted(per_chamber[facet_col].dropna().unique()) if facet_col else [None]
+    # Die statischen Chips haben keine Periode; ihr Panel (Chip-Familie/Medium) traegt zur Frage
+    # "ist die Erkennungsrate ueber die Perioden konstant?" nichts bei und bleibt weg. Die Werte
+    # stehen weiterhin in lv_02_detection_rate_per_chamber.csv.
+    facets = [f for f in facets if str(f).lower() != "static"]
+    if not facets:
+        logger.info("plot_assignment_rate(): nur statische Daten - Abbildung uebersprungen (Tabelle bleibt).")
+        return
 
     fig, axes = plt.subplots(1, len(facets), figsize=(3.4 * len(facets) + 0.4, 3.1), squeeze=False, sharey=True)
     axes = axes[0]
@@ -535,7 +542,7 @@ def plot_assignment_rate(per_chamber: pd.DataFrame, out_path: Path,
         ax.set_xticks(range(len(order_f)))
         ax.set_xticklabels([str(o) for o in order_f], rotation=30 if len(order_f) > 4 else 0)
         ax.set_ylim(0, 1.02)
-        ax.set_xlabel("half-cycle period [min]" if str(facet).lower() != "static" else "chip family / medium")
+        ax.set_xlabel("half-cycle period [min]")
         if ax is axes[0]:
             ax.set_ylabel("assigned bud candidates (fraction)")
         panel_title(ax, str(facet) if facet else "all data")

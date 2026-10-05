@@ -46,7 +46,7 @@ COLUMN_LABELS: dict[str, str] = {
     "chamber": "Chamber",
     "frame": "Frame",
     "time_h": "Time [h]",
-    "area": "Cell area [px²]",
+    "area": "cell area [µm²]",
     "eccentricity": "Eccentricity (a.u.)",
     "solidity": "Solidity (a.u.)",
     "budding_ratio": "Budding ratio (buds/cell)",
@@ -313,6 +313,7 @@ def plot_metric_over_time_by_frequency(
     reference_cells: Optional[pd.DataFrame] = None,
     x_col: str = "osc_freq",
     facet_col: str = "osc_type",
+    scale: float = 1.0,
 ) -> None:
     """
     Zeitverlauf einer Metrik (z.B. Sensor-Intensität, Zellfläche), facettiert
@@ -339,6 +340,10 @@ def plot_metric_over_time_by_frequency(
     """
     group_cols = ["biosensor", facet_col, x_col, "time_h"]
     agg = _aggregate_over_replicates(df, value_col, group_cols)
+    # scale: Anzeige-Einheit (z.B. px² -> µm² fuer die Zellflaeche), erst NACH der Aggregation,
+    # damit die grosse Zelltabelle nicht kopiert wird.
+    if scale != 1.0:
+        agg[["mean", "sem"]] = agg[["mean", "sem"]] * scale
 
     if "chip" in df.columns:
         chips_per_condition = df.groupby(["biosensor", facet_col, x_col], dropna=False)["chip"].nunique()
@@ -364,6 +369,8 @@ def plot_metric_over_time_by_frequency(
             ref_agg = _aggregate_over_replicates(
                 ref, value_col, ["biosensor", facet_col, "condition_type", "time_h"]
             ).dropna(subset=["mean"])
+            if scale != 1.0 and not ref_agg.empty:
+                ref_agg[["mean", "sem"]] = ref_agg[["mean", "sem"]] * scale
             if ref_agg.empty:
                 ref_agg = None
 
@@ -514,7 +521,8 @@ def plot_morphology_scatter(
 
 
 def plot_single_cell_trajectories(
-    df: pd.DataFrame, value_col: str, out_path: Path, min_coverage: float = 0.8
+    df: pd.DataFrame, value_col: str, out_path: Path, min_coverage: float = 0.8,
+    scale: float = 1.0, ylabel: Optional[str] = None,
 ) -> None:
     """
     Einzelzell-Trajektorien für je eine Beispielkammer pro
@@ -576,14 +584,15 @@ def plot_single_cell_trajectories(
                 continue
             for _, track in sub.groupby("cell_uid"):
                 track = track.sort_values("time_h")
-                ax.plot(track["time_h"], track[value_col], alpha=0.45, linewidth=0.6, color=strain_color(biosensor))
+                ax.plot(track["time_h"], track[value_col] * scale, alpha=0.45, linewidth=0.6,
+                        color=strain_color(biosensor))
             panel_title(ax, f"{osc_type} | {freq} | {biosensor}")
             if i == len(osc_types) - 1:
                 ax.set_xlabel("Time [h]")
             if j == 0:
-                ax.set_ylabel(value_col)
+                ax.set_ylabel(ylabel or value_col)
 
-    fig.suptitle(f"{value_col}: single-cell trajectories (one example chamber per condition)", y=1.02)
+    fig.suptitle(f"{ylabel or value_col}: single-cell trajectories (one example chamber per condition)", y=1.02)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
