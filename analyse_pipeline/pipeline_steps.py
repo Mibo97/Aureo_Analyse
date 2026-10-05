@@ -53,6 +53,10 @@ from config import (
     FLUX_CONFIG,
     MU_MAX_THRESHOLD,
     ROBUSTNESS_VALUE_COLS,
+    UM_PER_PX,
+    MORPHOLOGY_MIN_FRAMES,
+    MORPHOLOGY_LARGE_UM2,
+    MORPHOLOGY_ROUND_ECC,
     ROBUSTNESS_MIN_FRAMES_SINGLE_CELL,
     ROBUSTNESS_MIN_INTERVALS_MU_EVENT,
     ENDPOINT_LAST_FRACTION,
@@ -1236,9 +1240,20 @@ def step_50_summary(ctx: PipelineContext) -> None:
         if parts:
             all_trends = pd.concat(parts, ignore_index=True)
             all_trends.to_csv(output_dir / "50_control_trend_summary.csv", index=False)
-            plot_control_trend_summary(all_trends, output_dir / "50_control_trend_summary.pdf")
+            # Zwei Abbildungen: Wachstum und Morphologie (Flaeche, µ_area, Exzentrizitaet, Knospungsrate,
+            # µ_bud) getrennt von den Sensor-Ratios, damit die Marker lesbar bleiben; die CSV bleibt eine.
+            is_sensor = all_trends["value_col"].astype(str).str.startswith("ratio_")
+            growth_order = {k: i for i, k in enumerate(["area", "mu_area", "eccentricity", "budding_rate_per_h", "mu_bud"])}
+            growth = all_trends[~is_sensor]
+            growth = (growth.assign(_o=growth["value_col"].astype(str).map(growth_order).fillna(99))
+                      .sort_values("_o", kind="stable").drop(columns="_o"))
+            if not growth.empty:
+                plot_control_trend_summary(growth, output_dir / "50_control_trend_summary_growth.pdf")
+            if is_sensor.any():
+                plot_control_trend_summary(all_trends[is_sensor], output_dir / "50_control_trend_summary_sensors.pdf")
             counts = all_trends["verdict"].astype(str).str.split(":").str[0].value_counts().to_dict()
-            logger.info("Kontroll-Trend-Zusammenfassung gespeichert: 50_control_trend_summary.csv/.pdf - %s", counts)
+            logger.info("Kontroll-Trend-Zusammenfassung gespeichert: 50_control_trend_summary.csv, "
+                        "_growth.pdf, _sensors.pdf - %s", counts)
 
         # -- Dieselbe Zusammenfassung fuer die Robustheitsmasse R(t)/R(p) (Schritt 40, 40_*_control_trend.csv):
         #    getrennt von den Readouts, damit die 58 Zeilen der Readout-Zusammenfassung stehen bleiben.
@@ -1279,7 +1294,13 @@ def step_90_appendix(ctx: PipelineContext) -> None:
     #     Mutter-Trajektorien - deskriptive Plausibilitäts-Checks ohne
     #     eigene quantitative Kennzahl, siehe Diskussion zur Restrukturierung.
     # ==================================================================
-    plot_morphology_scatter(cells, output_dir / "90_morphology_scatter.pdf")
+    # Morphologie je Zelle (Flaeche gegen Exzentrizitaet): Oszillation je Stamm, statisch je Chip-Familie x Medium.
+    plot_morphology_scatter(
+        cells, output_dir / "90_morphology_scatter.pdf",
+        facet_cols=("biosensor",) if ctx.x_col == "osc_freq" else ("chip_family", "medium"),
+        um_per_px=UM_PER_PX, min_frames=MORPHOLOGY_MIN_FRAMES, large_um2=MORPHOLOGY_LARGE_UM2,
+        round_ecc=MORPHOLOGY_ROUND_ECC,
+    )
 
     # Dieser Plot zeigt 'area', hing aber an intensity_cols - dadurch fehlte er
     # bei den statischen Daten komplett (Wildtyp, keine Fluoreszenzkanäle).

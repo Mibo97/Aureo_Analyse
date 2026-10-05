@@ -180,9 +180,10 @@ def plot_new_objects_vs_density(table: pd.DataFrame, out_path, max_objects: int,
     if t.empty:
         return
     has_lt = t["new_tracks_touching"].notna().any()
-    left = ([("new_tracks_touching_per_frame", "new track touching a tracked mask, or split from one", INK, True),
-             ("new_tracks_free_per_frame", "new track touching nothing", INK_MUTED, False)] if has_lt
-            else [("new_tracks_total_per_frame", "new tracks (tables without link_type)", INK, True)])
+    left = ([("new_tracks_touching_per_frame",
+              "new object touching an existing cell at first detection (bud candidate or mask fragment)", INK, True),
+             ("new_tracks_free_per_frame", "new object touching nothing (washed in)", INK_MUTED, False)] if has_lt
+            else [("new_tracks_total_per_frame", "new objects (tables without link_type)", INK, True)])
     right_col = "new_tracks_touching_per_object_frame" if has_lt else "new_tracks_total_per_object_frame"
     n_edges = int(np.ceil(np.log2(max(float(t["objects_per_frame"].max()), 2.0)))) + 2
     edges = 2.0 ** np.arange(0, n_edges)
@@ -213,8 +214,8 @@ def plot_new_objects_vs_density(table: pd.DataFrame, out_path, max_objects: int,
     ax.set_ylim(bottom=0)
     ax.axvline(max_objects, color=INK, linestyle="--", linewidth=1.0, label=f"sparse limit ({max_objects} objects)")
     ax.set_xlabel("objects per frame (median of the block)")
-    ax.set_ylabel("new tracks per frame")
-    panel_title(ax, f"{t['exp_id'].nunique()} chambers, blocks of {block_frames} frames")
+    ax.set_ylabel("new objects per frame")
+    panel_title(ax, f"new objects per frame against density\n{t['exp_id'].nunique()} chambers, blocks of {block_frames} frames")
 
     binned(ax2, right_col, INK, True, None)
     ax2.set_xscale("log")
@@ -222,10 +223,10 @@ def plot_new_objects_vs_density(table: pd.DataFrame, out_path, max_objects: int,
     ax2.set_ylim(bottom=0)
     ax2.axvline(max_objects, color=INK, linestyle="--", linewidth=1.0)
     ax2.set_xlabel("objects per frame (median of the block)")
-    ax2.set_ylabel("new touching tracks\nper object and frame" if has_lt else "new tracks\nper object and frame")
-    panel_title(ax2, "new touching tracks per object and frame")
+    ax2.set_ylabel("touching new objects\nper existing object and frame" if has_lt else "new objects\nper existing object and frame")
+    panel_title(ax2, "per existing object\n(flat = proportional to density)")
     handles, labels = dedupe_handles([ax])
-    legend_below(fig, handles, labels, ncol=2 if len(handles) > 2 else len(handles), y=0.0)
+    legend_below(fig, handles, labels, ncol=1, y=0.0)
     finish(fig, out_path, logger)
 
 

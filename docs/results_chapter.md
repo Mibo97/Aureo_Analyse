@@ -107,7 +107,7 @@ files; µ_max and the lag time are unaffected by a linear calibration, y_max sca
 readings with the corresponding scattered-light values, I add the calibration to the plot script and the y axis
 and y_max column change to OD₆₀₀.]*
 
-## 3.2 The microfluidic data set and the limit set by cell density
+## 3.2 The microfluidic data set, the cells in it, and the limit set by cell density
 
 ### 3.2.1 Size of the data set
 
@@ -149,44 +149,110 @@ chamber 5.7 %), since the removed tracks were mostly single-frame objects of a f
 accounted for 432 tracks and 0.6 % of the object-frames. The debris-rich structure BSG/pH/6 min lost 52 % of its
 object-frames. 63,215 cell tracks with 950,203 object-frames remained.
 
-### 3.2.2 Track fragmentation and the sparse-phase window
+After exclusion of the objects at the chamber border, segmentation and tracking yielded 96,720 object tracks
+with 1,019,226 object-frames in the 564 chambers. The
+cell filter (at least two frames and a largest area of at least 1,500 px², i.e. 8 µm², and a phase contrast of at
+least 45 % of the structure median) removed 35 % of the tracks but only 6.8 % of the object-frames (median
+chamber 5.7 %), since the removed tracks were mostly single-frame objects of a few µm²; the phase-contrast rule
+accounted for 432 tracks and 0.6 % of the object-frames. The debris-rich structure BSG/pH/6 min lost 52 % of its
+object-frames. 63,215 cell tracks with 950,203 object-frames remained.
 
-New tracks began at a median rate of 0.070 per object and frame (10th to 90th percentile over chambers 0.047 to
-0.110), a rate that includes buds and washed-in cells as well as tracking breaks; the median track length was
-5 frames, and 78 % of the
-object-frames belonged to tracks of at least 10 frames. Structures of the Glc series fragmented more than those of
-the pH series (median 0.080 against 0.057 new tracks per object-frame). The previous tracker (pipeline v11, overlap
-threshold, no memory) had fragmented twice as much: 0.14 new tracks per object-frame, a median track length of
-3 frames and 31 % single-frame tracks (`docs/tracking_diagnosis.md`).
+### 3.2.2 Observed morphology
+
+The cells in the chambers took the forms described for *A. pullulans* by (2026_Rensink): ovoid yeast-like cells,
+large round swollen cells, and the blastoconidia that bud from them. Figure 3 shows every tracked cell as one
+point, its mean projected area over its track against its mean eccentricity, for the five strains of the
+oscillation experiments and for the chips and media of the static cultivations.
+
+The typical cell was an ovoid yeast-like cell. Over the 22,090 cells tracked for at least ten frames in the
+oscillation experiments the median mean area was 22 µm² (10th to 90th percentile 11 to 56 µm²) and the median
+eccentricity 0.75, which corresponds to an axis ratio of 1.5; 90 % of the cells had an axis ratio below 1.9.
+Cells in the Glc series were slightly larger and more elongated than in the pH series (median 24 against
+22 µm², eccentricity 0.80 against 0.72). Among the strains the wild type had the smallest cells (median 18 µm²)
+and BSpH the largest (31 µm²), with BSA, BSO and BSG in between (24 to 26 µm²).
+
+A minority of the cells were large and round, the swollen cells of (2026_Rensink). They form the second cluster
+in Figure 3, separate from the band of yeast-like cells: 5 % of the tracked cells combined a mean area of at
+least 30 µm² with an eccentricity below 0.6 (WT 3 %, BSA 5 %, BSO 6 %, BSG 8 %, BSpH 9 %), 34 % reached
+30 µm² and 1.2 % exceeded 100 µm². In the static cultivations the share depended on medium and chip. In complex
+medium on chip W109, 82 % of the cells were at least 30 µm² and the median cell measured 82 µm²; in minimal
+medium on the same chip the cells were small (median 21 µm²) and the most elongated of all groups (eccentricity
+0.85, axis ratio 1.9). On chip W65 the minimal-medium chambers held the largest share of large round cells
+(25 % of 51 tracked cells), among them the two cells of about 270 µm² that released blastoconidia (3.3), whereas
+its complex-medium chambers resembled the oscillation chambers (median 28 µm², 1 % large and round).
+
+The buds were blastoconidia released from large cells. Accepted buds measured 4.7 µm² at first detection (10th to
+90th percentile 2.3 to 9.9 µm²), and their mothers 71 µm² (32 to 120 µm²), more than twice the median cell. This
+holds for all bud candidates, not only the accepted ones (median mother 66 µm², 4 % of the mothers below
+15 µm²), so it is not a consequence of the size criterion of 3.2.5. No filamentous growth was observed inside the
+chambers: among the objects of the four structures with complete shape data (WT/pH/6 min, BSG/pH/6 min, W65
+and W109, about 125,000 objects of at least 8 µm²) the median solidity was 0.98, fewer than 0.3 % of the objects
+had an axis ratio above 3, and 0.1 % were flagged as highly eccentric by the segmentation. *[Add what you saw in
+the images that the masks cannot show: hyphae at the chamber walls or in the channels, melanised cells,
+chlamydospores, and in which conditions.]*
+
+**Figure 3: Morphology of the tracked cells.** One point per cell tracked for at least ten frames: mean projected
+area (log scale) against mean eccentricity, one panel per strain over all oscillation experiments (top row) and
+per chip and medium of the static cultivations (bottom row). The guide lines at 30 µm² and eccentricity 0.6 mark
+the quadrant of large round cells, the swollen cells of (2026_Rensink); their share stands in the panel title.
+[`90_morphology_scatter.pdf`, `static/90_morphology_scatter.pdf`, from the next pipeline run]
+
+### 3.2.3 How well the cells were tracked
+
+Tracking links the segmented objects of consecutive frames into tracks. A new track starts whenever an object
+cannot be linked to one of the previous frame: when a bud appears, when a cell is washed in, or when the tracker
+loses a cell and restarts it under a new identity. The last case, fragmentation, decides how long the tracks are
+on which growth and budding can be measured. Over all chambers, new tracks began at a median rate of 0.070 per
+object and frame (10th to 90th percentile over chambers 0.047 to 0.110), about one per 14 object-frames, buds and
+washed-in cells included. The median track lasted 5 frames (50 min), but 78 % of all object-frames belonged to
+tracks of at least 10 frames, so most of the data lay in long tracks. Structures of the Glc series fragmented more
+than those of the pH series (median 0.080 against 0.057 new tracks per object-frame). The previous tracker
+(pipeline v11: overlap threshold, no memory) had fragmented twice as much, with 0.14 new tracks per object-frame,
+a median track length of 3 frames and 31 % single-frame tracks (`docs/tracking_diagnosis.md`).
+
+### 3.2.4 Why budding events can be counted only in the sparse phase
 
 The chambers were inoculated with one to three cells and filled to as many as 180 objects per frame within 22 h
-(Figure 3 A). With rising density the number of newly appearing tracks rose in proportion to the number of
-objects, and most of the new tracks touched an established cell at their first detection. In the manually
-curated structure WT/pH/6 min the number of new tracks that touched a tracked mask, or split from one, rose from
-0.5 per 22-frame block at 2 objects per frame to 130 per block at 132 objects per frame, where it equalled the
-object count, whereas the number of new tracks touching nothing saturated at about 40 to 50 per block. At this
-density the masks of neighbouring cells touched, split and re-merged from frame to frame, and every fragment
-qualified as a bud candidate. In the four structures examined in detail (35 chambers of WT/pH/6 min,
-BSG/pH/6 min, W65 and W109), the rate of touching new tracks was 0.04 to 0.06 per object and frame from 8 to 256
-objects per frame, i.e. proportional to the density, and above 20 objects per frame 55 to 63 % of all new tracks
-touched a mask on the three structures that reached that density (Figure 3 B) *[to be replaced by the numbers of
-the full-run figure]*.
+(Figure 4 A). Whether a new object is a bud is decided from its contact with a tracked cell: the tracker records
+for every new object whether its mask touched an existing cell when it was first detected. In a sparse chamber a
+new object that touches a cell is a bud emerging from its mother. In a crowded chamber, however, the masks of
+neighbouring cells touch, merge and split from one frame to the next, and every fragment of such a mask is also a
+new object touching a tracked cell. Figure 4 B quantifies how the two cases scale with density. Each point is one
+chamber during one block of 22 frames (3.7 h); its position gives the number of objects in the chamber during
+that block on the x axis and the number of new objects appearing per frame on the y axis. Dark points are new
+objects that touched an existing cell, light points new objects that touched nothing. The dark series rises along
+a straight line of slope one on the logarithmic axes: the number of touching new objects is proportional to the
+number of objects present. The right panel shows the same data divided by the number of objects. From about
+8 objects per frame upward every object in the chamber gave rise to a new touching object at a constant rate of
+0.04 to 0.06 per frame, i.e. once every 17 to 25 frames, whether the chamber held 10 or 200 objects. The light
+series, the washed-in cells, saturated at about two new objects per frame, because the flow, not the density,
+delivers them. In the manually curated structure WT/pH/6 min this amounted to 0.5 touching new objects per
+block at 2 objects per frame and 130 per block, about six per frame, at 132 objects per frame, while the free new
+objects stayed at 40 to 50 per block. Above 20 objects per frame, 55 to 63 % of all new objects touched a mask on
+the three structures that reached that density. *[Numbers of Figure 4 B from the four structures examined in
+detail, 35 chambers of WT/pH/6 min, BSG/pH/6 min, W65 and W109; to be replaced by those of the full-run figure.]*
 
-Lineage readouts were therefore restricted to the sparse phase of every chamber, defined as the frames before the
-rolling median of objects per frame exceeded 20 (Section 2.5.4). 563 of the 564 chambers had such a window of at
-least 20 frames; its median length was 117 of 133 frames (range 26 to 136), and 245 chambers never exceeded
-20 objects and were used whole. Endpoint morphology, the area growth rate and the robustness metrics used the
-whole cultivation.
+At the high densities the touching new objects are therefore dominated by fragments of touching masks, which the
+contact rule cannot tell from buds. Three further observations support this reading: the masks visibly touch and
+re-split in the dense phase; the manual curation of the previous tracker found a third of its new identities to be
+losses of tracked cells; and the budding trends against the period changed with the tracker (3.2.6). Lineage
+readouts were therefore restricted to the sparse phase of every chamber, defined as the frames before the rolling
+median of objects per frame exceeded 20 (Section 2.5.4). 563 of the 564 chambers had such a window of at least
+20 frames; its median length was 117 of 133 frames (range 26 to 136), and 245 chambers never exceeded 20 objects
+and were used whole. Endpoint morphology, the area growth rate and the robustness metrics used the whole
+cultivation.
 
-**Figure 3: The limit set by cell density.** (A) Objects per frame over time for 80 of the 564 chambers, with the
+**Figure 4: The limit set by cell density.** (A) Objects per frame over time for 80 of the 564 chambers, with the
 sparse limit of 20 objects (dashed), and the distribution of the sparse-phase window length over all chambers.
-(B) Newly appearing tracks per frame against objects per frame, one point per chamber and block of 22 frames,
-for tracks that touch a tracked mask at first detection or split from one (dark) and tracks that touch nothing
-(light); lines and bands are the median and quartiles per density class. Right: touching new tracks per object
-and frame. [`20_lineage_window.pdf`; `00_new_objects_vs_density.pdf` from the next pipeline run, currently drawn
-for the four structures WT/pH/6, BSG/pH/6, W65 and W109]
+(B) Left: new objects per frame against objects per frame, one point per chamber and block of 22 frames; dark:
+new objects that touched an existing cell at first detection (bud candidates or fragments of touching masks),
+light: new objects that touched nothing (washed-in cells); lines and bands: median and quartiles per density
+class (powers of two); dashed line: sparse limit. Right: the dark series divided by the number of objects, i.e.
+touching new objects per existing object and frame; a flat line means proportionality to density.
+[`20_lineage_window.pdf`; `00_new_objects_vs_density.pdf` from the next pipeline run, currently drawn for the
+four structures WT/pH/6, BSG/pH/6, W65 and W109]
 
-### 3.2.3 Budding events, the size criterion and validation
+### 3.2.5 Budding events, the size criterion and validation
 
 Within the sparse-phase windows 11,361 budding events were accepted in 531 chambers (median 18 per chamber, 10th
 to 90th percentile 8 to 39). For 74 % of them the mother was the cell whose mask the bud touched at first
@@ -203,7 +269,7 @@ a series in 4 of the 10 strain-by-oscillation-type series (Kruskal-Wallis, p < 0
 period in no consistent direction (Spearman ρ −0.77 for BSA/Glc, −0.66 for BSpH/Glc, −0.80 for BSG/pH,
 +0.60 for BSO/Glc; Appendix Figure A3).
 
-### 3.2.4 Dependence of the budding trends on the tracking
+### 3.2.6 Dependence of the budding trends on the tracking
 
 Rebuilding the segmentation and the tracking changed which series showed a budding-rate trend against the period.
 With the previous tracker, eight of the nine series with a non-zero correlation had a negative one (WT/Glc
@@ -240,7 +306,7 @@ Welch's t-test over four chambers each, p 0.004), were marginally rounder (eccen
 p 0.23), and budded a sixth as often per mother-hour (0.05 against 0.33; the four minimal-medium chambers gave
 0.45, 0.58, 0.27 and 0.00 buds per mother-hour, the complex-medium chambers 0.03 to 0.08). The population birth
 rate showed the same difference (0.03 against 0.18 births per cell-hour). In complex medium the growth of the
-population therefore went into cell size rather than into blastoconidia (Figure 4).
+population therefore went into cell size rather than into blastoconidia (Figure 5).
 
 Chip W65 did not repeat the medium effect. Its cells reached the same endpoint area in complex medium as those of
 W109 (107.3 against 102.7 µm²), but in minimal medium they were 3.8 times larger than on W109 (112.5 µm²), and the
@@ -254,7 +320,7 @@ endpoint area and budding rate apart from the other three. With one culture per 
 result of chip W109, with W65 as a second single chip that showed the same cell size in complex medium and a
 different picture in minimal medium.
 
-**Figure 4: Static cultivation in complex and minimal medium.** (A) Endpoint cell area, (B) buds per mother-hour
+**Figure 5: Static cultivation in complex and minimal medium.** (A) Endpoint cell area, (B) buds per mother-hour
 in the sparse-phase window and (C) births per cell-hour, per chip family; mean ± SEM over chambers, every chamber
 as a small point beside the mean, complex medium filled and minimal medium hollow.
 [`static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf`,
@@ -268,20 +334,18 @@ controls of their own structure, and from the temporal and population robustness
 (Section 2.5.5).
 
 For every oscillation series (strain by oscillation type) one value per structure was compared across the cycle
-periods, with the constant-medium control chambers of the same structure plotted as separate markers and the
-pooled control range as a band (Figure 5, Appendix Figures A5 to A7). Because a structure carried one period, the
+periods, with the constant-medium control chambers of the same structure plotted as separate markers
+(Figure 6, Appendix Figures A5 to A7). Because a structure carried one period, the
 Spearman rank correlation of a readout with the period was computed over structures, with n equal to the number
 of periods (four to six); with n = 6 a |ρ| of 0.83 corresponds to p 0.05, and ρ is reported as an effect size, not
-as a test. In the bottom row of every panel the oscillation chambers are expressed relative to the two controls of
-their structure (bracket score: 0 = as under constant famine, 1 = as under constant feast), hollow where the two
-controls did not separate beyond the chamber scatter.
+as a test. In addition, every oscillation value was expressed relative to the two controls of its structure as a
+bracket score (0 = as under constant famine, 1 = as under constant feast; `*_bracket_score.csv`), which is
+undefined where the two controls did not separate beyond the chamber scatter.
 
-**Figure 5: Readouts of the Glc oscillation series against the cycle period.** (A) Buds per mother-hour in the
+**Figure 6: Readouts of the Glc oscillation series against the cycle period.** (A) Buds per mother-hour in the
 sparse-phase window, (B) births per cell-hour (µ_bud) and (C) endpoint cell area, one panel per strain; filled
 circles: oscillation chambers (mean ± SEM over chambers), triangles: feast control (filled, up) and famine control
-(hollow, down) of the same structure, dashed and dotted lines: pooled control means. Lower row: bracket score
-relative to the controls of the structure, hollow where the bracket is degenerate. ρ, p and n in the panel titles:
-Spearman correlation over structures. The pH series are shown in Appendix Figure A5.
+(hollow, down) of the same structure. ρ, p and n in the panel titles: Spearman correlation over structures. The pH series are shown in Appendix Figure A5.
 [`21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`,
 `13_endpoint_vs_period_area_Glc.pdf`]
 
@@ -386,7 +450,7 @@ ten series. [`40_<metric>_<readout>_per_chip.csv`, `51_osc_vs_controls.csv`,
 ## 3.5 Biosensor readouts against the cycle period
 
 The four biosensor strains reported their ratiometric signal (sensor over reference channel) at the endpoint of
-every chamber (Figure 6, Appendix Figure A8). The ratios lay at 0.10 to 0.16 for the ATP sensor (BSA,
+every chamber (Figure 7, Appendix Figure A8). The ratios lay at 0.10 to 0.16 for the ATP sensor (BSA,
 QUEEN-2m), 0.01 to 0.04 for the glucose-flux sensor (BSG, Gly-RNA; one feast-control structure at 1.00), 0.00 to
 0.02 for the oxidative-stress sensor (BSO, OxPro) and 0.63 to 0.96 for the pH sensor (BSpH, sfpHluorin).
 
@@ -401,8 +465,8 @@ the Glc series (+0.89); the QUEEN-2m ratio of BSA showed no trend. In every one 
 chambers of the same structures rose with the period as well (OxPro +0.94 and +1.00, pHluorin +0.89 and +1.00,
 Table 6), with the exception of Gly-RNA, whose trend did not survive the subtraction of its controls (3.6).
 
-**Figure 6: Biosensor ratios of the Glc oscillation series against the cycle period.** (A) OxPro ratio of BSO,
-(B) sfpHluorin ratio of BSpH; layout as in Figure 5. [`13_endpoint_vs_period_ratio_OxPro_Glc.pdf`,
+**Figure 7: Biosensor ratios of the Glc oscillation series against the cycle period.** (A) OxPro ratio of BSO,
+(B) sfpHluorin ratio of BSpH; layout as in Figure 6. [`13_endpoint_vs_period_ratio_OxPro_Glc.pdf`,
 `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf`]
 
 **Robustness of the sensor signals.** The temporal and population robustness of the four ratios differed by
@@ -494,17 +558,18 @@ of the same structures trended in the same direction, in 15 of them with a |ρ| 
 trends vanished after the controls were subtracted (eccentricity BSpH/pH, Gly-RNA ratio BSG/Glc). Two combinations
 met all three conditions of a period effect: µ_area in BSO/Glc (ρ −0.83, difference −0.77) and the budding rate in
 WT/Glc (ρ −0.60, difference −0.80). Neither recurred in the other oscillation type of the same strain (µ_area
-BSO/pH ρ −0.20; budding rate WT/pH a structure effect). Figure 7 shows all 58 combinations at once: the
-correlation of the oscillation chambers on the x axis and that of the strongest control on the y axis, where a
+BSO/pH ρ −0.20; budding rate WT/pH a structure effect). Figure 8 shows the 58 combinations, the growth and
+morphology readouts in A and the sensor ratios in B: the correlation of the oscillation chambers on the x axis and that of the strongest control on the y axis, where a
 point on the diagonal is a structure effect; 23 points lie in the two diagonal corners, 31 in the central band,
 and the two period effects and the two non-robust trends lie off the diagonal. Applied to the 114 combinations of
 the robustness metrics with the series (Tables 8 and 9), the same classification gave 60 combinations without a
 trend, 35 structure effects, 10 non-robust trends and 9 period effects (Appendix Figure A12).
 
-**Figure 7: Trends of the oscillation chambers against trends of their controls.** One point per readout and
-series (58 combinations): Spearman ρ of the oscillation chambers against the period on the x axis, ρ of the
-strongest control type on the y axis, colour = strain, hollow = not robust; grey zones mark |ρ| < 0.6.
-[`50_control_trend_summary.pdf`]
+**Figure 8: Trends of the oscillation chambers against trends of their controls.** (A) Endpoint area, µ_area,
+eccentricity, budding rate and µ_bud (50 combinations), (B) the four sensor ratios (8 combinations); one point
+per readout and series: Spearman ρ of the oscillation chambers against the period on the x axis, ρ of the
+strongest control type on the y axis, marker = readout, colour = strain, hollow = not robust; grey zones mark
+|ρ| < 0.6. [`50_control_trend_summary_growth.pdf`, `50_control_trend_summary_sensors.pdf`]
 
 The control chambers also differed between the structures of a series in their cell-to-cell heterogeneity: the
 population robustness R(p) of the cell area differed between structures for every control type and series
@@ -525,7 +590,7 @@ The pullulan knockout strain was cultivated on one structure of the Glc series a
 whether the control chambers of a structure agree better in the absence of the exopolysaccharide. The
 chamber-to-chamber variation of the cell-area level among the three famine-control chambers of the knockout
 structure was 0.23 (coefficient of variation) and among the three feast-control chambers 0.37, which placed the
-knockout at the 67th and 96th percentile of the 49 producer structures (Figure 8). The temporal variation of the
+knockout at the 67th and 96th percentile of the 49 producer structures (Figure 9). The temporal variation of the
 area after removing the linear trend lay at the 92nd and 61st percentile. Famine-control cells of the knockout
 were 1.5 times larger than its feast-control cells, where the producer structures had a median ratio of 0.98
 (knockout at the 92nd percentile); the µ_area bracket of feast over famine was 0.10, the producers' median. The
@@ -533,7 +598,7 @@ famine controls of the knockout also budded faster than its feast controls (0.32
 births per cell-hour). The single knockout structure therefore did not show a better agreement of its control
 chambers than the pullulan-producing strains.
 
-**Figure 8: Agreement of the control chambers on the pullulan-knockout structure against the producer
+**Figure 9: Agreement of the control chambers on the pullulan-knockout structure against the producer
 structures.** Chamber-to-chamber coefficient of variation of the cell-area level and detrended temporal
 coefficient of variation for the feast and famine controls of every structure; the knockout structure is marked.
 [`pko/61_pko_control_agreement.pdf`]
@@ -547,24 +612,25 @@ coefficient of variation for the feast and famine controls of every structure; t
 | thesis figure | pipeline file(s) | status |
 | --- | --- | --- |
 | Figure 2 | `growth_curves.pdf` (BioLector script) | exists; a.u., OD₆₀₀ calibration pending |
-| Figure 3 A | `20_lineage_window.pdf` | exists |
-| Figure 3 B | `00_new_objects_vs_density.pdf` | with the next pipeline run |
-| Figure 4 | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf`, `static/24_growth_from_budding_vs_medium.pdf` | exist; per-chamber points with the next run |
-| Figure 5 | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | exist |
-| Figure 6 | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | exist |
-| Figure 7 | `50_control_trend_summary.pdf` | exists |
-| Figure 8 | `pko/61_pko_control_agreement.pdf` | exists |
+| Figure 3 | `90_morphology_scatter.pdf`, `static/90_morphology_scatter.pdf` | with the next pipeline run (per-cell version, rebuilt 2026-10-03) |
+| Figure 4 A | `20_lineage_window.pdf` | exists |
+| Figure 4 B | `00_new_objects_vs_density.pdf` | with the next pipeline run |
+| Figure 5 | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf`, `static/24_growth_from_budding_vs_medium.pdf` | exist; per-chamber points with the next run |
+| Figure 6 | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | exist |
+| Figure 7 | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | exist |
+| Figure 8 | `50_control_trend_summary_growth.pdf`, `50_control_trend_summary_sensors.pdf` | with the next pipeline run (split 2026-10-05) |
+| Figure 9 | `pko/61_pko_control_agreement.pdf` | exists |
 | Appendix A1 | `00_n_tracks_overview_summary.pdf` | exists |
 | Appendix A2 | `20_bud_size_at_appearance.pdf` | exists |
 | Appendix A3 | `lineage_validation/lv_02_detection_rate.pdf` | exists (v12 validation) |
 | Appendix A4 | `static/10_cell_area_over_time.pdf`, `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/21_panel_a_violin.pdf` | exist |
-| Appendix A5 | the `_pH.pdf` counterparts of Figure 5 | exist |
+| Appendix A5 | the `_pH.pdf` counterparts of Figure 6 | exist |
 | Appendix A6 | `24_immigration_vs_period_Glc.pdf`, `24_immigration_vs_period_pH.pdf`, `24_mu_bud_vs_mu_area.pdf` | exist |
 | Appendix A7 | `13_endpoint_vs_period_eccentricity_Glc.pdf`, `_pH.pdf`, `12_area_growth_rate_all.pdf` | exist |
 | Appendix A8 | `95_<strain>_<osc_type>_ratio_<sensor>_comparison.pdf` | exist |
 | Appendix A9 | `40_control_consistency_*.pdf` | exist |
 | Appendix A10 | `pko/13_endpoint_vs_period_area_Glc.pdf` | exists |
-| Appendix A11 | `40_<metric>_<readout>_vs_period_<osc_type>.pdf` (R(t) population, R(t) single cell, R(p) of area, eccentricity, µ_area, budding rate per mother, µ_event) | with the next pipeline run; layout of Figure 5 with the controls and the bracket row |
+| Appendix A11 | `40_<metric>_<readout>_vs_period_<osc_type>.pdf` (R(t) population, R(t) single cell, R(p) of area, eccentricity, µ_area, budding rate per mother, µ_event) | with the next pipeline run; layout of Figure 6 with the controls |
 | Appendix A12 | `50_robustness_control_trend_summary.pdf` | with the next pipeline run |
 | Appendix A13 | `51_osc_vs_controls.pdf`, `51_osc_vs_controls_robustness.pdf`, `51_osc_vs_controls_sensors.pdf` | with the next pipeline run |
 

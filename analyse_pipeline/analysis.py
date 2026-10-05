@@ -444,36 +444,73 @@ def plot_metric_over_time_by_frequency(
 
 
 def plot_morphology_scatter(
-    df: pd.DataFrame, out_path: Path, sample_n: int = 1000, random_state: int = 0
+    df: pd.DataFrame, out_path: Path, facet_cols: Sequence[str] = ("biosensor",), um_per_px: Optional[float] = None,
+    min_frames: int = 10, large_um2: float = 30.0, round_ecc: float = 0.6, max_points: int = 4000,
+    random_state: int = 0,
 ) -> None:
-    """Scatter Fläche vs. Exzentrizität, facettiert nach Biosensor x Oszillationstyp,
-    Farbe = Oszillationsfrequenz. Stichprobe pro Gruppe, damit der Plot nicht zu schwer wird."""
-    if not {"area", "eccentricity"}.issubset(df.columns):
-        logger.warning("Spalten 'area'/'eccentricity' fehlen - Morphologie-Plot wird übersprungen.")
+    """Morphologie je Zelle: mittlere Flaeche (log) gegen mittlere Exzentrizitaet, eine Zelle = ein Punkt
+    (Tracks mit >= min_frames Frames), eine Facette je facet_cols-Kombination (Oszillation: Stamm; statisch:
+    Chip-Familie x Medium), Punkte in der Stammfarbe. Hilfslinien bei large_um2 und round_ecc teilen die Ebene
+    nach den Zelltypen von Rensink et al. 2026 (klein/laenglich = hefeartige Zellen, gross/rund = geschwollene
+    Zellen); der Anteil gross-runder Zellen steht im Paneltitel. Flaeche in um2, wenn um_per_px gegeben, sonst
+    in px2 (dann ohne Hilfslinien). Hoechstens max_points Punkte je Facette (Stichprobe), die Anteile im Titel
+    rechnen mit allen Zellen."""
+    need = {"area", "eccentricity", "cell_uid", "frame"}
+    if not need.issubset(df.columns):
+        logger.warning("Spalten %s fehlen - Morphologie-Plot wird übersprungen.", sorted(need - set(df.columns)))
         return
+    facet_cols = [c for c in facet_cols if c in df.columns]
+    per_cell = (df.dropna(subset=["area", "eccentricity"])
+                .groupby("cell_uid").agg(area=("area", "mean"), ecc=("eccentricity", "mean"), n=("frame", "nunique")))
+    per_cell = per_cell[per_cell["n"] >= min_frames]
+    if per_cell.empty:
+        logger.warning("Morphologie-Plot: keine Zelle mit >= %d Frames - übersprungen.", min_frames)
+        return
+    meta_cols = list(dict.fromkeys(list(facet_cols) + (["biosensor"] if "biosensor" in df.columns else [])))
+    per_cell = per_cell.join(df.drop_duplicates("cell_uid").set_index("cell_uid")[meta_cols])
+    scale = um_per_px ** 2 if um_per_px else 1.0
+    per_cell["area_u"] = per_cell["area"] * scale
+    unit = "µm²" if um_per_px else "px²"
 
-    sample = (
-        df.groupby(["biosensor", "osc_type", "osc_freq"], group_keys=False)[df.columns]
-        .apply(lambda g: g.sample(min(len(g), sample_n), random_state=random_state))
-        .reset_index(drop=True)
-    )
-
-    g = sns.relplot(
-        data=sample, x="area", y="eccentricity", hue="osc_freq",
-        hue_order=natural_freq_sort(sample["osc_freq"].dropna().unique()),
-        row="osc_type", col="biosensor",
-        kind="scatter", alpha=0.3, s=12,
-        palette=strain_ramp("_", sample["osc_freq"].nunique()),
-        height=3.0, aspect=1.2,
-    )
-    for ax in g.axes.flat:
+    if facet_cols:
+        keys = per_cell.drop_duplicates(facet_cols)[facet_cols].astype(str).apply(tuple, axis=1).tolist()
+        if facet_cols == ["biosensor"]:
+            keys = [(s,) for s in ordered_strains([k[0] for k in keys])]
+        else:
+            keys = sorted(keys)
+    else:
+        keys = [()]
+    n = len(keys)
+    fig, axes = plt.subplots(1, n, figsize=(2.6 * n + 0.6, 3.1), squeeze=False, sharex=True, sharey=True)
+    rng = np.random.default_rng(random_state)
+    for ax, key in zip(axes[0], keys):
+        sub = per_cell
+        for col, val in zip(facet_cols, key):
+            sub = sub[sub[col].astype(str) == val]
+        strain = str(sub["biosensor"].iloc[0]) if "biosensor" in sub.columns and len(sub) else "_"
+        color = strain_color(strain)
+        n_all = len(sub)
+        if um_per_px:
+            large_round = float(((sub["area_u"] >= large_um2) & (sub["ecc"] < round_ecc)).mean()) if n_all else float("nan")
+        show = sub.sample(max_points, random_state=rng.integers(1 << 30)) if n_all > max_points else sub
+        ax.scatter(show["area_u"], show["ecc"], s=6, facecolor=color, edgecolor="none", alpha=0.35, zorder=2)
+        if um_per_px:
+            ax.axvline(large_um2, color=INK_MUTED, linewidth=0.8, linestyle=(0, (4, 2)), zorder=1)
+            ax.axhline(round_ecc, color=INK_MUTED, linewidth=0.8, linestyle=(0, (4, 2)), zorder=1)
         ax.set_xscale("log")
-    g.set_axis_labels("Cell area [px²] (log)", "Eccentricity (0 = circle, 1 = line)")
-    g.set_titles("{row_name} | {col_name}")
-    g.fig.suptitle("Morphology: area vs. eccentricity (sample after QC)", y=1.02)
-    g.savefig(out_path, bbox_inches="tight")
-    plt.close(g.fig)
-    logger.info("Plot gespeichert: %s", out_path.name)
+        ax.set_ylim(0, 1)
+        label = " ".join(key) if key else "all cells"
+        title = f"{label}  (n = {n_all:,} cells)"
+        if um_per_px and n_all:
+            title += f"\nlarge and round: {100 * large_round:.0f} %"
+        panel_title(ax, title)
+        ax.set_xlabel(f"mean cell area [{unit}]")
+    axes[0][0].set_ylabel("mean eccentricity\n(0 = circle, 1 = line)")
+    if um_per_px:
+        handles = [Line2D([], [], color=INK_MUTED, linewidth=0.8, linestyle=(0, (4, 2)),
+                          label=f"guides: {large_um2:g} {unit} and eccentricity {round_ecc:g}")]
+        legend_below(fig, handles, ncol=1, y=0.0)
+    finish(fig, out_path, logger)
 
 
 def plot_single_cell_trajectories(

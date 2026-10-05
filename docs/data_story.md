@@ -318,9 +318,10 @@ and the burst chamber are visible in the figure itself; the per-chamber tables b
 ## 4. Section 2: oscillations, the apparent dose responses
 
 The pipeline reads one value per structure and plots it against the period with the controls of the same
-structure as markers and the pooled control band behind (`13_endpoint_vs_period_<readout>_<osc_type>.pdf`,
-`21_budding_rate_vs_period_<osc_type>.pdf`; lower row: bracket score, 0 = famine control, 1 = feast control,
-hollow when the two controls do not separate). Spearman over structures, n = number of periods (4 to 6), is
+structure as markers (`13_endpoint_vs_period_<readout>_<osc_type>.pdf`, `21_budding_rate_vs_period_<osc_type>.pdf`;
+since 2026-10-05 without connecting lines, pooled-control lines and the bracket-score row, `PERIOD_FIGURE_*` in
+`config.py`; the bracket score, 0 = famine control, 1 = feast control, undefined when the two controls do not
+separate, stays in `*_bracket_score.csv`). Spearman over structures, n = number of periods (4 to 6), is
 an effect size, not a test (`13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`,
 `12_area_growth_rate_spearman.csv`).
 
@@ -420,7 +421,8 @@ position, so it stays inferred from the period order. The day blocks add a cultu
 across strains for Glc, aligned with the period for pH (`00_chip_run_order.csv`). Without the controls every
 drift in section 4 would have been reported as a dose response.
 
-`50_control_trend_summary.pdf` (with `50_control_trend_summary.csv`) shows the whole finding in one figure:
+`50_control_trend_summary_growth.pdf` and `_sensors.pdf` (with `50_control_trend_summary.csv`) show the whole
+finding in two figures, the growth and morphology readouts and the sensor ratios:
 one point per readout and strain series, the oscillation Spearman on x, the strongest control Spearman on y,
 coloured by verdict; points along the diagonal are the structure effects. It collects the control-trend tables
 of the endpoint (`13_`), of µ_area (`12_area_growth_rate_control_trend.csv`) and of the budding rate (`21_`).
@@ -539,11 +541,12 @@ n = 1.
 | thesis section | main-text figures | appendix figures | evidence tables |
 | --- | --- | --- | --- |
 | Methods: units and sampling | none (a schematic of chip, structures, arrays and chambers is the author's) | `00_n_tracks_overview_summary.pdf` | `00_chip_overview.csv`, `00_chip_run_order.csv` |
+| 3.2.2 Observed morphology | `90_morphology_scatter.pdf` (one cell = one point, mean area against mean eccentricity, guides at 30 µm² and eccentricity 0.6, share of large round cells in the title; static per chip family and medium) | | `40_Rt_single_cell_area.csv` / `_eccentricity.csv` (per-cell means), `20_bud_size_at_appearance.csv` |
 | Methods: tracking and sparse window | `20_lineage_window.pdf`, `00_new_objects_vs_density.pdf` | `20_bud_size_at_appearance.pdf`, `qc_comparison/70_qc_effect.pdf` and `lineage_validation/lv_02_detection_rate.pdf` (v11 run) | `00_track_fragmentation.csv`, `00_cell_filter.csv`, `20_bud_size_threshold.csv`, `00_new_objects_vs_density.csv` (the block table of 2.2 for all chambers) |
 | 1 Static medium | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf` | `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/10_cell_area_over_time.pdf`, `static/21_panel_a_violin.pdf` | `static/13_endpoint_summary.csv`, `static/13_endpoint_per_chamber.csv`, `static/21_budding_rate_summary.csv` |
 | 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `24_immigration_vs_period_*.pdf`, `24_mu_bud_vs_mu_area.pdf`, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `24_growth_from_budding_spearman.csv`, `12_area_growth_rate_spearman.csv` |
 | 3 Biosensors | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | `95_*_comparison.pdf`, `31_ratio_*_over_time_*.pdf` | ratio rows of `13_endpoint_control_trend.csv`, `95_*_summary_per_replicate.csv` |
-| 4 Controls (the pivot) | `50_control_trend_summary.pdf`; `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf`, bracket rows of the `13_`/`21_`/`24_` figures | `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `24_growth_from_budding_control_trend.csv`, `13_endpoint_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
+| 4 Controls (the pivot) | `50_control_trend_summary_growth.pdf`, `50_control_trend_summary_sensors.pdf`; `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf` | `*_bracket_score.csv` of `13_`/`21_`/`24_`, `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `24_growth_from_budding_control_trend.csv`, `13_endpoint_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
 | PKO | `pko/61_pko_control_agreement.pdf` | `pko/13_endpoint_vs_period_area_Glc.pdf` | `pko/60_pko_within_chip_agreement.csv`, `pko/60_pko_control_bracket.csv` |
 
 Suggested order of the results chapter: static first (the clean result), then the tracking limit as a short
@@ -580,7 +583,10 @@ WT/pH/6), the dead-cell rule (2.7).
 Not built, still possible:
 
 - **Nothing pending on the pipeline side.** The robustness outputs of section 5b (steps 40 and 50, built
-  2026-10-01) appear with the next run, together with the density figure and the per-chamber points. Every number in this document comes from the final run. The two
+  2026-10-01) appear with the next run, together with the density figure, the per-chamber points and the per-cell
+  morphology figure (`90_morphology_scatter.pdf`, rebuilt 2026-10-03 for results section 3.2.2: 22,090 cells of
+  at least 10 frames, median 22 µm², eccentricity 0.75; 5 % large and round; buds 4.7 µm² at first detection on
+  mothers of 71 µm²; no filamentous objects: solidity 0.98, axis ratio > 3 in < 0.3 %). Every number in this document comes from the final run. The two
   figure additions of 2026-09-29, the per-chamber points on the static figures (section 3) and the block table
   of 2.2 as a figure over all chambers (`00_new_objects_vs_density.pdf`), are in the code and appear with the
   next run; the density numbers quoted in 2.2 are from the four tables at hand, not from the full run.

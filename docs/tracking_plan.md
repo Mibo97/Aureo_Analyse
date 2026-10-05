@@ -530,6 +530,34 @@ Glc oscillation (−1.11 against −1.13 / −1.00, below the control mean on 29
 114 metric x series combinations: 60 no trend, 35 structure effects, 10 not robust, 9 period effects, five of them
 BSA/Glc. Synthetic run (no link_type, no sensor ratios in the static branch) exit 0.
 
+## 6o. Morphology per cell, and the density figure made readable (2026-10-03)
+
+`analysis.plot_morphology_scatter()` now draws one point per cell (tracks with >= `MORPHOLOGY_MIN_FRAMES` = 10
+frames): mean area in µm² (`UM_PER_PX` = 0.0733) against mean eccentricity, one panel per strain (oscillation)
+or per chip family x medium (static), strain colour, guide lines at `MORPHOLOGY_LARGE_UM2` = 30 and
+`MORPHOLOGY_ROUND_ECC` = 0.6 with the share of large round cells in the panel title (orientation after Rensink
+et al. 2026, not a classification). It carries the new results section 3.2.2 "Observed morphology". On the
+final-run per-cell tables: median cell 22 µm², eccentricity 0.75 (axis ratio 1.5), Glc 24 / pH 22 µm², WT 18 to
+BSPH 31 µm²; large and round 5 % (WT 3 to BSPH 9 %); W109 ypd median 82 µm², 82 % >= 30 µm²; buds 4.7 µm² at
+first detection on mothers of 71 µm² (all candidates 66 µm², 4 % of mothers < 15 µm²); no filaments (solidity
+0.98, axis ratio > 3 in < 0.3 % of 125,000 objects of the four full tables). `plot_new_objects_vs_density()`
+got plain labels ("new object touching an existing cell at first detection (bud candidate or mask fragment)",
+"per existing object (flat = proportional to density)"), and results section 3.2 was restructured: 3.2.1 data
+set, 3.2.2 morphology (new, Figure 3), 3.2.3 tracking quality, 3.2.4 why budding is counted only in the sparse
+phase (the density figure read step by step, Figure 4), 3.2.5 events, 3.2.6 tracker dependence; later figures
+renumbered by one.
+
+## 6p. Period figures without lines and bracket panels; summary figure split (2026-10-05)
+
+`plot_endpoint_vs_period()` has three switches with defaults in `config.py` (`PERIOD_FIGURE_CONNECT_OSC`,
+`PERIOD_FIGURE_REFERENCE_LINES`, `PERIOD_FIGURE_BRACKET_PANEL`), all False: the figures against the period
+(`13_*`, `21_*`, `24_*`, `40_*_vs_period`) show only the oscillation means with their chamber error bars and the
+feast and famine controls of the same structure as triangles; no line through the oscillation means, no pooled
+control lines, no bracket-score row. The bracket score and its trend stay in `*_bracket_score.csv` and
+`*_spearman.csv`. The control-trend summary is now two figures, `50_control_trend_summary_growth.pdf` (endpoint
+area, µ_area, eccentricity, budding rate, µ_bud) and `50_control_trend_summary_sensors.pdf` (the four sensor
+ratios), from the unchanged `50_control_trend_summary.csv`. Synthetic run exit 0.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,
