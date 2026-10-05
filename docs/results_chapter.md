@@ -334,20 +334,18 @@ controls of their own structure, and from the temporal and population robustness
 (Section 2.5.5).
 
 For every oscillation series (strain by oscillation type) one value per structure was compared across the cycle
-periods, with the constant-medium control chambers of the same structure plotted as separate markers and the
-pooled control range as a band (Figure 6, Appendix Figures A5 to A7). Because a structure carried one period, the
+periods, with the constant-medium control chambers of the same structure plotted as separate markers
+(Figure 6, Appendix Figures A5 to A7). Because a structure carried one period, the
 Spearman rank correlation of a readout with the period was computed over structures, with n equal to the number
 of periods (four to six); with n = 6 a |ρ| of 0.83 corresponds to p 0.05, and ρ is reported as an effect size, not
-as a test. In the bottom row of every panel the oscillation chambers are expressed relative to the two controls of
-their structure (bracket score: 0 = as under constant famine, 1 = as under constant feast), hollow where the two
-controls did not separate beyond the chamber scatter.
+as a test. In addition, every oscillation value was expressed relative to the two controls of its structure as a
+bracket score (0 = as under constant famine, 1 = as under constant feast; `*_bracket_score.csv`), which is
+undefined where the two controls did not separate beyond the chamber scatter.
 
 **Figure 6: Readouts of the Glc oscillation series against the cycle period.** (A) Buds per mother-hour in the
 sparse-phase window, (B) births per cell-hour (µ_bud) and (C) endpoint cell area, one panel per strain; filled
 circles: oscillation chambers (mean ± SEM over chambers), triangles: feast control (filled, up) and famine control
-(hollow, down) of the same structure, dashed and dotted lines: pooled control means. Lower row: bracket score
-relative to the controls of the structure, hollow where the bracket is degenerate. ρ, p and n in the panel titles:
-Spearman correlation over structures. The pH series are shown in Appendix Figure A5.
+(hollow, down) of the same structure. ρ, p and n in the panel titles: Spearman correlation over structures. The pH series are shown in Appendix Figure A5.
 [`21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`,
 `13_endpoint_vs_period_area_Glc.pdf`]
 
@@ -560,17 +558,18 @@ of the same structures trended in the same direction, in 15 of them with a |ρ| 
 trends vanished after the controls were subtracted (eccentricity BSpH/pH, Gly-RNA ratio BSG/Glc). Two combinations
 met all three conditions of a period effect: µ_area in BSO/Glc (ρ −0.83, difference −0.77) and the budding rate in
 WT/Glc (ρ −0.60, difference −0.80). Neither recurred in the other oscillation type of the same strain (µ_area
-BSO/pH ρ −0.20; budding rate WT/pH a structure effect). Figure 8 shows all 58 combinations at once: the
-correlation of the oscillation chambers on the x axis and that of the strongest control on the y axis, where a
+BSO/pH ρ −0.20; budding rate WT/pH a structure effect). Figure 8 shows the 58 combinations, the growth and
+morphology readouts in A and the sensor ratios in B: the correlation of the oscillation chambers on the x axis and that of the strongest control on the y axis, where a
 point on the diagonal is a structure effect; 23 points lie in the two diagonal corners, 31 in the central band,
 and the two period effects and the two non-robust trends lie off the diagonal. Applied to the 114 combinations of
 the robustness metrics with the series (Tables 8 and 9), the same classification gave 60 combinations without a
 trend, 35 structure effects, 10 non-robust trends and 9 period effects (Appendix Figure A12).
 
-**Figure 8: Trends of the oscillation chambers against trends of their controls.** One point per readout and
-series (58 combinations): Spearman ρ of the oscillation chambers against the period on the x axis, ρ of the
-strongest control type on the y axis, colour = strain, hollow = not robust; grey zones mark |ρ| < 0.6.
-[`50_control_trend_summary.pdf`]
+**Figure 8: Trends of the oscillation chambers against trends of their controls.** (A) Endpoint area, µ_area,
+eccentricity, budding rate and µ_bud (50 combinations), (B) the four sensor ratios (8 combinations); one point
+per readout and series: Spearman ρ of the oscillation chambers against the period on the x axis, ρ of the
+strongest control type on the y axis, marker = readout, colour = strain, hollow = not robust; grey zones mark
+|ρ| < 0.6. [`50_control_trend_summary_growth.pdf`, `50_control_trend_summary_sensors.pdf`]
 
 The control chambers also differed between the structures of a series in their cell-to-cell heterogeneity: the
 population robustness R(p) of the cell area differed between structures for every control type and series
@@ -619,7 +618,7 @@ coefficient of variation for the feast and famine controls of every structure; t
 | Figure 5 | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf`, `static/24_growth_from_budding_vs_medium.pdf` | exist; per-chamber points with the next run |
 | Figure 6 | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | exist |
 | Figure 7 | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | exist |
-| Figure 8 | `50_control_trend_summary.pdf` | exists |
+| Figure 8 | `50_control_trend_summary_growth.pdf`, `50_control_trend_summary_sensors.pdf` | with the next pipeline run (split 2026-10-05) |
 | Figure 9 | `pko/61_pko_control_agreement.pdf` | exists |
 | Appendix A1 | `00_n_tracks_overview_summary.pdf` | exists |
 | Appendix A2 | `20_bud_size_at_appearance.pdf` | exists |
@@ -631,7 +630,7 @@ coefficient of variation for the feast and famine controls of every structure; t
 | Appendix A8 | `95_<strain>_<osc_type>_ratio_<sensor>_comparison.pdf` | exist |
 | Appendix A9 | `40_control_consistency_*.pdf` | exist |
 | Appendix A10 | `pko/13_endpoint_vs_period_area_Glc.pdf` | exists |
-| Appendix A11 | `40_<metric>_<readout>_vs_period_<osc_type>.pdf` (R(t) population, R(t) single cell, R(p) of area, eccentricity, µ_area, budding rate per mother, µ_event) | with the next pipeline run; layout of Figure 6 with the controls and the bracket row |
+| Appendix A11 | `40_<metric>_<readout>_vs_period_<osc_type>.pdf` (R(t) population, R(t) single cell, R(p) of area, eccentricity, µ_area, budding rate per mother, µ_event) | with the next pipeline run; layout of Figure 6 with the controls |
 | Appendix A12 | `50_robustness_control_trend_summary.pdf` | with the next pipeline run |
 | Appendix A13 | `51_osc_vs_controls.pdf`, `51_osc_vs_controls_robustness.pdf`, `51_osc_vs_controls_sensors.pdf` | with the next pipeline run |
 

@@ -129,6 +129,14 @@ MORPHOLOGY_MIN_FRAMES = 10
 MORPHOLOGY_LARGE_UM2 = 30.0
 MORPHOLOGY_ROUND_ECC = 0.6
 
+# Abbildungen gegen die Periode (endpoint_trends.plot_endpoint_vs_period: 13_*, 21_*, 24_*, 40_*_vs_period):
+# Linie durch die Oszillationsmittel, gepoolte Kontrollmittel als Referenzlinien, untere Reihe mit dem
+# Bracket-Score. Seit 2026-10-05 alle drei aus: nur Punkte mit Fehlerbalken und die Kontrollen der eigenen
+# Struktur als Dreiecke. Der Bracket-Score bleibt als Tabelle (*_bracket_score.csv) und im Text.
+PERIOD_FIGURE_CONNECT_OSC = False
+PERIOD_FIGURE_REFERENCE_LINES = False
+PERIOD_FIGURE_BRACKET_PANEL = False
+
 # WICHTIG ZUR SPALTE 'osc_freq': sie enthaelt trotz ihres Namens die PERIODE
 # der Feast/Famine-Zyklen in MINUTEN (0.75 ... 24), keine Frequenz.
 #

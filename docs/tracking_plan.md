@@ -547,6 +547,17 @@ set, 3.2.2 morphology (new, Figure 3), 3.2.3 tracking quality, 3.2.4 why budding
 phase (the density figure read step by step, Figure 4), 3.2.5 events, 3.2.6 tracker dependence; later figures
 renumbered by one.
 
+## 6p. Period figures without lines and bracket panels; summary figure split (2026-10-05)
+
+`plot_endpoint_vs_period()` has three switches with defaults in `config.py` (`PERIOD_FIGURE_CONNECT_OSC`,
+`PERIOD_FIGURE_REFERENCE_LINES`, `PERIOD_FIGURE_BRACKET_PANEL`), all False: the figures against the period
+(`13_*`, `21_*`, `24_*`, `40_*_vs_period`) show only the oscillation means with their chamber error bars and the
+feast and famine controls of the same structure as triangles; no line through the oscillation means, no pooled
+control lines, no bracket-score row. The bracket score and its trend stay in `*_bracket_score.csv` and
+`*_spearman.csv`. The control-trend summary is now two figures, `50_control_trend_summary_growth.pdf` (endpoint
+area, µ_area, eccentricity, budding rate, µ_bud) and `50_control_trend_summary_sensors.pdf` (the four sensor
+ratios), from the unchanged `50_control_trend_summary.csv`. Synthetic run exit 0.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

@@ -627,23 +627,34 @@ def plot_endpoint_vs_period(
     ylabel: Optional[str] = None,
     strain_order: Optional[Sequence[str]] = None,
     title: Optional[str] = None,
+    connect_osc: Optional[bool] = None,
+    reference_lines: Optional[bool] = None,
+    bracket_panel: Optional[bool] = None,
 ) -> None:
     """Endzustand gegen die Periode: EINE Struktur pro Periode, mit IHREN Kontrollen.
 
     Obere Reihe: pro Periode der Mittelwert der Oszillationskammern (Fehlerbalken = Kammern dieser
-    Struktur, technisch) als gefuellter Kreis mit Linie in der Stammfarbe; an derselben x-Position
-    die Feast- (Dreieck hoch, gefuellt) und Famine-Kontrolle (Dreieck runter, hohl) DERSELBEN
-    Struktur. Duenne graue Referenzlinien: das ueber alle Strukturen des Stamms gepoolte Mittel je
-    Kontrollart (gestrichelt Feast, gepunktet Famine) - wie weit die Kontrollen selbst wandern,
-    zeigen die Dreiecke.
+    Struktur, technisch) als gefuellter Kreis in der Stammfarbe; an derselben x-Position die Feast-
+    (Dreieck hoch, gefuellt) und Famine-Kontrolle (Dreieck runter, hohl) DERSELBEN Struktur.
+    Optional (connect_osc) eine Linie durch die Oszillationsmittel und (reference_lines) duenne graue
+    Referenzlinien fuer das ueber alle Strukturen des Stamms gepoolte Mittel je Kontrollart.
 
-    Untere Reihe: der bracket-normierte Score (bracket_normalise()), 0 = Famine-Kontrolle,
-    1 = Feast-Kontrolle; Strukturen mit entartetem Bracket hohl bei 0.5.
+    Untere Reihe (bracket_panel): der bracket-normierte Score (bracket_normalise()), 0 = Famine-
+    Kontrolle, 1 = Feast-Kontrolle; Strukturen mit entartetem Bracket hohl bei 0.5. Die drei
+    Schalter fallen auf config.PERIOD_FIGURE_* zurueck (seit 2026-10-05 alle aus: nur Punkte mit
+    Fehlerbalken und die Kontrollen der Struktur; der Score bleibt als Tabelle).
 
     Eine Facette pro Stamm in der Stammfarbe (config.STRAIN_COLORS); Spearman-Wert in der Facette,
-    n = Zahl der Strukturen = Zahl der Perioden. Schritt 20/24 nutzen dieselbe Abbildung fuer die
-    Knospungsrate und µ_bud (title/ylabel).
+    n = Zahl der Strukturen = Zahl der Perioden. Schritt 20/24/40 nutzen dieselbe Abbildung fuer die
+    Knospungsrate, µ_bud und die Robustheitsmasse (title/ylabel).
     """
+    from config import PERIOD_FIGURE_CONNECT_OSC, PERIOD_FIGURE_REFERENCE_LINES, PERIOD_FIGURE_BRACKET_PANEL
+    if connect_osc is None:
+        connect_osc = PERIOD_FIGURE_CONNECT_OSC
+    if reference_lines is None:
+        reference_lines = PERIOD_FIGURE_REFERENCE_LINES
+    if bracket_panel is None:
+        bracket_panel = PERIOD_FIGURE_BRACKET_PANEL
     if per_chip is None or per_chip.empty:
         logger.warning("plot_endpoint_vs_period(): keine Daten fuer '%s' - uebersprungen.", value_col)
         return
@@ -655,7 +666,7 @@ def plot_endpoint_vs_period(
                        "fuer '%s' - uebersprungen.", value_col)
         return
     strains = [b for b in (strain_order or ordered_strains(osc["biosensor"].unique())) if b in set(osc["biosensor"])]
-    has_score = score is not None and not score.empty
+    has_score = bool(bracket_panel) and score is not None and not score.empty
     n_rows = 2 if has_score else 1
     periods_all = sorted(osc["_period"].unique())
     fig, axes = plt.subplots(n_rows, len(strains), figsize=(2.7 * len(strains) + 0.5, 2.7 * n_rows + 0.4),
@@ -667,10 +678,11 @@ def plot_endpoint_vs_period(
         ax = axes[0][j]
         sub = df[df["biosensor"] == strain]
         # Gepooltes Kontrollmittel je Art als duenne Referenzlinie (Feast gestrichelt, Famine gepunktet).
-        for ct in CONTROL_TYPES:
-            vals = sub.loc[sub["condition_type"] == ct, "value"].dropna()
-            if len(vals) >= 2:
-                ax.axhline(vals.mean(), color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES[ct], zorder=1)
+        if reference_lines:
+            for ct in CONTROL_TYPES:
+                vals = sub.loc[sub["condition_type"] == ct, "value"].dropna()
+                if len(vals) >= 2:
+                    ax.axhline(vals.mean(), color=INK_MUTED, linewidth=0.8, linestyle=CONTROL_LINESTYLES[ct], zorder=1)
         # Kontrollen DIESER Struktur an der x-Position ihrer Periode.
         for ct in ("NegCtrl", "PosCtrl"):
             c = sub[sub["condition_type"] == ct].dropna(subset=["_period", "value"]).sort_values("_period")
@@ -678,7 +690,10 @@ def plot_endpoint_vs_period(
                 ax.scatter(c["_period"], c["value"], **marker_kwargs(ct, color, size=30))
         o = sub[sub["condition_type"] == "Oscillation"].dropna(subset=["_period", "value"]).sort_values("_period")
         yerr = o["sd_chamber"].fillna(0.0) if "sd_chamber" in o.columns else None
-        ax.errorbar(o["_period"], o["value"], yerr=yerr, **errorbar_kwargs("Oscillation", color))
+        osc_kw = errorbar_kwargs("Oscillation", color)
+        if not connect_osc:
+            osc_kw["linestyle"] = ""
+        ax.errorbar(o["_period"], o["value"], yerr=yerr, **osc_kw)
         _log_period_axis(ax, periods_all)
         panel_title(ax, f"{strain}  (n = {o['_period'].nunique()} structures)")
         if j == 0:
@@ -724,10 +739,11 @@ def plot_endpoint_vs_period(
 
     handles = control_handles(INK_SOFT)
     handles[0].set_label("oscillation chambers (mean ± SD of the structure's chambers)")
-    handles += [Line2D([], [], color=INK_MUTED, linewidth=0.9, linestyle=CONTROL_LINESTYLES["PosCtrl"],
-                       label="feast controls, mean over structures"),
-                Line2D([], [], color=INK_MUTED, linewidth=0.9, linestyle=CONTROL_LINESTYLES["NegCtrl"],
-                       label="famine controls, mean over structures")]
+    if reference_lines:
+        handles += [Line2D([], [], color=INK_MUTED, linewidth=0.9, linestyle=CONTROL_LINESTYLES["PosCtrl"],
+                           label="feast controls, mean over structures"),
+                    Line2D([], [], color=INK_MUTED, linewidth=0.9, linestyle=CONTROL_LINESTYLES["NegCtrl"],
+                           label="famine controls, mean over structures")]
     if any_degenerate:
         handles.append(Line2D([], [], marker="o", linestyle="", markersize=6, markerfacecolor=SURFACE,
                               markeredgecolor=INK_SOFT, label="bracket undefined (controls do not separate)"))
