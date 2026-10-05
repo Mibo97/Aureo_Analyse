@@ -151,13 +151,6 @@ chamber 5.7 %), since the removed tracks were mostly single-frame objects of a f
 accounted for 432 tracks and 0.6 % of the object-frames. The debris-rich structure BSG/pH/6 min lost 52 % of its
 object-frames. 63,215 cell tracks with 950,203 object-frames remained.
 
-After exclusion of the objects at the chamber border, segmentation and tracking yielded 96,720 object tracks
-with 1,019,226 object-frames in the 564 chambers. The
-cell filter (at least two frames and a largest area of at least 1,500 px², i.e. 8 µm², and a phase contrast of at
-least 45 % of the structure median) removed 35 % of the tracks but only 6.8 % of the object-frames (median
-chamber 5.7 %), since the removed tracks were mostly single-frame objects of a few µm²; the phase-contrast rule
-accounted for 432 tracks and 0.6 % of the object-frames. The debris-rich structure BSG/pH/6 min lost 52 % of its
-object-frames. 63,215 cell tracks with 950,203 object-frames remained.
 
 ### 3.2.2 Observed morphology
 
@@ -298,10 +291,10 @@ five on W65). [`static/13_endpoint_summary.csv`, `static/21_budding_rate_summary
 
 | readout | W109 minimal | W109 complex | p | W65 minimal | W65 complex | p |
 | --- | --- | --- | --- | --- | --- | --- |
-| endpoint cell area (µm²) | 29.5 | 102.7 | 0.004 | 112.5 | 107.3 | n.s. |
+| endpoint cell area (µm²) | 29.5 | 102.7 | 0.004 | 112.5 | 107.3 | 0.89 |
 | endpoint eccentricity | 0.80 | 0.75 | 0.23 | 0.43 | 0.72 | 0.006 |
-| buds per mother-hour | 0.33 | 0.05 | 0.12 | 0.14 | 0.18 | n.s. |
-| µ_bud (births per cell-hour) | 0.18 | 0.03 | | 0.11 | 0.14 | |
+| buds per mother-hour | 0.33 | 0.05 | 0.12 | 0.14 | 0.18 | 0.66 |
+| µ_bud (births per cell-hour) | 0.18 | 0.03 | 0.099 | 0.11 | 0.14 | 0.68 |
 
 On chip W109 cells in complex medium ended 3.5 times larger than in minimal medium (102.7 against 29.5 µm²,
 Welch's t-test over four chambers each, p 0.004), were marginally rounder (eccentricity 0.75 against 0.80,
@@ -350,7 +343,7 @@ undefined where the two controls did not separate beyond the chamber scatter.
 
 **Figure 6: Readouts of the Glc oscillation series against the half-cycle period.** (A) Buds per mother-hour in the
 sparse-phase window, (B) births per cell-hour (µ_bud) and (C) endpoint cell area, one panel per strain; filled
-circles: oscillation chambers (mean ± SEM over chambers), triangles: feast control (filled, up) and famine control
+circles: oscillation chambers (mean ± SD over the chambers of the structure), triangles: feast control (filled, up) and famine control
 (hollow, down) of the same structure. ρ, p and n in the panel titles: Spearman correlation over structures. The pH series are shown in Appendix Figure A5.
 [`21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`,
 `13_endpoint_vs_period_area_Glc.pdf`]
@@ -364,7 +357,10 @@ pH series. The specific birth rate of the population, µ_bud, had a median of 0.
 entered the chambers with the flow at a median rate of 0.19 per cell-hour (new tracks without a parent mask), and
 immigration exceeded births in 37 % of the chambers, so that the object count of a chamber was not a growth
 curve (Appendix Figure A6). Per structure and chamber type, µ_bud and the area growth rate of single cells
-µ_area were negatively correlated (Spearman ρ −0.4, n = 146): where cells grew in area, they budded less.
+µ_area were not coupled in one direction (Appendix Figure A6): pooled over both oscillation types they
+correlated negatively (Spearman ρ −0.41, n = 146), but only because the Glc structures combined a higher µ_bud
+with a lower µ_area than the pH structures (medians 0.25 against 0.16 births per cell-hour and 0.11 against
+0.18 h⁻¹); within the Glc series the correlation was −0.24 (n = 87) and within the pH series +0.39 (n = 59).
 
 **Oscillation against constant medium.** Robustness to the oscillation itself was read from the comparison of
 the oscillation chambers with the constant-medium controls of the same structure, paired over structures

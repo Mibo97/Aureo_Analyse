@@ -259,9 +259,12 @@ Full run, 535 chambers with a window: 11,361 births in 49,764 cell-hours.
 - Against the period (`24_growth_from_budding_control_trend.csv`): no period effect in any series; BSO/Glc
   rises with the period (ρ +1.00) together with its famine control (+0.60), BSA/pH, BSG/Glc and BSG/pH fall
   (−0.60) together with a control (−0.77 to −1.00), the other six series show no trend.
-- Population against single cell: µ_bud and µ_area per chip and chamber type correlate at Spearman −0.4
-  (n = 146, `24_mu_bud_vs_mu_area.pdf`). Where cells grow in area they bud less; growth goes into size or
-  into blastoconidia, the same trade-off as in the static comparison of section 3.
+- Population against single cell: µ_bud and µ_area per chip and chamber type correlate at Spearman −0.41
+  pooled (n = 146, `24_mu_bud_vs_mu_area.pdf`), but the pooled value is a between-type contrast: the Glc
+  structures have the higher µ_bud (median 0.25 against 0.16) and the lower µ_area (0.11 against 0.18 h⁻¹).
+  Within Glc the correlation is −0.24 (n = 87; oscillation chambers alone −0.43), within pH +0.39 (n = 59;
+  oscillation chambers +0.48). The trade-off "growth into size or into blastoconidia" holds between the two
+  oscillation types and in the static comparison of section 3, not within the pH series.
 - Static (`static/24_growth_from_budding_summary.csv`): W109 minimal medium 0.18, complex medium 0.03 per
   cell-hour; W65 0.11 and 0.14, with the burst chamber at 0.28. PKO: its famine controls bud at 0.32 to 0.43
   per cell-hour, its feast controls at 0.18 to 0.22 (`pko/24_growth_from_budding_per_chamber.csv`).
