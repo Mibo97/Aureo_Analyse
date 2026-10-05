@@ -184,7 +184,7 @@ def plot_osc_vs_controls(per_struct: pd.DataFrame, out_path: Path, readouts: Seq
                 ax.set_ylabel(labels.get(readout, readout) + ("\n(oscillation / controls)" if mode == "ratio"
                                                              else "\n(oscillation − controls)"), fontsize=7.5)
             if i == len(readouts) - 1:
-                ax.set_xlabel("cycle period [min]")
+                ax.set_xlabel("half-cycle period [min]")
     legend_below(fig, strain_handles(strains), ncol=min(len(strains), 6), y=0.0)
     if title:
         fig.suptitle(title, fontsize=9.5, y=1.0)

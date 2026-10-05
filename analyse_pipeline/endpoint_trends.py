@@ -1,16 +1,18 @@
 """
 endpoint_trends.py
 ==================
-Kumulativer Endzustand gegen die Zyklusperiode - plus der Trendtest, der dazu
-gehoert.
+Kumulativer Endzustand gegen die Halbzyklus-Periode (das Schaltintervall des Mediums,
+'osc_freq' in Minuten; eine volle Feast/Famine-Periode ist doppelt so lang) - plus der
+Trendtest, der dazu gehoert.
 
 WARUM DIESE DATEI EXISTIERT
 ---------------------------
-Bei MIN_PER_FRAME = 10 liegt die kuerzeste aufloesbare Periode bei 20 min;
-fuenf der sechs Bedingungen liegen darunter (siehe config.py und den
-README-Abschnitt zur Abtastung). Ein einzelner Zyklus ist damit NICHT
-beobachtbar, und eine scheinbare Periodizitaet in einer Zeitreihe waere ein
-Alias-Artefakt. Interpretierbar ist nur die KUMULATIVE Wirkung ueber Stunden.
+Bei MIN_PER_FRAME = 10 liegt die kuerzeste aufloesbare volle Periode bei 20 min; vier der
+sechs Schaltintervalle (0.75 bis 6 min, volle Perioden 1.5 bis 12 min) liegen darunter, 12 min
+ist grenzwertig (2.4 Frames je Zyklus), 24 min aufgeloest (4.8 Frames je Zyklus); siehe
+config.py und den README-Abschnitt zur Abtastung. Fuer die kurzen Intervalle ist ein
+einzelner Zyklus NICHT beobachtbar, eine scheinbare Periodizitaet in einer Zeitreihe waere ein
+Alias-Artefakt. Interpretierbar ist fuer alle Intervalle die KUMULATIVE Wirkung ueber Stunden.
 
 Genau diese Auswertung fehlte: die Pipeline erzeugte Zeitreihen (10_/30_/31_)
 und Varianzmasse (40_), aber keine einzige Abbildung, die den ENDZUSTAND einer
@@ -730,12 +732,12 @@ def plot_endpoint_vs_period(
                             edgecolor=edge_color(color), linewidth=0.9, zorder=3)
             _log_period_axis(ax2, periods_all)
             ax2.set_ylim(y_lo, y_hi)
-            ax2.set_xlabel("feast/famine cycle period [min]")
+            ax2.set_xlabel("feast/famine half-cycle period [min]")
             if j == 0:
                 ax2.set_ylabel("bracket score\n0 = famine control, 1 = feast control")
             _annotate_trend(ax2, score_trend, strain, value_col)
         else:
-            ax.set_xlabel("feast/famine cycle period [min]")
+            ax.set_xlabel("feast/famine half-cycle period [min]")
 
     handles = control_handles(INK_SOFT)
     handles[0].set_label("oscillation chambers (mean ± SD of the structure's chambers)")

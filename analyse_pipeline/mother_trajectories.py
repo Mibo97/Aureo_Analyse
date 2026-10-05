@@ -71,6 +71,8 @@ def plot_mother_trajectories(
     max_mothers: int = 24,
     mothers_per_page: int = 6,
     min_per_frame: Optional[float] = None,
+    scales: Optional[dict] = None,
+    labels: Optional[dict] = None,
 ) -> pd.DataFrame:
     """
     Plottet die Roh-Trajektorien (z.B. Fläche + Sensor-Ratio) EINZELNER,
@@ -162,14 +164,15 @@ def plot_mother_trajectories(
                 for col_i, value_col in enumerate(value_cols):
                     ax = axes[row_i][col_i]
                     x = traj["frame"] * min_per_frame / 60.0 if min_per_frame is not None else traj["frame"]
-                    ax.plot(x, traj[value_col], color=_line_color(mom_row, traj), linewidth=1.1, marker="o", markersize=2)
+                    ax.plot(x, traj[value_col] * (scales or {}).get(value_col, 1.0),
+                            color=_line_color(mom_row, traj), linewidth=1.1, marker="o", markersize=2)
 
                     for bf in bud_frames:
                         bx = bf * min_per_frame / 60.0 if min_per_frame is not None else bf
                         ax.axvline(bx, color="#222222", linewidth=0.9, linestyle="--", alpha=0.7)
 
                     if row_i == 0:
-                        ax.set_title(value_col, fontsize=10)
+                        ax.set_title((labels or {}).get(value_col, value_col), fontsize=10)
                     if col_i == 0:
                         ax.set_ylabel(
                             f"{cell_uid}\ncoverage={mom_row['coverage']:.2f}", fontsize=8,
@@ -307,6 +310,8 @@ def plot_stable_mother_per_group(
     n_per_group: int = 1,
     mothers_per_page: int = 6,
     min_per_frame: Optional[float] = None,
+    scales: Optional[dict] = None,
+    labels: Optional[dict] = None,
 ) -> pd.DataFrame:
     """
     Wie plot_mother_trajectories(), aber zwei Unterschiede:
@@ -391,12 +396,13 @@ def plot_stable_mother_per_group(
                         continue
 
                     value_col = vcols[col_i]
-                    ax.plot(x, traj[value_col], color=_line_color(mom_row, traj), linewidth=1.1, marker="o", markersize=2)
+                    ax.plot(x, traj[value_col] * (scales or {}).get(value_col, 1.0),
+                            color=_line_color(mom_row, traj), linewidth=1.1, marker="o", markersize=2)
                     for bf in bud_frames:
                         bx = bf * min_per_frame / 60.0 if min_per_frame is not None else bf
                         ax.axvline(bx, color="#222222", linewidth=0.9, linestyle="--", alpha=0.7)
 
-                    ax.set_title(value_col, fontsize=9)
+                    ax.set_title((labels or {}).get(value_col, value_col), fontsize=9)
                     if col_i == 0:
                         ax.set_ylabel(
                             f"{group_label}\n{mom_row['cell_uid']} (cov={mom_row['coverage']:.2f})",

@@ -26,7 +26,18 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import to_hex, to_rgb
 from matplotlib.lines import Line2D
 
-from config import STRAIN_COLORS, STRAIN_COLOR_OTHER, STRAIN_ORDER
+from config import STRAIN_COLORS, STRAIN_COLOR_OTHER, STRAIN_ORDER, UM_PER_PX
+
+# Zellflaeche: die Tabellen tragen die rohe Cellpose-Flaeche in px², die Abbildungen zeigen µm²
+# (Pixelgroesse config.UM_PER_PX). Die Umrechnung passiert nur beim Zeichnen bzw. in den
+# *_um2-Zusatzspalten der Endpunkt-Tabellen; Schwellen (CELL_MIN_MAX_AREA_PX usw.) bleiben px².
+AREA_SCALE_UM2 = UM_PER_PX ** 2
+AREA_LABEL = "cell area [µm²]"
+
+
+def area_to_um2(values):
+    """px² -> µm² fuer Anzeigewerte (Series, Array oder Skalar)."""
+    return values * AREA_SCALE_UM2
 
 # Tintenfarben fuer Text, Achsen, Referenzlinien.
 INK = "#222222"
@@ -206,7 +217,7 @@ def dedupe_handles(axes) -> tuple[list, list]:
     return list(seen.values()), list(seen.keys())
 
 
-AXIS_LABELS = {"osc_freq": "cycle period [min]", "medium": "medium", "chip_family": "chip family",
+AXIS_LABELS = {"osc_freq": "half-cycle period [min]", "medium": "medium", "chip_family": "chip family",
                "biosensor": "strain", "condition_type": "chamber type"}
 
 

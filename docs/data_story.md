@@ -41,7 +41,7 @@ one culture, does not repeat it.
 | organism, imaging | *Aureobasidium pullulans*, microfluidic chambers, one frame per 10 min, 133 frames in the standard run (about 22 h; 13 to 136 in the tables, one chamber broke off after 13 frames); 0.0733 µm per px, a blastoconidium of 20 µm² is 3,700 px² |
 | segmentation, tracking | Cellpose `cpsam`, flow 0.4, cell probability 0 (`imaging/pipeline_template_v12.yaml`); tracking on the raw labels before any filtering, the mother of a new object from the mask it touches (`imaging/cellpose_pipeline_v12.py`, `imaging/track_labels.py`) |
 | strains | WT and four biosensor strains: BSA (`ratio_Queen-2m`), BSG (`ratio_GlyRNA`), BSO (`ratio_OxPro`), BSPH (`ratio_pHluorin`); PKO = no pullulan |
-| oscillation types | Glc and pH switching; periods 0.75, 1.5, 3, 6, 12, 24 min (Glc; WT lacks 24) and 0.75, 1.5, 6, 24 min (pH) |
+| oscillation types | Glc and pH switching; the "period" of a structure is the switching interval of the medium, i.e. the half-cycle period (`osc_freq`): 0.75, 1.5, 3, 6, 12, 24 min (Glc; WT lacks 24) and 0.75, 1.5, 6, 24 min (pH); a full feast/famine cycle lasts twice as long (1.5 to 48 min) |
 | one structure | one period; 5 oscillation chambers, 3 constant-feast (PosCtrl) and 3 (sometimes 4) constant-famine (NegCtrl) chambers on several arrays; `replicate` is the array index, `chamber` the position (A1/A2 feast, A13/A14 famine, A3 to A12 switching) |
 | one physical chip | 2 or 3 structures = 2 or 3 periods, one pre-culture, one day (`culture`) |
 | oscillation and PKO total | 50 structures, 547 chambers (8 to 12 per structure), 20 cultures |
@@ -69,11 +69,14 @@ The pipeline calls a structure `chip` in every table and figure. `culture` is th
 
 ### 1.3 The sampling limit
 
-Ten-minute frames resolve periods of 20 min and longer. Five of the six Glc periods and three of the four pH
-periods lie below that. Single cycles are not observable; apparent periodicity in the time series is an
-alias. The pipeline therefore reads only cumulative quantities: the endpoint of a chamber (`13_`), the budding
-rate over the sparse window (`21_`), and the robustness R(p) (`40_Rp_*`). The time series (`10_`, `30_`,
-`31_`) are shown as drift over hours, never as cycles. (`config.py` logs the unresolved periods at every run.)
+Ten-minute frames resolve full periods of 20 min and longer. A full feast/famine cycle is twice the switching
+interval, so the intervals 0.75 to 6 min (full periods 1.5 to 12 min), four of the six Glc intervals and three of
+the four pH intervals, lie below that; the 12-min interval is at the limit (full period 24 min, 2.4 frames per
+cycle) and the 24-min interval is resolved (48 min, 4.8 frames per cycle). For the short intervals single cycles
+are not observable, and apparent periodicity in their time series is an alias. The pipeline therefore reads
+cumulative quantities for all intervals alike: the endpoint of a chamber (`13_`), the budding rate over the sparse
+window (`21_`), µ_bud (`24_`) and the robustness metrics (`40_`). The time series (`10_`, `30_`, `31_`) are shown
+as drift over hours, never as cycles. (`config.py` logs the unresolved and marginal intervals at every run.)
 
 ---
 
@@ -256,9 +259,12 @@ Full run, 535 chambers with a window: 11,361 births in 49,764 cell-hours.
 - Against the period (`24_growth_from_budding_control_trend.csv`): no period effect in any series; BSO/Glc
   rises with the period (ρ +1.00) together with its famine control (+0.60), BSA/pH, BSG/Glc and BSG/pH fall
   (−0.60) together with a control (−0.77 to −1.00), the other six series show no trend.
-- Population against single cell: µ_bud and µ_area per chip and chamber type correlate at Spearman −0.4
-  (n = 146, `24_mu_bud_vs_mu_area.pdf`). Where cells grow in area they bud less; growth goes into size or
-  into blastoconidia, the same trade-off as in the static comparison of section 3.
+- Population against single cell: µ_bud and µ_area per chip and chamber type correlate at Spearman −0.41
+  pooled (n = 146, `24_mu_bud_vs_mu_area.pdf`), but the pooled value is a between-type contrast: the Glc
+  structures have the higher µ_bud (median 0.25 against 0.16) and the lower µ_area (0.11 against 0.18 h⁻¹).
+  Within Glc the correlation is −0.24 (n = 87; oscillation chambers alone −0.43), within pH +0.39 (n = 59;
+  oscillation chambers +0.48). The trade-off "growth into size or into blastoconidia" holds between the two
+  oscillation types and in the static comparison of section 3, not within the pH series.
 - Static (`static/24_growth_from_budding_summary.csv`): W109 minimal medium 0.18, complex medium 0.03 per
   cell-hour; W65 0.11 and 0.14, with the burst chamber at 0.28. PKO: its famine controls bud at 0.32 to 0.43
   per cell-hour, its feast controls at 0.18 to 0.22 (`pko/24_growth_from_budding_per_chamber.csv`).
@@ -421,8 +427,8 @@ position, so it stays inferred from the period order. The day blocks add a cultu
 across strains for Glc, aligned with the period for pH (`00_chip_run_order.csv`). Without the controls every
 drift in section 4 would have been reported as a dose response.
 
-`50_control_trend_summary_growth.pdf` and `_sensors.pdf` (with `50_control_trend_summary.csv`) show the whole
-finding in two figures, the growth and morphology readouts and the sensor ratios:
+`50_control_trend_summary.pdf` (with `50_control_trend_summary.csv`; `_growth.pdf` and `_sensors.pdf` are the
+same figure split in two) shows the whole finding in one figure:
 one point per readout and strain series, the oscillation Spearman on x, the strongest control Spearman on y,
 coloured by verdict; points along the diagonal are the structure effects. It collects the control-trend tables
 of the endpoint (`13_`), of µ_area (`12_area_growth_rate_control_trend.csv`) and of the budding rate (`21_`).
@@ -488,10 +494,11 @@ least (R(t) −0.21, R(p) −0.73, values near zero). The control-trend classifi
 combinations (21 metrics x series): 60 no trend, 35 structure effects, 10 not robust, 9 period effects, five of
 them in BSA/Glc (R(p) of area, eccentricity, µ_area and budding rate per mother, R(t) of µ_event: with longer
 periods that series gets more homogeneous in size, growth and budding, more stable in the budding rhythm, and more
-heterogeneous in shape), the same picture as the 58 readout rows of section 5. The R(t) caveat: an R(t) trend of
-the oscillation chambers alone can be an alias artefact (sampling below Nyquist, largest at the longest period);
-against the controls it stays readable, and the one R(t) period effect of the area (WT/Glc) runs towards more
-robustness with the period, against the alias direction.
+heterogeneous in shape), the same picture as the 58 readout rows of section 5. The R(t) caveat: the cycle itself
+contributes to the temporal variance of the oscillation chambers, and differently per interval (a random phase of
+the cycle at intervals up to 6 min, near the Nyquist limit at 12 min, a resolved cycle at 24 min), so an R(t)
+trend of the oscillation chambers alone is not interpretable; against the controls, which see no cycle, it stays
+readable.
 
 Static context: R(t) of the area −0.18 in minimal and −0.39 in complex medium (the growing cells), R(p) −0.47 and
 −0.51.
@@ -517,7 +524,7 @@ to the period.
   `95_..._control_chambers.pdf` (every control chamber within every structure), `95_..._timeseries.pdf`,
   `95_..._raw_channels.pdf`, with `95_..._summary_per_replicate.csv`: no clear difference for any sensor.
 - Appendix: `30_<channel>_over_time_<osc_type>.pdf`, `31_ratio_<sensor>_over_time_<osc_type>.pdf` (drift over
-  hours; cycles are below the sampling limit), `40_Rp_ratio_*.pdf`, `40_Rt_population_ratio_*.pdf`.
+  hours; single cycles are not resolved for intervals up to 6 min), `40_Rp_ratio_*.pdf`, `40_Rt_population_ratio_*.pdf`.
 
 ---
 
@@ -546,7 +553,7 @@ n = 1.
 | 1 Static medium | `static/13_endpoint_vs_medium_area.pdf`, `static/21_budding_rate_vs_medium.pdf` | `static/13_endpoint_vs_medium_eccentricity.pdf`, `static/10_cell_area_over_time.pdf`, `static/21_panel_a_violin.pdf` | `static/13_endpoint_summary.csv`, `static/13_endpoint_per_chamber.csv`, `static/21_budding_rate_summary.csv` |
 | 2 Oscillations | `21_budding_rate_vs_period_Glc.pdf`, `24_growth_from_budding_vs_period_Glc.pdf`, `13_endpoint_vs_period_area_Glc.pdf` | the `_pH.pdf` counterparts, `24_immigration_vs_period_*.pdf`, `24_mu_bud_vs_mu_area.pdf`, `13_endpoint_vs_period_eccentricity_*.pdf`, `10_cell_area_over_time_*.pdf`, `12_area_growth_rate_all.pdf` (with the control chambers), `40_Rp_*.pdf` | `13_endpoint_spearman.csv`, `21_budding_rate_spearman.csv`, `24_growth_from_budding_spearman.csv`, `12_area_growth_rate_spearman.csv` |
 | 3 Biosensors | `13_endpoint_vs_period_ratio_OxPro_Glc.pdf`, `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf` | `95_*_comparison.pdf`, `31_ratio_*_over_time_*.pdf` | ratio rows of `13_endpoint_control_trend.csv`, `95_*_summary_per_replicate.csv` |
-| 4 Controls (the pivot) | `50_control_trend_summary_growth.pdf`, `50_control_trend_summary_sensors.pdf`; `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf` | `*_bracket_score.csv` of `13_`/`21_`/`24_`, `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `24_growth_from_budding_control_trend.csv`, `13_endpoint_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
+| 4 Controls (the pivot) | `50_control_trend_summary.pdf` (`_growth.pdf`, `_sensors.pdf` split for the appendix); `13_endpoint_vs_period_ratio_OxPro_Glc.pdf` as the worked example | `40_control_consistency_*.pdf` | `*_bracket_score.csv` of `13_`/`21_`/`24_`, `50_control_trend_summary.csv`, `13_endpoint_control_trend.csv`, `12_area_growth_rate_control_trend.csv`, `21_budding_rate_control_trend.csv`, `24_growth_from_budding_control_trend.csv`, `13_endpoint_within_culture.csv`, `*_bracket_score.csv`, `00_chip_run_order.csv` |
 | PKO | `pko/61_pko_control_agreement.pdf` | `pko/13_endpoint_vs_period_area_Glc.pdf` | `pko/60_pko_within_chip_agreement.csv`, `pko/60_pko_control_bracket.csv` |
 
 Suggested order of the results chapter: static first (the clean result), then the tracking limit as a short

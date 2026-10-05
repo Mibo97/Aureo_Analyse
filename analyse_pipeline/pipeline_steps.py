@@ -115,6 +115,7 @@ from summary_plots import (
     plot_rt_vs_rp_quadrant,
     plot_rt_single_cell_distribution,
 )
+from plot_style import AREA_LABEL, AREA_SCALE_UM2
 from analysis import (
     pretty_label,
     data_overview,
@@ -316,6 +317,33 @@ class PipelineContext:
 
 
 
+def _area_display(df: pd.DataFrame, value_col: str, cols) -> pd.DataFrame:
+    """Kopie mit den Spalten `cols` in µm², wenn value_col die Zellflaeche ist (nur fuer die
+    Abbildungen; die Tabellen bleiben in px², siehe plot_style.AREA_SCALE_UM2)."""
+    if value_col != "area" or df is None or df.empty:
+        return df
+    out = df.copy()
+    for c in cols:
+        if c in out.columns:
+            out[c] = out[c] * AREA_SCALE_UM2
+    return out
+
+
+def _with_um2_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Endpunkt-Tabellen: fuer die Flaechen-Zeilen (value_col == 'area') die Werte zusaetzlich in µm²
+    (<spalte>_um2), damit die Zahlen der Arbeit ohne Umrechnung aus der Tabelle kommen."""
+    if df is None or df.empty or "value_col" not in df.columns:
+        return df
+    is_area = df["value_col"].astype(str).eq("area")
+    if not is_area.any():
+        return df
+    out = df.copy()
+    for c in ("value", "mean", "sd", "sem", "sd_chamber", "sem_chamber", "sd_chip", "sem_chip"):
+        if c in out.columns:
+            out[f"{c}_um2"] = pd.to_numeric(out[c], errors="coerce").where(is_area) * AREA_SCALE_UM2
+    return out
+
+
 def step_00_overview(ctx: PipelineContext) -> None:
     """Übersicht / Sanity-Check."""
     cells = ctx.cells
@@ -353,7 +381,7 @@ def step_10_growth(ctx: PipelineContext) -> None:
         for facet_value, plot_sel, ctrl_sel in _per_facet(ctx, cells_plot, controls_only):
             plot_metric_over_time_by_frequency(
                 plot_sel, "area", output_dir / f"10_cell_area_over_time{facet_value}.pdf",
-                freq_order=freq_order, ylabel="Cell area [px²]",
+                freq_order=freq_order, ylabel=AREA_LABEL, scale=AREA_SCALE_UM2,
                 reference_cells=ctrl_sel, x_col=ctx.x_col, facet_col=ctx.facet_col,
             )
 
@@ -516,17 +544,17 @@ def step_10_growth(ctx: PipelineContext) -> None:
 
 
 def step_13_endpoint(ctx: PipelineContext) -> None:
-    """Kumulativer Endzustand gegen die Zyklusperiode (+ Spearman-Trendtest)."""
+    """Kumulativer Endzustand gegen die Halbzyklus-Periode (+ Spearman-Trendtest)."""
     cells = ctx.cells
     output_dir = ctx.output_dir
 
     # ==================================================================
     # 13. Kumulativer Endzustand gegen die Periode
     #
-    # Die einzige Auswertungsform, die bei dieser Abtastung interpretierbar
-    # ist: einzelne Zyklen liegen unter dem Nyquist-Limit (siehe config.py),
-    # ein Zyklusverlauf ist also nicht beobachtbar - die Wirkung ueber
-    # Stunden dagegen schon. Vorher gab es dafuer keine Abbildung: 10_/30_/31_
+    # Die Auswertungsform, die bei dieser Abtastung fuer ALLE Intervalle
+    # interpretierbar ist: die kurzen Zyklen (Schaltintervall <= 6 min) liegen
+    # unter dem Nyquist-Limit (siehe config.py), ein Zyklusverlauf ist dort
+    # nicht beobachtbar - die Wirkung ueber Stunden dagegen schon. Vorher gab es dafuer keine Abbildung: 10_/30_/31_
     # sind Zeitreihen, 40_ sind Varianzmasse, und 50_summary_statistics.csv
     # bekommt nur intensity_cols uebergeben, sieht die ratio_*-Spalten also
     # nie. Fuer die Sensor-Daten ist das hier die erste kumulative Auswertung
@@ -607,10 +635,11 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
                 all_trend.append(score_trend.assign(value_col=f"{value_col}__bracket_score"))
             # Eine Datei pro osc_type: die Staemme nebeneinander statt in einem
             # Staemme x osc_type-Gitter, das bei 5 Staemmen unlesbar wird.
+            per_rep_plot = _area_display(per_replicate, value_col, ("value", "sd_chamber"))
             for osc_type in sorted(per_replicate["osc_type"].dropna().unique()):
                 sel = per_replicate["osc_type"] == osc_type
                 plot_endpoint_vs_period(
-                    per_replicate[sel], output_dir / f"13_endpoint_vs_period_{value_col}_{osc_type}.pdf",
+                    per_rep_plot[sel], output_dir / f"13_endpoint_vs_period_{value_col}_{osc_type}.pdf",
                     value_col=value_col, trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
                     score=score[score["osc_type"] == osc_type] if not score.empty else None,
                     score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
@@ -619,10 +648,12 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         else:
             # Kategoriale x-Achse (Medium), Facette Chip-Familie, Fehler ueber Chips.
             plot_point_errorbar(
-                summary, value_col="mean", sd_col="sem",
+                _area_display(summary, value_col, ("mean", "sd", "sem", "sd_chamber", "sd_chip", "sem_chip")),
+                value_col="mean", sd_col="sem",
                 out_path=output_dir / f"13_endpoint_vs_{ctx.x_col}_{value_col}.pdf",
                 x_col=ctx.x_col, facet_col=ctx.facet_col, color_col=PANEL_A_GROUP_COL,
-                x_order=ctx.freq_order, points=per_chamber, points_col="value",
+                x_order=ctx.freq_order, points=_area_display(per_chamber, value_col, ("value",)),
+                points_col="value",
                 ylabel=f"{pretty_label(value_col)} (endpoint)",
                 title=f"{pretty_label(value_col)}: endpoint before saturation (frames {frame_window[0]}-{frame_window[1]}), mean ± SEM over chambers"
                       if frame_window else f"{pretty_label(value_col)}: endpoint, mean ± SEM over chambers",
@@ -632,18 +663,19 @@ def step_13_endpoint(ctx: PipelineContext) -> None:
         logger.warning("Schritt 13: kein Endzustand berechenbar - keine Dateien geschrieben.")
         return
 
-    pd.concat(all_per_replicate, ignore_index=True).to_csv(
+    _with_um2_columns(pd.concat(all_per_replicate, ignore_index=True)).to_csv(
         output_dir / "13_endpoint_per_chip.csv", index=False)
     if all_chambers:
-        pd.concat(all_chambers, ignore_index=True).to_csv(
+        _with_um2_columns(pd.concat(all_chambers, ignore_index=True)).to_csv(
             output_dir / "13_endpoint_per_chamber.csv", index=False)
     if all_scores:
         pd.concat(all_scores, ignore_index=True).to_csv(
             output_dir / "13_endpoint_bracket_score.csv", index=False)
         logger.info("Tabelle gespeichert: 13_endpoint_bracket_score.csv")
-    pd.concat(all_summary, ignore_index=True).to_csv(
+    _with_um2_columns(pd.concat(all_summary, ignore_index=True)).to_csv(
         output_dir / "13_endpoint_summary.csv", index=False)
-    logger.info("Tabellen gespeichert: 13_endpoint_per_chip.csv / 13_endpoint_summary.csv")
+    logger.info("Tabellen gespeichert: 13_endpoint_per_chip.csv / 13_endpoint_summary.csv "
+                "(Flaechen-Zeilen zusaetzlich als *_um2)")
 
     if all_trend:
         trend_all = pd.concat(all_trend, ignore_index=True)
@@ -713,7 +745,7 @@ def _lineage_rate_outputs(ctx: PipelineContext, per_experiment: pd.DataFrame) ->
                 score=score[score["osc_type"] == osc_type] if not score.empty else None,
                 score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
                 ylabel="buds per mother-hour\n(sparse-phase window)",
-                title="budding rate in the sparse-phase window vs cycle period — one chip per period",
+                title="budding rate in the sparse-phase window vs half-cycle period — one structure per interval",
             )
     else:
         plot_point_errorbar(
@@ -741,9 +773,9 @@ def _growth_from_budding_outputs(ctx: PipelineContext) -> None:
     per_chamber.to_csv(output_dir / "24_growth_from_budding_per_chamber.csv", index=False)
     for value_col, stem, ylabel, title in (
         ("mu_bud", "24_growth_from_budding", "µ_bud [h⁻¹]\n(births per cell-hour, sparse window)",
-         "specific growth rate from budding vs cycle period — one chip per period"),
+         "specific growth rate from budding vs half-cycle period — one structure per interval"),
         ("immigration_per_cell_h", "24_immigration", "washed-in cells per cell-hour\n(new tracks without a parent mask)",
-         "immigration into the chambers vs cycle period — one chip per period"),
+         "immigration into the chambers vs half-cycle period — one structure per interval"),
     ):
         if per_chamber[value_col].isna().all():
             logger.info("%s: Spalte '%s' leer (kein link_type in den Tabellen) - uebersprungen.", stem, value_col)
@@ -836,6 +868,7 @@ def step_20_lineage(ctx: PipelineContext) -> None:
         plot_panel_a(
             cells_plot, exclude_controls(per_mother), output_dir / "21_panel_a_violin.pdf",
             group_col=ctx.panel_a_group_col, facet_col=ctx.panel_a_facet_col,
+            min_frames=MORPHOLOGY_MIN_FRAMES, area_scale=AREA_SCALE_UM2, area_label=AREA_LABEL,
         )
     else:
         logger.warning("compute_budding_ratio() lieferte keine per_mother-Tabelle - Panel A wird übersprungen.")
@@ -940,11 +973,12 @@ def _robustness_period_outputs(ctx: PipelineContext, per_chamber: pd.DataFrame, 
     Tabellen = label (z.B. 'R(t) population area'), damit 50_robustness_control_trend_summary die Masse
     auseinanderhaelt.
 
-    Vorbehalt fuer R(t) gegen die Periode: ein Frame tastet eine Oszillation unter dem Nyquist-Limit bei
-    zufaelliger Phase ab, der Alias-Beitrag zur zeitlichen Varianz ist bei der laengsten Periode am
-    groessten. Ein R(t)-Trend der Oszillationskammern ALLEIN ist deshalb nicht interpretierbar; gegen die
-    Kontrollen (die kein Aliasing haben) bleibt er lesbar, und ein 'period effect' von R(t) in Richtung
-    sinkender Robustheit mit der Periode kann ein Alias-Artefakt sein - so steht es in der Datengeschichte."""
+    Vorbehalt fuer R(t) gegen die Periode: der Beitrag des Zyklus zur zeitlichen Varianz haengt vom
+    Schaltintervall ab - bei Intervallen bis 6 min trifft ein Frame eine zufaellige Phase des Zyklus, bei
+    12 min liegt die volle Periode (24 min) am Nyquist-Limit, bei 24 min (volle Periode 48 min, 4.8 Frames je
+    Zyklus) wird der Zyklus aufgeloest. Ein R(t)-Trend der Oszillationskammern ALLEIN ist deshalb nicht
+    interpretierbar; gegen die Kontrollen (die keinen Zyklus sehen) bleibt er lesbar - so steht es in der
+    Datengeschichte."""
     output_dir = ctx.output_dir
     if per_chamber is None or per_chamber.empty or per_chamber["value"].isna().all():
         logger.info("%s: keine Kammerwerte - uebersprungen.", stem)
@@ -980,7 +1014,7 @@ def _robustness_period_outputs(ctx: PipelineContext, per_chamber: pd.DataFrame, 
                 trend=trend[trend["osc_type"] == osc_type] if not trend.empty else trend,
                 score=score[score["osc_type"] == osc_type] if not score.empty else None,
                 score_trend=score_trend[score_trend["osc_type"] == osc_type] if not score_trend.empty else None,
-                ylabel=ylabel, title=f"{label} vs cycle period — one structure per period, with its controls",
+                ylabel=ylabel, title=f"{label} vs half-cycle period — one structure per interval, with its controls",
             )
     else:
         plot_point_errorbar(
@@ -1251,9 +1285,13 @@ def step_50_summary(ctx: PipelineContext) -> None:
                 plot_control_trend_summary(growth, output_dir / "50_control_trend_summary_growth.pdf")
             if is_sensor.any():
                 plot_control_trend_summary(all_trends[is_sensor], output_dir / "50_control_trend_summary_sensors.pdf")
+            # Dazu die EINE Abbildung mit allen Readouts (Wachstum/Morphologie zuerst, dann die Sensoren):
+            # die Arbeit zeigt diese, die beiden Teilabbildungen bleiben fuer den Anhang.
+            plot_control_trend_summary(pd.concat([growth, all_trends[is_sensor]], ignore_index=True),
+                                       output_dir / "50_control_trend_summary.pdf")
             counts = all_trends["verdict"].astype(str).str.split(":").str[0].value_counts().to_dict()
             logger.info("Kontroll-Trend-Zusammenfassung gespeichert: 50_control_trend_summary.csv, "
-                        "_growth.pdf, _sensors.pdf - %s", counts)
+                        ".pdf (alle Readouts), _growth.pdf, _sensors.pdf - %s", counts)
 
         # -- Dieselbe Zusammenfassung fuer die Robustheitsmasse R(t)/R(p) (Schritt 40, 40_*_control_trend.csv):
         #    getrennt von den Readouts, damit die 58 Zeilen der Readout-Zusammenfassung stehen bleiben.
@@ -1305,7 +1343,8 @@ def step_90_appendix(ctx: PipelineContext) -> None:
     # Dieser Plot zeigt 'area', hing aber an intensity_cols - dadurch fehlte er
     # bei den statischen Daten komplett (Wildtyp, keine Fluoreszenzkanäle).
     if "area" in cells.columns:
-        plot_single_cell_trajectories(cells, "area", output_dir / "91_single_cell_trajectories.pdf")
+        plot_single_cell_trajectories(cells, "area", output_dir / "91_single_cell_trajectories.pdf",
+                                      scale=AREA_SCALE_UM2, ylabel=AREA_LABEL)
     else:
         logger.warning("Spalte 'area' fehlt - 91_single_cell_trajectories.pdf übersprungen.")
 
@@ -1321,6 +1360,7 @@ def step_90_appendix(ctx: PipelineContext) -> None:
             out_path=output_dir / "92_stable_mother_trajectories.pdf",
             group_cols=STABLE_MOTHER_GROUP_COLS, base_value_cols=stable_base_cols,
             min_coverage=STABLE_MOTHER_MIN_COVERAGE, min_per_frame=MIN_PER_FRAME,
+            scales={"area": AREA_SCALE_UM2}, labels={"area": AREA_LABEL},
         )
         logger.info("Plot gespeichert: 92_stable_mother_trajectories.pdf")
     else:

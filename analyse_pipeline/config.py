@@ -137,15 +137,18 @@ PERIOD_FIGURE_CONNECT_OSC = False
 PERIOD_FIGURE_REFERENCE_LINES = False
 PERIOD_FIGURE_BRACKET_PANEL = False
 
-# WICHTIG ZUR SPALTE 'osc_freq': sie enthaelt trotz ihres Namens die PERIODE
-# der Feast/Famine-Zyklen in MINUTEN (0.75 ... 24), keine Frequenz.
+# WICHTIG ZUR SPALTE 'osc_freq': sie enthaelt trotz ihres Namens das SCHALTINTERVALL
+# des Mediums in MINUTEN (0.75 ... 24), d.h. die HALBZYKLUS-Periode, keine Frequenz.
+# Eine volle Feast/Famine-Periode ist doppelt so lang (1.5 ... 48 min).
 #
 # Daraus folgt eine Randbedingung, die in JEDE Methodenbeschreibung gehoert:
-# bei MIN_PER_FRAME=10 liegt die kuerzeste aufloesbare Periode (Nyquist) bei
-# 20 min. ALLE Oszillationsbedingungen liegen also am oder unter dem
-# Abtastlimit - ein einzelner Zyklus ist grundsaetzlich nicht beobachtbar,
-# und eine scheinbare Periodizitaet in den Sensor-Zeitreihen waere ein
-# Alias-Artefakt, nicht der Medienwechsel.
+# bei MIN_PER_FRAME=10 liegt die kuerzeste aufloesbare volle Periode (Nyquist)
+# bei 20 min. Die Intervalle 0.75 bis 6 min (volle Perioden 1.5 bis 12 min)
+# liegen darunter, 12 min ist grenzwertig (volle Periode 24 min, 2.4 Frames je
+# Zyklus), 24 min aufgeloest (48 min, 4.8 Frames je Zyklus). Fuer die kurzen
+# Intervalle ist ein einzelner Zyklus nicht beobachtbar, und eine scheinbare
+# Periodizitaet in den Sensor-Zeitreihen waere ein Alias-Artefakt, nicht der
+# Medienwechsel.
 #
 # Die Oszillation ist damit eine BEHANDLUNG, keine Messgroesse: bei gleicher
 # Gesamtdauer erfahren die Bedingungen ~1600 (0.75 min) bis ~50 (24 min)
@@ -518,17 +521,21 @@ def log_active_configuration() -> None:
                 LINEAGE_PARAMS.bud_min_frames, LINEAGE_PARAMS.use_measured_parent)
     if OSC_FREQ_IS_PERIOD_IN_MINUTES:
         nyquist_min = 2 * MIN_PER_FRAME
-        periods = [p for p in (float(f) for f in FREQ_ORDER if _is_number(f))]
-        unresolved = [p for p in periods if p <= nyquist_min]
-        if unresolved:
+        intervals = [p for p in (float(f) for f in FREQ_ORDER if _is_number(f))]
+        # volle Periode = 2 x Schaltintervall (Halbzyklus)
+        unresolved = [p for p in intervals if 2 * p < nyquist_min]
+        marginal = [p for p in intervals if nyquist_min <= 2 * p < 3 * MIN_PER_FRAME]
+        if unresolved or marginal:
             logger.warning(
-                "ABTASTUNG: 'osc_freq' ist die Periode in Minuten. Bei %.0f min/Frame liegt die "
-                "kuerzeste aufloesbare Periode bei %.0f min - %d von %d Bedingungen (%s) liegen "
-                "darunter. Einzelne Zyklen sind NICHT beobachtbar; scheinbare Periodizitaet in "
-                "den Sensor-Zeitreihen ist ein Alias-Artefakt. Interpretierbar ist nur die "
-                "kumulative Wirkung ueber Stunden, nicht der Zyklusverlauf.",
-                MIN_PER_FRAME, nyquist_min, len(unresolved), len(periods),
-                ", ".join(f"{p:g}" for p in unresolved),
+                "ABTASTUNG: 'osc_freq' ist das Schaltintervall in Minuten (Halbzyklus; volle Periode = "
+                "2 x Intervall). Bei %.0f min/Frame liegt die kuerzeste aufloesbare volle Periode bei "
+                "%.0f min - %d von %d Intervallen (%s) liegen darunter, grenzwertig (< 3 Frames je Zyklus): %s. "
+                "Fuer diese Intervalle sind einzelne Zyklen NICHT beobachtbar; scheinbare Periodizitaet in "
+                "den Sensor-Zeitreihen ist ein Alias-Artefakt. Interpretierbar ist die kumulative Wirkung "
+                "ueber Stunden, nicht der Zyklusverlauf.",
+                MIN_PER_FRAME, nyquist_min, len(unresolved), len(intervals),
+                ", ".join(f"{p:g}" for p in unresolved) or "keines",
+                ", ".join(f"{p:g}" for p in marginal) or "keines",
             )
     logger.info("  LINEAGE_PARAMS:   %s", LINEAGE_PARAMS)
     logger.info("  Sparse-Phase-Lineage: <= %d Objekte/Frame (Median ueber %d Frames), min. %d Frames; "

@@ -47,7 +47,9 @@ its parent track.
 
 - All `Combined_Results.csv` of the data tree are read into one table (a parquet cache beside the output
   folder makes the second run fast). Strain, oscillation type and period come from the folder path; chamber
-  and array index from the file name. Every row gets a chamber id and a global cell id.
+  and array index from the file name. The period is the switching interval of the medium, i.e. the half-cycle
+  period (0.75 to 24 min); a full feast/famine cycle lasts twice as long, so only the 12-min and 24-min intervals
+  are resolved by the 10-min frames. Every row gets a chamber id and a global cell id.
 - Rows flagged at the border or outside the area limits are dropped from every measurement. One static recording
   that duplicated another stage position (W65 minimal medium, Rep5) is dropped by name.
 - Sensor ratios are computed per cell (sensor channel over reference channel).
@@ -94,7 +96,7 @@ rejected. The threshold is determined once from all data and applied everywhere.
 | 10 growth | cell area over time; µ_event per mother from interbud intervals (reported, not used as a growth rate); µ_area per track as the slope of ln(area), tracks of at least 10 frames, fitted before the first breakpoint; per-chip summaries, trend and control-trend tests for µ_area | `10_*`, `11_*`, `12_*` |
 | 13 endpoint | mean over the last 25 % of a chamber's frames for area, eccentricity and sensor ratios (static: an absolute window ending at the earliest saturation); chamber, structure and condition levels; Spearman against the period; bracket score; control-trend classification; within-culture change; figures against the period with the controls | `13_*` |
 | 20 lineage | budding events; budding ratio per mother and per chamber; buds per mother-hour in the window with the same trend and control tests; Panel A violins; budding-ratio time series; lineage depth; µ_bud (births per cell-hour) and immigration (new tracks without parent per cell-hour); µ_bud against µ_area | `20_*` to `24_*` |
-| 30 sensors | channel intensities and ratios over time, after the 2 h preconditioning, as drift over hours (cycles lie below the sampling limit) | `30_*`, `31_*` |
+| 30 sensors | channel intensities and ratios over time, after the 2 h preconditioning, as drift over hours (single cycles are not resolved for intervals up to 6 min) | `30_*`, `31_*` |
 | 40 robustness | R(t) at population and single-cell level and R(p) for area, eccentricity and the sensor ratios; R(p) of µ_area; R(t) of µ_event per mother; R(p) of the budding rate per mother; each metric per chamber, then the same chip logic, tests and figures as the readouts; control consistency across structures (Kruskal-Wallis) | `40_*` |
 | 50 summary | summary statistics; control-trend summary over all readouts as two figures, growth and morphology readouts and sensor ratios (one point per readout and series, oscillation ρ against control ρ); the same for the robustness metrics; the paired comparison of oscillation chambers with the controls of their own structure for all readouts and metrics | `50_*`, `51_*` |
 | 90 morphology and appendix | morphology per cell (mean area against mean eccentricity, one point per cell, guide lines for large round cells, share in the title), single-cell trajectories, one stable mother per group with its budding marks | `90_*` to `92_*` |
