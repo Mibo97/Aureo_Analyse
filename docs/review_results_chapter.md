@@ -8,9 +8,9 @@ table numbers below are those of the PDF; "draft" means the numbering of `docs/r
 
 | question | answer | done |
 | --- | --- | --- |
-| 1 Figure 5 | A: chip W65, complex medium; B: chip W65, minimal medium, the chamber of 3.3 | caption in the draft; the text sentence "only in the W109 chip in complex medium" contradicts A (W65), see 3.2.2 of the draft |
+| 1 Figure 5 | A: chip W65, complex medium; B: chip W65, minimal medium, the chamber of 3.3, frame 90; scale bars 10 µm | caption in the draft; 3.2.2 keeps pseudohyphae (W65, Figure 5 A) and filamentous growth (true hyphae, only W109 in complex medium) apart |
 | 2 Figure 6 stars | pipeline figure `21_panel_a_violin.pdf`: the stars were a Mann-Whitney U over object-frames (every frame of every cell), so every pair was "****" by n alone | pipeline changed: one value per cell, test over structures (median per structure, ≥ 3 per group), stated on the figure; caption in the draft |
-| 3 Figure 13 | merged, phase contrast, signal 1 (uvGFP for BSA/BSpH, YFP for OxPro, mTurquoise for Gly-RNA), signal 2 (GFP for BSA/BSpH, mCherry for BSO/BSG) | caption in the draft ("YPD" read as YFP) |
+| 3 Figure 13 | merged, phase contrast, signal 1 (uvGFP for BSA/BSpH, YFP for OxPro, mTurquoise for Gly-RNA), signal 2 (GFP for BSA/BSpH, mCherry for BSO/BSG); time point not needed, the figure shows that both channels are present in every strain | caption in the draft; a scale bar is still missing |
 | 4 Figure 15 | keep the combined figure | pipeline writes `50_control_trend_summary.pdf` again (growth readouts first, then sensors); the split pair stays for the appendix |
 | 5 Figure 9 | drop the static panel | `validate_lineage.py` plots the oscillation series only |
 | 6 Table 2 | drop the caption sentences | draft |

@@ -187,12 +187,11 @@ The buds were blastoconidia released from large cells. Accepted buds measured 4.
 90th percentile 2.3 to 9.9 µm²), and their mothers 71 µm² (32 to 120 µm²), more than twice the median cell. This
 holds for all bud candidates, not only the accepted ones (median mother 66 µm², 4 % of the mothers below
 15 µm²), so it is not a consequence of the size criterion of 3.2.5. Pseudohyphal chains of elongated cells
-(Figure 5 A) were seen in complex medium on chip W65 *[your text says "only in the W109 chip in complex medium";
-Figure 5 A is from W65: on which chips and media did you see them?]*; the segmentation split them into their
-individual cells (among the objects of the four structures with complete shape data, WT/pH/6 min, BSG/pH/6 min,
-W65 and W109, about 125,000 objects of at least 8 µm², the median solidity was 0.98, fewer than 0.3 % had an axis
-ratio above 3 and 0.1 % were flagged as highly eccentric by the segmentation), so they enter Figure 4 as single
-elongated cells, not as filaments.
+(Figure 5 A) were seen in complex medium on chip W65; the segmentation split them into their individual cells
+(among the objects of the four structures with complete shape data, WT/pH/6 min, BSG/pH/6 min, W65 and W109,
+about 125,000 objects of at least 8 µm², the median solidity was 0.98, fewer than 0.3 % had an axis ratio above 3
+and 0.1 % were flagged as highly eccentric by the segmentation), so they enter Figure 4 as single elongated
+cells. Filamentous growth, that is true hyphae, was observed only on chip W109 in complex medium.
 
 **Figure 4: Morphology of the tracked cells.** One point per cell tracked for at least ten frames: mean projected
 area (log scale) against mean eccentricity, one panel per strain over all oscillation experiments (top row) and
@@ -202,8 +201,8 @@ the quadrant of large round cells, the swollen cells of (2026_Rensink); their sh
 
 **Figure 5: Phase-contrast examples of the observed morphologies.** (A) A pseudohyphal chain of elongated cells,
 chip W65, complex medium; (B) two swollen cells with the blastoconidia they released, chip W65, minimal medium,
-the chamber described in 3.3 (frame *[n]*). Red outlines: segmentation masks; scale bar 10 µm *[check]*. [from the
-QC overlays in `03_results_v12/QC/`]
+the chamber described in 3.3, frame 90. Red outlines: segmentation masks; scale bars 10 µm. [from the QC
+overlays in `03_results_v12/QC/`]
 
 **Figure 6: Cell area and eccentricity per strain.** Violins over one value per cell (mean over the track, tracks
 of at least ten frames), left Glc and right pH series, dot = mean; stars: Mann-Whitney U over structures (median
@@ -493,10 +492,11 @@ QUEEN-2m), 0.01 to 0.04 for the glucose-flux sensor (BSG, Gly-RNA; one feast-con
 Figure 13 shows one cell of every biosensor strain in the merged image, the phase contrast and the two fluorescence
 channels that form the ratio.
 
-**Figure 13: Example cells of the four biosensor strains.** From left to right: merged image, phase contrast,
-first and second fluorescence channel of the ratio; BSA (QUEEN-2m) and BSpH (sfpHluorin): uvGFP and GFP channel
-*[excitation 405 and 488 nm? check]*, BSO (OxPro): YFP and mCherry, BSG (Gly-RNA): mTurquoise and mCherry.
-*[chamber and time point; scale bar]* [your microscopy images]
+**Figure 13: Example cells of the four biosensor strains.** Both channels of every ratio are detected in the
+chip. From left to right: merged image, phase contrast, first and second fluorescence channel of the ratio; BSA
+(QUEEN-2m) and BSpH (sfpHluorin): uvGFP and GFP channel, BSO (OxPro): YFP and mCherry, BSG (Gly-RNA): mTurquoise
+and mCherry. *[add a scale bar or the image width in µm; the excitation wavelengths as in the methods chapter]*
+[your microscopy images]
 
 None of the four sensors showed a consistent difference between its constant-feast and constant-famine chambers:
 the bracket was degenerate on 6 to 9 of the 10 structures per sensor, and the pairwise comparison of the two
