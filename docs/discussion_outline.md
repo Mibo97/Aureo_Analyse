@@ -294,6 +294,9 @@ one recommendation for scale-down work with this organism.
 
 ## Literature workflow (how to find the fitting parts)
 
+Done for 4.1 and 4.4 on 2026-10-06: `docs/literature_4.1_4.4.md` lists the passages of the twelve papers you
+sent, per claim, with PDF page and quote, plus the papers that fit something else and what is still missing.
+
 For every claim above the "literature need" names what the sentence must be able to cite. Two ways to get there:
 
 1. Upload the PDFs of the candidates (or the whole library as a zip). I extract the passages that match each
