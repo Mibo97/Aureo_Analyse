@@ -146,7 +146,8 @@ rejected. The threshold is determined once from all data and applied everywhere.
 
 - Every apparent dose response against the period (budding, shape, three sensor ratios) is a structure effect:
   the constant-medium controls on the same structures trend the same way. Of 58 readout-by-series combinations,
-  2 remain as period effects, which is what chance produces; 23 are structure effects.
+  2 remain as period effects, fewer than the 3.5 that shuffled periods produce; 23 are structure effects, more
+  than the 13 of shuffled periods (`docs/scratch/trend_null.py`).
 - Under glucose oscillation cells bud about a quarter more often, are 14 % larger and grow 12 % slower in area
   than under constant feast or famine on the same structure, in every strain and independent of the period;
   under pH oscillation nothing differs from the controls.

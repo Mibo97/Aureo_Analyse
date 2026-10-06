@@ -604,7 +604,13 @@ met all three conditions of a period effect: µ_area in BSO/Glc (ρ −0.83, dif
 WT/Glc (ρ −0.60, difference −0.80). Neither recurred in the other oscillation type of the same strain (µ_area
 BSO/pH ρ −0.20; budding rate WT/pH a structure effect). Figure 15 shows all 58 combinations at once: the correlation of the oscillation chambers on the x axis and that of the strongest control on the y axis, where a
 point on the diagonal is a structure effect; 23 points lie in the two diagonal corners, 31 in the central band,
-and the two period effects and the two non-robust trends lie off the diagonal.
+and the two period effects and the two non-robust trends lie off the diagonal. Shuffling the periods among the
+structures of each series, which keeps every structure's chambers together and destroys only the period order,
+produced 3.5 period effects on average (5th to 95th percentile 1 to 7) and 13 structure effects (8 to 19) over
+1,000 shuffles: the two period effects lie below chance level, the 23 structure effects above it (p 0.004), so the
+controls trended with the real period order more often than with a random one. *[new 2026-10-06, from
+`docs/scratch/trend_null.py` on the final-run tables; becomes a pipeline output (`50_control_trend_null.csv`) if
+you want it in the chapter]*
 
 **Figure 15: Trends of the oscillation chambers against trends of their controls.** One point per readout and
 series (58 combinations): Spearman ρ of the oscillation chambers against the period on the x axis, ρ of the

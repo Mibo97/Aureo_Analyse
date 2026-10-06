@@ -405,7 +405,11 @@ Constant-medium chambers cannot respond to the period. On the same structures th
   pipeline: 7 in the v11 run, 5 with the new analysis rules on the v11 tables, 3 in the first v12 run, 2 once
   the contrast rule removed the dead cells (area BSG/pH went from ρ −0.8 to −0.4, one rank swap among four
   periods); three further rows changed verdict between the fixed and the relative contrast rule, none of them
-  a period effect. What is left is what 58 tries produce by chance. The one recurrence of the v11 run, µ_area falling
+  a period effect. What is left is below what 58 tries produce by chance: shuffling the periods among the
+  structures of each series (`docs/scratch/trend_null.py`, 1,000 shuffles, chip effects kept) gives 3.5 period
+  effects on average (5th to 95th percentile 1 to 7) and 13 structure effects (8 to 19); the observed 23 structure
+  effects exceed that (p 0.004), i.e. the structure drifts were monotone in the real period order more often than
+  in a random one, which is the alignment of 1.2 quantified. The one recurrence of the v11 run, µ_area falling
   with the period in all five pH series, did not survive the rebuild (ρ −0.4 to +0.4).
 - `13_endpoint_within_culture.csv`, `24_growth_from_budding_within_culture.csv`: the change from the shortest
   to the longest period inside one culture, where the pre-culture cannot differ. Area: the oscillation
