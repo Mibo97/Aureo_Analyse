@@ -286,7 +286,25 @@ use it. Where a paper contradicts or qualifies a claim, that is said.
 - **2022_Olsson** p.9 gives Kitano's integral definition of robustness; only needed if you want the formal
   background before Trivellin's R.
 
-## Still missing after these twelve
+## Added 2026-10-06: 2004_Campbell and 2026_Malat
+
+- **2004_Campbell** (FEMS Microbiol Lett 232:225): p.1 (abstract): "only swollen cells and chlamydospores, and
+  neither hyphae nor unicellular blastospores, often held responsible for pullulan formation, appeared to
+  produce pullulan-like material"; p.4: "Only the multi-celled chlamydospores and swollen cells were coated with
+  silver grains … None of the blastospores …, germ tubes arising from swollen cells … or hyphae … showed this
+  silver deposition"; p.1: "Many factors affect this complex life cycle, with the nitrogen source (both organic
+  and inorganic) and medium pH particularly influential"; p.2: "An inverse relationship between intracellular
+  glycogen and extracellular pullulan formation in A. pullulans [7] suggested a link between their production."
+  Use: 4.5 and 4.7 (morphotype decides the product; a shift toward blastoconidia under glucose heterogeneity
+  is a shift away from the producing forms); 4.4 (glycogen as a reserve).
+- **2026_Malat** (Sci Rep 16:16672): p.1: fluorescence decline "may be associated with reduced dye penetration
+  into the compact, melanized matrix rather than a reduction in biomass"; p.1: morphological forms "ranging from
+  yeast-like blastoconidia to filamentous hyphae and melanized arthroconidia"; p.8: quantitative fluorescence
+  "may not resolve the mechanical or structural properties of adhering biomass, particularly when EPS
+  accumulation limits dye penetration". Use: 4.4 (melanisation as a possible attenuator of fluorescence
+  readouts, hypothesis), 4.5 (surface growth and EPS as the context of the chamber biofilm).
+
+## Still missing after these fourteen
 
 - Conidiation or blastoconidia release under nutrient limitation in A. pullulans (4.2, 4.4): Rensink 2024
   and 2026 are the fallback; a physiological source would be better.
