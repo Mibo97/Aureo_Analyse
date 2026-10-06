@@ -125,6 +125,10 @@ established. Pullulan does not explain the disagreement of control chambers.
   across readouts, but R(t) depends on the sampling (10-min frames alias the cycles differently per interval), so
   only the comparison against the controls of the same structure is interpretable, not the level.
 - Five of eight period effects in one series (BSA/Glc) is a series property, not a metric property.
+- Checked 2026-10-06 (`docs/scratch/robust_cv.py`): as coefficient of variation, the growth-rate homogeneity
+  (p 0.002), the eccentricity heterogeneity (p 0.001) and the temporal instability of the mean area (p 0.042)
+  hold; the area heterogeneity does not (p 0.13), it is the larger mean size expressed as a Fano factor. All
+  differences are Glc-only.
 
 **Literature need.** 2022_Trivellin (robustness is phenotype-specific; how R was compared across conditions),
 2024_Blöbaum (use of R(t) and R(p) in the chip); to find: phenotypic heterogeneity reviews (Ackermann 2015) if

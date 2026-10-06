@@ -449,7 +449,7 @@ population was also more heterogeneous in cell area (R(p) −0.671 against −0.
 structures, p 0.003) and in eccentricity (−0.048 against −0.041 and −0.042, p 0.003), but more homogeneous in
 its area growth rate (R(p) of µ_area −0.333 against −0.412 and −0.453, above the control mean on 33 of 49
 structures, p 0.008). The heterogeneity of cell area and that of the growth rate were unrelated across chambers
-(Spearman ρ 0.06, n = 497). The reproductive output of the mothers was as heterogeneous under oscillation as
+(Spearman ρ 0.06, n = 497). Measured as the coefficient of variation instead of R, the more homogeneous area growth rate of the oscillation chambers (ratio to the control mean 0.84, p 0.002), their more heterogeneous eccentricity (1.07, p 0.001) and their less stable mean area over time (1.05, p 0.042) remained, whereas the cell-to-cell spread of the area did not differ (1.04, p 0.13): the larger cells of the oscillation chambers carry a larger Fano factor at the same relative spread. *[new 2026-10-06, `docs/scratch/robust_cv.py` on the `40_*` tables of the final run; pipeline output if you want it in the chapter]* The reproductive output of the mothers was as heterogeneous under oscillation as
 under constant medium (R(p) of the budding rate per mother −2.02 against −1.98 and −1.92, p 0.95), whereas the
 budding rhythm of the individual mother was less stable under glucose oscillation (single-cell R(t) of µ_event
 −1.11 against −1.13 and −1.00; below the control mean on 29 of 47 structures, p 0.022; Glc p 0.043, pH

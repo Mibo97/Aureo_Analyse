@@ -1,6 +1,6 @@
 # 4. Discussion
 
-Draft of 2026-10-06, sections 4.1 and 4.4; the other sections follow the plan in `docs/discussion_outline.md`.
+Draft of 2026-10-06, sections 4.1 to 4.4; the other sections follow the plan in `docs/discussion_outline.md`.
 Cross-references use the thesis numbering of the results chapter (Tables 1 to 6, Figures 2 to 17, Sections 3.x)
 and of the methods chapter (2.x). Citation keys are those of your reference list; the page and the full passage
 behind every quotation are in `docs/literature_4.1_4.4.md`. Direct quotations can be paraphrased where the
@@ -116,12 +116,151 @@ structures stops being the detection limit and becomes a measured quantity.
 
 ## 4.2 Glucose oscillation shifted growth toward blastoconidia; pH oscillation changed nothing
 
-*[To be drafted; plan and evidence in `docs/discussion_outline.md`, passages in `docs/literature_4.1_4.4.md`
-under 4.2.]*
+The period did not matter, but the oscillation did. Paired over the 29 structures of the Glc series, cells in
+the oscillation chambers budded more often than cells in the constant-medium chambers of the same structure: the
+budding rate lay above the control mean on 27 of 29 structures (median ratio 1.25) and µ_bud on 23 of 29
+(1.15); the cells were larger (endpoint area above the control mean on 25 of 29 structures, ratio 1.14),
+marginally rounder (eccentricity 0.98) and grew more slowly in area (µ_area below the control mean on 22 of 29
+structures, ratio 0.88) (3.4). The shift appeared in every strain, with median budding ratios from 1.07 for BSG
+to 1.37 for BSA, and it did not depend on the period: the ratio of oscillation to control correlated with the
+period at |ρ| ≥ 0.6 in two to five of the ten series per readout, with both signs. Under pH oscillation none of
+the readouts differed from the controls (ratios 0.97 to 1.09, p 0.09 to 0.65). The glucose result is the one
+positive finding of the oscillation experiments. It is a finding about the alternation of the medium, not about
+its frequency, and three readings of it have to be weighed.
+
+The first is that the oscillation chambers saw a medium of intermediate strength. Blöbaum et al. note for the
+same kind of design that "even though oscillation frequencies differed, the total time spent under starvation or
+feast conditions was the same for all cells" (2024_Blöbaum); here every oscillation chamber spent half of its
+20 h in 50 g/L and half in 0 g/L glucose, whatever the interval, which is a time-average of 25 g/L. A medium of
+25 g/L would place the oscillation chambers between the controls. They did not lie between them: on 26 of the 49
+structures the oscillation chambers budded more than both controls and on 4 less than both (3.4), and the two
+controls themselves barely differed in budding (4.4), so there was no gradient between feast and famine on which
+an average could lie. The time-average reading explains the independence from the period, but not the
+direction.
+
+The second reading is that the alternation itself is the stimulus, and that it acts on both growth modes of the
+organism at once. In *A. pullulans* a bud is not a daughter cell of the same kind but a blastoconidium released
+from a mother more than twice the size of the median cell (3.2.2), and the two ways of growing, in size and by
+releasing blastoconidia, traded against each other wherever the medium differed: complex medium gave cells 3.5
+times larger that budded a sixth as often as in minimal medium (3.3), and within the Glc series µ_bud and
+µ_area were negatively correlated (Figure 12). Cells in alternating medium did both more than cells in constant
+medium: they were larger than the control mean and budded more, while growing in area more slowly. Rensink et
+al. describe the cell types of *A. pullulans* as a cycle in which "blastoconidia were formed by cell division of
+swollen cells, hyphae, and existing blastoconidia, while blastoconidia differentiated into swollen cells"
+(2026_Rensink); a medium that alternates between feeding and withdrawal could drive this cycle faster than
+either constant medium, the feast phases feeding the swelling and the famine phases the release. This is a
+hypothesis. It predicts that the shift depends on the amplitude of the alternation and not on its frequency,
+which is what was observed, and it predicts that an oscillation between 50 and 20 g/L would shift less than one
+between 50 and 0 g/L, which was not tested. The sign of the response separates *A. pullulans* from yeast. In
+*S. cerevisiae* substrate oscillation reduced the budding ratio and the specific growth rate, most at 24-min
+intervals in one study (2024_Blöbaum) and at 1.5 and 6 min or 6 and 24 min, depending on the strain, in the
+other (2025_Pianale), while "substrate oscillations resulted in bigger and rounder cells than pH oscillations"
+(2025_Pianale). For yeast a bud is growth, and the oscillation cost growth. For *A. pullulans* the oscillation
+cost growth in size as well, but it converted the perturbation into propagules.
+
+The third reading is position. The oscillation chambers occupied the positions A3 to A12 of an array and the
+constant-medium chambers the positions A1, A2, A13 and A14 (2.5.3), because the laminar layout keeps the ends of
+the array in "control zones, which are always exposed to the same liquid" (2023_Blöbaum). The comparison of
+oscillation and control chambers is therefore also a comparison between the centre and the ends of an array, and
+Täuber et al. report that "depending on the position of the cultivation chamber and thus the flow regime during
+the switching zone, the exchange rates of fluorescein can slightly differ" (2020_Täuber). One observation
+argues against a position effect on the flow. The immigration rate, the number of cells washed into a chamber
+per cell-hour, did not differ between oscillation and control chambers in either oscillation type (ratios 1.02
+and 1.10, p 0.90 and 0.45; 3.4), so the flow that delivers cells, and with them the medium, reached the centre
+and the ends alike. What differs beyond the flow is the pressure regime: the oscillation chambers saw the
+switching between the two inlets at 90 mbar while the control arrays were supplied at a passive 10 mbar
+(2.4.3). In the *C. glutamicum* chip a switch between two identical media at 10-s intervals left the growth
+rate at the value of constant perfusion (2020_Täuber), which makes a pressure effect unlikely but does not
+exclude it for this chip and this organism. The control that would settle both readings, constant medium in
+central chambers or an oscillation between two identical media, was not run and is listed in 4.8.
+
+Under pH oscillation nothing moved, although the external pH alternated between 3.0 and 8.0 every 0.75 to
+24 min. In the BioLector the wild type grew at nearly the same rate at pH 3.0 and pH 8.0 (0.36 and 0.34 h⁻¹;
+3.1), the genome of *A. pullulans* carries the expansions of the HOG pathway and of alkali-metal cation
+transporters that underlie its tolerance of pH extremes (2014_Gostinčar), and in the pH series glucose was
+present at 20 g/L throughout the cycle. Pianale et al. draw the same conclusion for yeast, which "is
+notoriously resistant to low pH …, explaining the absence of growth impairment by any pH oscillation", and add
+that "in the pH-dynamic setup, substrate (i.e. glucose) was not a limiting factor as it was sufficient to
+maintain internal homeostasis and stable growth" (2025_Pianale). The pH sensor ratio of BSpH did not move
+either, which under this reading is homeostasis and under the alternative of 4.4 an unresponsive sensor. The
+two oscillation types also differ in more than the oscillating variable: the Glc structures ran on oMLP at
+pH 5.5 with 50 or 0 g/L glucose and budded more and grew less in area than the pH structures on 20 g/L at pH 3.0
+or 8.0 (medians 0.25 against 0.16 births per cell-hour and 0.11 against 0.18 h⁻¹; Figure 12). This difference
+is one between media, structures and days as well, and it is not attributed to the famine phases alone.
+
+The oscillation result therefore meets the test that the period results failed. It is present in every strain,
+independent of the interval and measured against controls on the same structure; its sign is the opposite of
+what the same experiment gave in yeast; and its meaning for the process, a shift toward blastoconidia, the
+morphotype that Campbell et al. found not to produce pullulan (2004_Campbell), belongs to 4.5 and 4.7.
 
 ## 4.3 What the robustness metrics add
 
-*[To be drafted; plan in the outline, passages under 4.3 of the literature file.]*
+The robustness metrics of Trivellin et al. were computed as Blöbaum et al. defined them for the chip: R(p) from
+the standard deviation and mean of a function "across all cells at each time point", so that it "describes how
+homogeneous a function is across a cell population", and R(t) from the dispersion of a function over time at the
+population and the single-cell level (2024_Blöbaum), each normalised by the mean of the function over the data
+set (2022_Trivellin), each per chamber and then through the same structure logic as the readouts (2.5.5).
+Against the period they behaved like the readouts: of the 90 combinations of nine metrics and ten series, 51
+showed no trend of the oscillation chambers, 23 a trend shared by a control of the same structures, 8 a trend
+that vanished after the controls were subtracted and 8 met the conditions of a period effect (3.4). Five of the
+eight fell in one series, BSA/Glc, in which the population became more homogeneous in area, growth rate and
+budding and more heterogeneous in eccentricity with longer periods. One series carrying five of eight period
+effects is a series property. Whether it is a response of this strain or a drift of these six structures that
+the controls did not share is a question for a second culture of BSA under glucose oscillation.
+
+Against the controls of the same structure the metrics did differ, all of them in the Glc series. Under glucose
+oscillation the mean cell area of a chamber was less stable over time (population R(t) −0.127 against −0.096
+for the feast and −0.123 for the famine controls; below the control mean on 31 of 49 structures, p 0.013), the
+population more heterogeneous in cell area (R(p) −0.671 against −0.571 and −0.613; 34 of 49, p 0.003) and in
+eccentricity (p 0.003), but more homogeneous in its area growth rate (R(p) of µ_area −0.333 against −0.412 and
+−0.453; above the control mean on 33 of 49, p 0.008); the budding output of the mothers was as heterogeneous as
+under constant medium (p 0.95), and the budding rhythm of the individual mother was less stable under glucose
+oscillation (p 0.043) and not under pH oscillation (p 0.28) (Table 4). The metrics echo 4.2 rather than add an
+independent finding: cells that bud more and grow more slowly in area present a population with more small new
+objects and more mothers in transition, which widens the size distribution and moves the chamber mean, and a
+growth rate that is reduced is also compressed.
+
+How much of this is the metric? R is the negative Fano factor over a global mean, and Trivellin et al. note that
+with it "the weight of the mean on R was higher than for the CV" (2022_Trivellin). A function whose mean rises
+at constant relative spread therefore becomes less robust by R, and one whose mean falls becomes more robust.
+Both happened here: the cells under glucose oscillation were larger and grew more slowly. Measured as the
+coefficient of variation instead, three of the four differences remained and one did not (3.4): the area growth
+rate of the oscillation chambers was more homogeneous (ratio to the control mean 0.84, p 0.002; Glc 0.79,
+p < 0.001), the eccentricity more heterogeneous (1.07, p 0.001) and the chamber mean area less stable over time
+(1.05, p 0.042), whereas the cell-to-cell spread of the area did not differ (1.04, p 0.13). The greater
+heterogeneity of cell size under oscillation in Table 4 is therefore the larger mean size of 4.2 expressed as a
+Fano factor, not a wider relative distribution; the more homogeneous growth rate is real, and so is the less
+stable mean area. Trade-offs of this kind are what the metric was built to show, since "robustness is
+function-specific and characterized by positive and negative function-specific trade-offs" (2022_Trivellin).
+Here the function that became more robust under oscillation, the area growth rate, is the one whose mean fell,
+and the function that became less robust, the chamber mean area, is the one whose mean rose. The heterogeneity
+of cell area and that of the growth rate were unrelated across chambers (ρ 0.06, n = 497; 3.4), so the two
+R(p) values measure two properties of a population rather than one degree of order.
+
+Two caveats of the metric limit the reading further. R is "a relative and not an absolute term" that "changes
+upon addition of more replicates or conditions" (2024_Blöbaum), so the values of Table 4 compare within this
+data set and not with the yeast values of the literature. And R(t) "is not able to differentiate between
+oscillating and steadily changing functions" (2024_Blöbaum): at 10 min per frame the half-cycles of 0.75 to
+6 min are not resolved, the 12-min half-cycle is at the limit and the 24-min half-cycle is sampled 4.8 times per
+cycle (3.4), so the oscillation contributes to the temporal variance of a chamber differently at every interval,
+as noise at the short intervals and as a sampled cycle at the long ones. A comparison of R(t) between periods
+would have compared sampling artefacts. The comparison of R(t) against the controls of the same structure,
+which carry no cycle, is the one that is interpretable, and even it includes whatever part of the cycle the
+frames caught.
+
+The yeast studies with the same chip and metric show what the metrics can do when the interval matters. In
+*S. cerevisiae* "slower feast-starvation oscillations led to greater heterogeneity in intracellular ATP
+levels …, as manifested by a decrease in R(p) with longer oscillations", and the cells under 48-min cycles
+"exhibited the highest average ATP content, but the lowest stability over time and the highest heterogeneity
+within the population" (2024_Blöbaum); across three strains, "all strains exhibited less population
+heterogeneity when exposed to substrate than pH oscillations", and the industrial strain Ethanol Red combined
+the highest ATP levels with the highest stability (2025_Pianale). For *A. pullulans* the metrics show
+heterogeneity and stability differences between alternating and constant medium and none along the interval
+axis, and the sensor ratios showed no difference in either (3.5) *[the sensor half-sentence only if the optional
+robustness paragraph of 3.5 is kept]*. The metrics thus confirm the two answers of 4.1 and 4.2 at the level of
+distributions: robust to the frequency, responsive to the alternation. What they add on their own is the
+growth-rate result, a population that grows more uniformly in area when the medium alternates, which the mean
+values alone would not have shown.
 
 ## 4.4 Famine did not starve, and the sensors did not separate
 
@@ -136,8 +275,7 @@ BioLector: the biosensor strains stayed at their initial signal, and the wild ty
 of 12 h (3.1). In the chip, 22 h of the same medium did not stop blastoconidia formation. Three readings have to
 be weighed, and they lead to different consequences for the oscillation results.
 
-The first reading is reserves. The cells entered the chip from a preculture in oMLP *[confirm: with 50 g/L
-glucose]*, a medium derived from the liamocin production medium of Haala et al.; with 50 g/L glucose and
+The first reading is reserves. The cells entered the chip from a preculture in oMLP with 50 g/L glucose, a medium derived from the liamocin production medium of Haala et al.; with 50 g/L glucose and
 0.46 g/L ammonium nitrate it has the carbon-to-nitrogen ratio of 125 of that production medium (2024_Haala).
 Under such conditions, "high carbon (C) and low nitrogen (N) concentrations (high C/N ratio)", *A. pullulans*
 forms "intracellular storage lipids" (2024_Haala), which in oleaginous *Aureobasidium* strains "can reach 65%
@@ -201,15 +339,6 @@ connection between ATP concentration and intracellular pH" (2022_Pianale). Under
 have to be read together. Both ratios were flat, which is consistent with a constant intracellular pH between
 external pH 3.0 and 8.0 and with the pH tolerance that the BioLector growth rates showed (3.1), and inconsistent
 only with a large change in ATP.
-
-A property of the organism may add to this. *A. pullulans* is a black yeast that "produces melanin in the
-later stages of fermentation" (2024_Zhang), and in surface cultures the fluorescence of a cell-wall dye fell as
-the layer matured, which the authors attribute to "reduced dye penetration into the compact, melanized matrix
-rather than a reduction in biomass" (2026_Malat). Melanin absorbs more strongly at shorter wavelengths, so an
-excitation ratio measured at 390 to 410 nm against 470 to 480 nm would drift with melanisation independently of
-pH or ATP. Whether the chambers melanised within 22 h was not assessed. This is a hypothesis to test with the
-autofluorescence of the wild type, which carries no sensor. *[Hypothesis; drop if you do not want it in the
-thesis.]*
 
 The growth of the sensor strains sets a last caveat. In oMLP with 50 g/L glucose the four biosensor strains grew
 at 66 to 90 % of the wild-type rate, and their ranking against the wild type depended on the medium (3.1). In
