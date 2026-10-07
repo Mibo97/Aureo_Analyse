@@ -113,8 +113,7 @@ established. Pullulan does not explain the disagreement of control chambers.
 2. Against the period the metrics behaved like the readouts: 90 combinations, 51 no trend, 23 structure effects,
    8 not robust, 8 period effects, five of them in BSA/Glc.
 3. Heterogeneity of cell area and of growth rate were unrelated across chambers (ρ 0.06, n = 497).
-4. The sensor ratios did not differ in R(t) or R(p) between oscillation and controls (optional Table S1 of the
-   draft; keep as one sentence if the table is not used).
+4. The sensor ratios did not differ in R(t) or R(p) between oscillation and controls (Table 5).
 
 **Interpretation.**
 - More budding events mean more small new objects and more mothers in transition, so a wider size distribution

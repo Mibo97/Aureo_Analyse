@@ -1,7 +1,7 @@
 # 4. Discussion
 
 Draft of 2026-10-06/07, sections 4.1 to 4.8 and a first Conclusion; plan in `docs/discussion_outline.md`.
-Cross-references use the thesis numbering of the results chapter (Tables 1 to 6, Figures 2 to 17, Sections 3.x)
+Cross-references use the thesis numbering of the results chapter (Tables 1 to 7, Figures 2 to 17, Sections 3.x)
 and of the methods chapter (2.x). Citation keys are those of your reference list; the page and the full passage
 behind every quotation are in `docs/literature_4.1_4.4.md`. Direct quotations can be paraphrased where the
 thesis style prefers it. Sentences in *[italic square brackets]* are notes to the author, not thesis text.
@@ -19,7 +19,7 @@ Across half-cycle periods of 0.75 to 24 min, that is full feast/famine cycles of
 morphology or sensor readout of the five strains changed with the period once the constant-medium controls of
 the same structures were taken into account. Of the 58 readout-by-series combinations, 31 showed no monotone
 trend of the oscillation chambers, 23 a trend that a control of the same structures shared, 2 a trend that
-vanished after the controls were subtracted and 2 a trend that met all conditions of a period effect (Table 6,
+vanished after the controls were subtracted and 2 a trend that met all conditions of a period effect (Table 7,
 Figure 15). Shuffling the periods among the structures of each series produced 3.5 period effects on average,
 so the two observed ones lie below chance level, and neither recurred in the other oscillation type of the same
 strain. The 23 structure effects, by contrast, exceeded the 13 that shuffled periods produced: the control
@@ -69,7 +69,7 @@ one. One period per structure is what the laminar layout of the chip allows, in 
 always exposed to the same liquid" flank "a switching zone, across which the laminar boundary layer moves"
 (2023_Blöbaum). The difference here is that every structure carried constant-medium chambers of both kinds, so
 that the drift of the structure could be read off and subtracted. Without them, the 27 monotone trends of the
-oscillation chambers in Table 5 would have been reported as dose responses, among them the rise of the OxPro
+oscillation chambers in Table 6 would have been reported as dose responses, among them the rise of the OxPro
 and sfpHluorin ratios with the period in both oscillation types (3.5). The control-trend classification of 3.6
 is therefore the methodological result of this thesis that carries beyond *A. pullulans*: in a dMSCC
 experiment the constant-medium chambers on the same structure are the only handle on the structure, and the
@@ -256,8 +256,7 @@ within the population" (2024_Blöbaum); across three strains, "all strains exhib
 heterogeneity when exposed to substrate than pH oscillations", and the industrial strain Ethanol Red combined
 the highest ATP levels with the highest stability (2025_Pianale). For *A. pullulans* the metrics show
 heterogeneity and stability differences between alternating and constant medium and none along the interval
-axis, and the sensor ratios showed no difference in either (3.5) *[the sensor half-sentence only if the optional
-robustness paragraph of 3.5 is kept]*. The metrics thus confirm the two answers of 4.1 and 4.2 at the level of
+axis, and the sensor ratios showed no difference in either (3.5, Table 5). The metrics thus confirm the two answers of 4.1 and 4.2 at the level of
 distributions: robust to the frequency, responsive to the alternation. What they add on their own is the
 growth-rate result, a population that grows more uniformly in area when the medium alternates, which the mean
 values alone would not have shown.
@@ -389,8 +388,7 @@ organic and inorganic) and medium pH" as "particularly influential" on the life 
 two media differ in both: YPD supplies peptone and yeast extract, oMLP ammonium nitrate at a carbon-to-nitrogen
 ratio of 125 (2.1; 2024_Haala). Haala et al. also report that under such a ratio "A. pullulans form
 intracellular storage lipids" (2024_Haala); whether the large round cells of the minimal-medium chambers were
-lipid-storing cells was not examined, and a Nile red stain tried in the chip stained the PDMS as well.
-*[your observation; keep or drop]* Pseudohyphal growth, finally, had a
+lipid-storing cells was not examined. Pseudohyphal growth, finally, had a
 different trigger here than in yeast: Blöbaum et al. saw it in S. cerevisiae under glucose shifts every 1.5 and
 6 min, as "a known response to nitrogen starvation and stress" (2024_Blöbaum); in A. pullulans it appeared with
 the complex medium and not with the oscillation.

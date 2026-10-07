@@ -16,7 +16,7 @@ table numbers below are those of the PDF; "draft" means the numbering of `docs/r
 | 6 Table 2 | drop the caption sentences | draft |
 | 7 Rensink | both papers exist | keys kept as they are; check each citation against the right paper |
 | 8 area axes | µm² | every area figure in µm², tables in px² plus `*_um2` columns in `13_endpoint_*.csv` |
-| 9 sensor robustness | drop the sentence in 3.6 | draft; the 3.5 paragraph and Table 9 marked optional |
+| 9 sensor robustness | drop the sentence in 3.6; on 2026-10-07: the 3.5 paragraph and its table stay | draft: 3.6 sentence dropped; the sensor-robustness table is Table 5 in 3.5, the tables of 3.6 are now 6 and 7 |
 
 The draft `docs/results_chapter.md` now carries the thesis numbering (Figures 2 to 17, Tables 1 to 6) and
 captions for Figures 3, 5, 6, 8, 9, 12 and 13; the mapping table in section 2 below is therefore only needed for
