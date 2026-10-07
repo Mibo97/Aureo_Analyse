@@ -2,7 +2,7 @@
 
 Draft of 2026-09-29 for the thesis, updated 2026-10-05. Numbers come from the final v12 run of the analysis pipeline (564 chambers,
 `analysis_output_v12/`, `docs/data_story.md`) and from the BioLector cultivations (`growth_parameters_summary.csv`).
-Figure and table numbers follow the chapter PDF of 2026-10-05 (Figures 2 to 17, Tables 1 to 6); the remaining
+Figure and table numbers follow the chapter PDF of 2026-10-05 (Figures 2 to 17, Tables 1 to 7); the remaining
 appendix figures keep the A-numbers of the notes table until the appendix is numbered. The pipeline file behind
 every figure and table stands in square brackets in its caption and is to be removed before submission. Citation
 keys follow the methods chapter (`2024_Blöbaum`). Strain names follow Section 2.3 (BSpH is labelled BSPH in the
@@ -416,7 +416,7 @@ controls the positions A1, A2, A13 and A14 (Section 2.5.3), so the comparison is
 positions (Appendix Figure A13).
 
 **Trends against the period.** Monotone trends of the oscillation chambers with |ρ| ≥ 0.6 appeared in every
-readout, but in different series (Table 5, columns "oscillation chambers"). The budding rate fell with the period
+readout, but in different series (Table 6, columns "oscillation chambers"). The budding rate fell with the period
 in WT/pH (ρ −1.00), WT/Glc, BSA/pH and BSG/pH (−0.60) and rose in BSO/Glc (+0.77); µ_bud rose in BSO/Glc (+1.00)
 and fell in BSA/pH, BSG/Glc and BSG/pH (−0.60). The endpoint area fell with the period in BSpH/Glc (−0.89) and
 WT/pH (−0.80) and rose in BSA/Glc (+0.71); µ_area fell in BSA/Glc (−0.94), BSO/Glc (−0.83) and WT/pH (−0.80). The
@@ -507,14 +507,14 @@ Against the period, the OxPro ratio of BSO rose in the oscillation chambers of b
 in Glc, +1.00 in pH), and so did the pHluorin ratio of BSpH (+0.71 and +0.60) and the Gly-RNA ratio of BSG in
 the Glc series (+0.89); the QUEEN-2m ratio of BSA showed no trend. In every one of these cases the famine-control
 chambers of the same structures rose with the period as well (OxPro +0.94 and +1.00, pHluorin +0.89 and +1.00,
-Table 5), with the exception of Gly-RNA, whose trend did not survive the subtraction of its controls (3.6).
+Table 6), with the exception of Gly-RNA, whose trend did not survive the subtraction of its controls (3.6).
 
 **Figure 14: Biosensor ratios of the Glc oscillation series against the half-cycle period.** (A) OxPro ratio of BSO,
 (B) sfpHluorin ratio of BSpH; layout as in Figure 11. [`13_endpoint_vs_period_ratio_OxPro_Glc.pdf`,
 `13_endpoint_vs_period_ratio_pHluorin_Glc.pdf`]
 
-*[Optional, not in your chapter:]* **Robustness of the sensor signals.** The temporal and population robustness of the four ratios differed by
-two orders of magnitude between the sensors (Table S1): the sfpHluorin ratio was the most stable over time and
+**Robustness of the sensor signals.** The temporal and population robustness of the four ratios differed by
+two orders of magnitude between the sensors (Table 5): the sfpHluorin ratio was the most stable over time and
 the most homogeneous across cells (R(t) and R(p) of −0.01), the OxPro ratio, whose values lie close to zero, the
 least (R(t) −0.21 and R(p) −0.73 in the oscillation chambers). For none of the four sensors did the oscillation
 chambers differ from the controls of their structure in R(t) or R(p) (Wilcoxon signed-rank test over ten
@@ -523,7 +523,7 @@ structure effects, among them both series of OxPro in all three metrics, in whic
 fell with the period in the oscillation and in the famine chambers alike; one combination met the conditions of
 a period effect (single-cell R(t) of the Gly-RNA ratio in BSG/pH), two were not robust and nine showed no trend.
 
-**Table S1: Temporal and population robustness of the four sensor ratios.** *[Optional, not in your chapter.]*
+**Table 5: Temporal and population robustness of the four sensor ratios.**
 Layout as in Table 4; ten structures per sensor. [`40_<metric>_ratio_<sensor>_per_chip.csv`, `51_osc_vs_controls.csv`]
 
 | sensor | metric | oscillation | feast control | famine control | less robust (of 10) | p |
@@ -551,7 +551,7 @@ against the period, and each of the 58 readout-by-series combinations was classi
 that the oscillation chambers trended (|ρ| ≥ 0.6), that no control type trended in the same direction, and that
 the difference trended as well.
 
-**Table 5: Trends of the oscillation chambers and of their controls against the half-cycle period.** Spearman ρ
+**Table 6: Trends of the oscillation chambers and of their controls against the half-cycle period.** Spearman ρ
 over structures for all readout-by-series combinations in which the oscillation chambers trended with |ρ| ≥ 0.6;
 "strongest control" is the control type (feast, famine or their mean) with the largest |ρ|; "difference" is
 oscillation chambers minus control mean. Residual: the difference trends in the same direction with |ρ| ≥ 0.6
@@ -587,7 +587,7 @@ although a control trends too. [`50_control_trend_summary.csv`, `24_growth_from_
 | | BSG/pH | −0.60 | −0.60 | −0.40 | structure effect |
 | | BSpH/pH | +0.60 | +0.50 | −0.20 | not robust |
 
-**Table 6: Classification of the 58 readout-by-series combinations** (endpoint area, eccentricity, four sensor
+**Table 7: Classification of the 58 readout-by-series combinations** (endpoint area, eccentricity, four sensor
 ratios, µ_area, budding rate and µ_bud over ten series). [`50_control_trend_summary.csv`]
 
 | classification | combinations |
@@ -598,7 +598,7 @@ ratios, µ_area, budding rate and µ_bud over ten series). [`50_control_trend_su
 | period effect: oscillation chambers trend, controls do not, difference trends | 2 |
 
 In 23 of the 27 combinations in which the oscillation chambers trended with the period, at least one control type
-of the same structures trended in the same direction, in 15 of them with a |ρ| of 0.8 or more (Table 5). Two
+of the same structures trended in the same direction, in 15 of them with a |ρ| of 0.8 or more (Table 6). Two
 trends vanished after the controls were subtracted (eccentricity BSpH/pH, Gly-RNA ratio BSG/Glc). Two combinations
 met all three conditions of a period effect: µ_area in BSO/Glc (ρ −0.83, difference −0.77) and the budding rate in
 WT/Glc (ρ −0.60, difference −0.80). Neither recurred in the other oscillation type of the same strain (µ_area
