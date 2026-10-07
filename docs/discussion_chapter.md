@@ -388,8 +388,9 @@ medium moved it toward swollen cells and, on W109, hyphae. Campbell et al. name 
 organic and inorganic) and medium pH" as "particularly influential" on the life cycle (2004_Campbell), and the
 two media differ in both: YPD supplies peptone and yeast extract, oMLP ammonium nitrate at a carbon-to-nitrogen
 ratio of 125 (2.1; 2024_Haala). Haala et al. also report that under such a ratio "A. pullulans form
-intracellular storage lipids" (2024_Haala); whether the large round cells of the minimal-medium chambers on W65
-were lipid-storing cells was not examined and could be, with a lipid stain. Pseudohyphal growth, finally, had a
+intracellular storage lipids" (2024_Haala); whether the large round cells of the minimal-medium chambers were
+lipid-storing cells was not examined, and a Nile red stain tried in the chip stained the PDMS as well.
+*[your observation; keep or drop]* Pseudohyphal growth, finally, had a
 different trigger here than in yeast: Blöbaum et al. saw it in S. cerevisiae under glucose shifts every 1.5 and
 6 min, as "a known response to nitrogen starvation and stress" (2024_Blöbaum); in A. pullulans it appeared with
 the complex medium and not with the oscillation.
@@ -478,7 +479,10 @@ The half-cycle periods tested here span the time scales of large-scale mixing. N
 times in bioreactors as "of the order 10–1000 s depending on the reactor design and operating conditions", with
 circulation times lower "typically by a factor of three to five" (2021_Nadal-Rey); the measured mixing times of
 the industrial vessels modelled by Losoi et al. were 124 and 165 s, and optimally placed multiple feed points
-reduced them "from the scale of minutes to the scale of 10 s" (2022_Losoi). A cell in such a reactor passes
+reduced them "from the scale of minutes to the scale of 10 s" (2022_Losoi); Arulrajah et al. put laboratory
+mixing times below 5 s and large-scale mixing times at "tens to 100 s of seconds", "notably longer than
+relevant cellular reaction time, which can be in the magnitude of seconds on transcriptome level"
+(2025_Arulrajah). A cell in such a reactor passes
 through zones of excess and limitation on the scale of the circulation time, seconds to a few minutes, and sees
 the whole vessel on the scale of the mixing time. The half-cycles of 0.75 to 24 min, chosen with the yeast
 studies to cover "large-reactor mixing times" (2025_Pianale), cover this range and extend beyond it. Within it,
@@ -491,7 +495,9 @@ The amplitude, not the frequency, is the parameter to carry into process design.
 so. First, the one effect of the oscillation was the alternation between glucose excess and glucose absence,
 present at every interval (4.2). Second, the amplitude used here is a worst case. In fed-batch reactors the
 glucose peaks measured in a 20 m³ S. cerevisiae process were "from approximately 40 to 80 mg L−1"
-(2021_Nadal-Rey); the chambers alternated between 50 and 0 g/L, three orders of magnitude more. The chip result
+(2021_Nadal-Rey); the chambers alternated between 50 and 0 g/L, three orders of magnitude more, and in a baker's yeast
+scale-down reactor sugar pulses of only "0.45–1.9 g L−1" for "60-s periods" on a tenth of the culture already cost
+"a 6–7% reduction in biomass yield" (2025_Arulrajah). The chip result
 therefore says that even the extreme alternation did not change growth or morphology with the frequency, and
 that it shifted the population toward blastoconidia and larger mothers. For the process this reads in two
 directions. Nadal-Rey et al. note that exposure to fluctuations "increases the ATP demand for maintenance by
@@ -499,13 +505,21 @@ directions. Nadal-Rey et al. note that exposure to fluctuations "increases the A
 answers glucose alternation by releasing more blastoconidia converts carbon into propagules that, by Campbell
 et al., do not produce pullulan (2004_Campbell), while the larger mothers may. Which of the two prevails is a
 question for a product measurement under alternation, with a pullulan or liamocin assay, and it is the first
-experiment that follows from this thesis.
+experiment that follows from this thesis. That the answer is specific to the organism is the general lesson of
+scale-down work: "the impact of gradients in large-scale bioreactors is highly organism-dependent and should be
+carefully considered when designing scale-down studies" (2025_Arulrajah); for A. pullulans this thesis places
+the sensitivity in the amplitude of the glucose alternation and the composition of the medium, not in the
+frequency.
 
 pH gradients are the smaller concern. Losoi et al. find the simulated pH gradients after a base pulse "similar
 to the substrate gradients" in extent (2022_Losoi); in the chip, alternation between pH 3.0 and pH 8.0 left
 growth, morphology and the pH sensor unchanged (4.2, 4.4), and the BioLector growth rates at the two pH values
-were alike (3.1). For a circular feedstock that arrives acidic or alkaline, or for a reactor in which base
-addition creates local pH excursions, the organism's growth is not the limiting factor; the product may be,
+were alike (3.1). pH gradients in reactors "are generally more localized and short-lived" than substrate or oxygen gradients
+(2025_Arulrajah), so the chambers' 22 h of alternation between pH 3.0 and 8.0 exceed what a cell meets in a
+reactor, and unlike base pulses in a scale-down reactor, which "not only increased the pH of the entire
+bioreactor but also raised the osmolarity" (2025_Arulrajah), the chip separated the pH from the medium. For a
+circular feedstock that arrives acidic or alkaline, or for a reactor in which base addition creates local pH
+excursions, the organism's growth is not the limiting factor; the product may be,
 since the life cycle and pullulan formation are pH-sensitive (2004_Campbell), which is again a product
 question.
 
@@ -520,9 +534,10 @@ liamocins (2024_Haala) and that Zhang et al. report at 10:1 for pullulan (2024_Z
 Two further implications concern strains and methods. The biosensor strains grew at 66 to 90 % of the wild type
 in oMLP and their ranking depended on the medium (3.1); as production hosts they carry a cost, and as monitoring
 strains they report nothing until their sensors are calibrated in the process context (4.4). The wild type
-remains the production candidate. On the method side, the thesis delivers what Olsson et al. ask for, a
-quantification of robustness "as a tool for guiding strain and bioprocess development" (2022_Olsson), with one
-addition: the control chambers on the same structure, without which the dMSCC data would have shown dose
+remains the production candidate. On the method side, dynamic single-cell cultivation is now named among the scale-down tools as "a
+complementary approach to conventional STR scale-down studies" (2025_Arulrajah), and the thesis delivers what
+Olsson et al. ask for, a quantification of robustness "as a tool for guiding strain and bioprocess development"
+(2022_Olsson), with one addition: the control chambers on the same structure, without which the dMSCC data would have shown dose
 responses that were not there (4.1). A scale-down study of A. pullulans that wants to rank strains or media
 should therefore vary amplitude and composition, replicate per culture, keep constant-medium chambers on every
 structure, and add a product readout at the single-cell level; a fluorescent pullulan reporter of the kind Zhang
@@ -558,8 +573,7 @@ under the microscope would give the range in which the ratios can move; an isoge
 would separate the cost of the sensor from clonal variation in the growth rates of 3.1.
 
 Morphology and product. The static comparison rests on two chips with one culture each (3.3, 4.5); more chips
-per medium, a lipid stain for the large round cells, and a per-cell product readout would turn the morphology
-results into process statements. The segmentation can be fine-tuned on A. pullulans for the dense phase and the
+per medium and a per-cell product readout would turn the morphology results into process statements. The segmentation can be fine-tuned on A. pullulans for the dense phase and the
 pseudohyphal forms (2025_Pachitariu), and bud retention in the chamber geometry would deepen the lineages that
 wash-out now cuts short (4.6).
 
@@ -568,8 +582,9 @@ preculture (3.1); an OD₆₀₀ calibration and biological replicates are neede
 compared across strains.
 
 Statistics and pipeline. The permutation null of the trend classification and the coefficient-of-variation
-check of the robustness metrics were computed on the final-run tables outside the pipeline (3.6, 3.4); both
-should become pipeline outputs so that the chapter's numbers come from one run.
+check of the robustness metrics (3.6, 3.4) are part of the pipeline since the last revision, so that every
+number of the chapter comes from one run of it (2.5.6). *[Both outputs appear with the next run:
+`50_control_trend_null.csv`, `51_osc_vs_controls_cv.csv`; the methods rewrite needs a sentence on them.]*
 
 ---
 

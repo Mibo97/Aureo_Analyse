@@ -585,6 +585,23 @@ mean, tracks of at least `MORPHOLOGY_MIN_FRAMES` frames, the rule of `90_morphol
 from a Mann-Whitney U over structures (median per structure, each strain against WT, at least three structures per
 group); before, the test ran over object-frames, so every pair was "****" by n alone. Synthetic run exit 0.
 
+## 6s. Permutation null and CV check as pipeline outputs (2026-10-07)
+
+Two checks that the discussion needed were first computed on the final-run tables (`docs/scratch/trend_null.py`,
+`docs/scratch/robust_cv.py`) and are now step-50 outputs. `trend_null.py` shuffles the periods of every series
+among its structures (one label per structure, so a structure keeps its oscillation and control chambers and
+only the period order is destroyed), repeats the control-trend classification with the same rules and reports
+per verdict the observed count, the null mean, the 5th and 95th percentile and P(null ≥ observed)
+(`50_control_trend_null.csv`; `TREND_NULL_PERMUTATIONS` = 1000, `TREND_NULL_SEED` = 0; a self-check compares the
+observed counts with `control_trend_check()`). On the final run: 2 period effects observed against 3.5 expected,
+23 structure effects against 13.4 (p 0.004). `cv_check.py` reads the step-40 chamber tables, forms the
+coefficient of variation and the mean per chamber for area, eccentricity and µ_area (R(p)) and for the chamber
+mean area and eccentricity over time (R(t)), and runs them through the paired comparison of
+`osc_vs_controls.py` (`51_osc_vs_controls_cv.csv`, `_per_structure.csv`). On the final run the growth-rate
+homogeneity, the eccentricity heterogeneity and the temporal instability of the mean area hold as CV, the area
+heterogeneity does not (Fano factor of the larger mean). Both reproduce the scratch results on the final-run
+tables; synthetic run exit 0.
+
 ## 7. Order and checkpoints
 
 Phase A (sweep) and the re-tracking on the existing zarr stacks run in parallel on the cluster. B1–B3,

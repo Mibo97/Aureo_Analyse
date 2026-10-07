@@ -376,12 +376,22 @@ use it. Where a paper contradicts or qualifies a claim, that is said.
   oscillations in the order of large-reactor mixing times (Lara et al. 2006)".
 - 2022_Olsson p.1: "Quantification of robustness is suggested as a tool for guiding strain and bioprocess
   development."
+- 2025_Arulrajah (Bioprocess Biosyst Eng 48:1619) p.1: "In smaller systems, mixing times are typically very
+  short (< 5 s)"; p.2: "the mixing time in large-scale can range from tens to 100 s of seconds … Thus, the mixing
+  time can be notably longer than relevant cellular reaction time, which can be in the magnitude of seconds on
+  transcriptome level"; p.4: "pH gradients are generally more localized and short-lived"; "the impact of
+  gradients in large-scale bioreactors is highly organism-dependent and should be carefully considered when
+  designing scale-down studies"; p.5: "Yeast, e.g., Saccharomyces cerevisiae exhibit intermediate sensitivity …
+  certain gradients may even enhance product yield under specific conditions"; p.7: pH pulses in one vessel "not
+  only increased the pH of the entire bioreactor but also raised the osmolarity"; "Recent advances in single-cell
+  microfluidic cultivation offer a complementary approach to conventional STR scale-down studies. Blöbaum et al.
+  [8] presented a dynamic single-cell microfluidic cultivation (dMSCC) pipeline"; p.10: baker's yeast scale-down,
+  "about 10% of the yeast culture to high sugar concentrations (0.45–1.9 g L−1) for 60-s periods … a 6–7%
+  reduction in biomass yield, which was also observed in the large-scale 215 m3 bubble column". Use: 4.7 time
+  scales, amplitude context, organism dependence, pH gradients, dMSCC as a scale-down tool.
 
-## Still missing after these seventeen
+## Still missing after these eighteen
 
 - Conidiation or blastoconidia release under nutrient limitation in A. pullulans (4.2, 4.4): Rensink 2024
   and 2026 are the fallback; a physiological source would be better.
 - Fluorescent-protein or heterologous-expression burden in a fungus (4.4, 4.7).
-- Mixing and circulation times of large reactors with numbers (4.7): your intro refs 2022_Losoi,
-  2021_Nadal-Ray, 2025_Arulrajah; 2020_Täuber p.3 gives only "Typical time scales are in second to minutes
-  range based on the size and geometry of the bioreactor".

@@ -137,6 +137,13 @@ PERIOD_FIGURE_CONNECT_OSC = False
 PERIOD_FIGURE_REFERENCE_LINES = False
 PERIOD_FIGURE_BRACKET_PANEL = False
 
+# Permutationsnull der Kontroll-Trend-Klassifikation (trend_null.py -> 50_control_trend_null.csv): wie viele
+# Perioden- und Struktureffekte erzeugt die Klassifikation, wenn die Perioden einer Serie zufaellig auf ihre
+# Strukturen verteilt werden (Chip-Effekte bleiben, nur die Periodenordnung wird zerstoert)? 1000 Mischungen
+# dauern etwa eine halbe Minute; 0 schaltet die Ausgabe ab.
+TREND_NULL_PERMUTATIONS = 1000
+TREND_NULL_SEED = 0
+
 # WICHTIG ZUR SPALTE 'osc_freq': sie enthaelt trotz ihres Namens das SCHALTINTERVALL
 # des Mediums in MINUTEN (0.75 ... 24), d.h. die HALBZYKLUS-Periode, keine Frequenz.
 # Eine volle Feast/Famine-Periode ist doppelt so lang (1.5 ... 48 min).

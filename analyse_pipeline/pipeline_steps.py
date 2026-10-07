@@ -59,6 +59,8 @@ from config import (
     MORPHOLOGY_ROUND_ECC,
     ROBUSTNESS_MIN_FRAMES_SINGLE_CELL,
     ROBUSTNESS_MIN_INTERVALS_MU_EVENT,
+    TREND_NULL_PERMUTATIONS,
+    TREND_NULL_SEED,
     ENDPOINT_LAST_FRACTION,
     ENDPOINT_VALUE_COLS,
     STATIC_SATURATION_LEVEL,
@@ -116,6 +118,8 @@ from summary_plots import (
     plot_rt_single_cell_distribution,
 )
 from plot_style import AREA_LABEL, AREA_SCALE_UM2
+from trend_null import observed_counts_match, permutation_null
+from cv_check import cv_outputs
 from analysis import (
     pretty_label,
     data_overview,
@@ -1317,7 +1321,61 @@ def step_50_summary(ctx: PipelineContext) -> None:
 
         # -- Oszillation gegen die Kontrollen der eigenen Struktur, gepaart ueber Strukturen (51_*).
         _osc_vs_controls_outputs(ctx)
+        # -- Variationskoeffizient statt R fuer die Robustheitsmasse (cv_check.py): traegt R den Mittelwert?
+        try:
+            per_struct_cv, summary_cv = cv_outputs(output_dir)
+            if not summary_cv.empty:
+                per_struct_cv.to_csv(output_dir / "51_osc_vs_controls_cv_per_structure.csv", index=False)
+                summary_cv.to_csv(output_dir / "51_osc_vs_controls_cv.csv", index=False)
+                logger.info("CV-Vergleich gespeichert: 51_osc_vs_controls_cv.csv / _per_structure.csv (%d Readouts)",
+                            summary_cv["readout"].nunique() if "readout" in summary_cv.columns else -1)
+        except Exception as e:  # noqa: BLE001 - Zusatzausgabe darf den Lauf nicht abbrechen
+            logger.warning("CV-Vergleich uebersprungen: %s: %s", type(e).__name__, e)
+        # -- Permutationsnull der Kontroll-Trend-Klassifikation (trend_null.py): 50_control_trend_null.csv
+        _trend_null_outputs(ctx)
 
+
+
+def _trend_null_outputs(ctx: PipelineContext) -> None:
+    """Mischt die Perioden jeder Serie unter ihren Strukturen (TREND_NULL_PERMUTATIONS mal) und zaehlt, wie oft
+    die Kontroll-Trend-Klassifikation dann Perioden-, Struktur- und nicht-robuste Effekte vergibt; Eingabe sind
+    dieselben Chip-Tabellen wie fuer 50_control_trend_summary.csv (12_, 13_, 21_, 24_)."""
+    if not TREND_NULL_PERMUTATIONS or TREND_NULL_PERMUTATIONS <= 0:
+        return
+    output_dir = ctx.output_dir
+    parts = []
+    for name, readout in (("13_endpoint_per_chip.csv", None), ("12_area_growth_rate_per_chip.csv", "mu_area"),
+                          ("21_budding_rate_per_chip.csv", "budding_rate_per_h"),
+                          ("24_growth_from_budding_per_chip.csv", "mu_bud")):
+        path = output_dir / name
+        if not path.exists():
+            continue
+        try:
+            t = pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            continue
+        if t.empty:
+            continue
+        if "value_col" not in t.columns:
+            t["value_col"] = readout
+        parts.append(t)
+    if not parts:
+        return
+    per_chip = pd.concat(parts, ignore_index=True)
+    try:
+        null = permutation_null(per_chip, n_perm=TREND_NULL_PERMUTATIONS, seed=TREND_NULL_SEED)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Permutationsnull uebersprungen: %s: %s", type(e).__name__, e)
+        return
+    if null.empty:
+        logger.info("Permutationsnull: keine Serie mit numerischen Perioden - keine Datei geschrieben.")
+        return
+    observed_counts_match(per_chip, null)
+    null.to_csv(output_dir / "50_control_trend_null.csv", index=False)
+    summary = {r["verdict"].split(":")[0]: f"{int(r['observed'])} beobachtet / {r['null_mean']:.1f} erwartet"
+               for _, r in null.iterrows() if not r["verdict"].startswith("fewer")}
+    logger.info("Permutationsnull der Kontroll-Trend-Klassifikation gespeichert: 50_control_trend_null.csv "
+                "(%d Mischungen) - %s", TREND_NULL_PERMUTATIONS, summary)
 
 
 def step_90_appendix(ctx: PipelineContext) -> None:
