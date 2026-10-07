@@ -1,6 +1,6 @@
 # 4. Discussion
 
-Draft of 2026-10-06, sections 4.1 to 4.4; the other sections follow the plan in `docs/discussion_outline.md`.
+Draft of 2026-10-06/07, sections 4.1 to 4.8 and a first Conclusion; plan in `docs/discussion_outline.md`.
 Cross-references use the thesis numbering of the results chapter (Tables 1 to 6, Figures 2 to 17, Sections 3.x)
 and of the methods chapter (2.x). Citation keys are those of your reference list; the page and the full passage
 behind every quotation are in `docs/literature_4.1_4.4.md`. Direct quotations can be paraphrased where the
@@ -360,23 +360,237 @@ been measured.
 
 ## 4.5 Growth mode and morphology
 
-*[To be drafted. New passage for the product link: Campbell et al. found with a gold-conjugated pullulanase
-probe that "only swollen cells and chlamydospores, and neither hyphae nor unicellular blastospores, often held
-responsible for pullulan formation, appeared to produce pullulan-like material" (2004_Campbell, p.1; p.4:
-"Only the multi-celled chlamydospores and swollen cells were coated with silver grains"), and that "the nitrogen
-source (both organic and inorganic) and medium pH" are "particularly influential" on the life cycle
-(2004_Campbell, p.1).]*
+The cells in the chambers were, for the most part, the ovoid yeast-like cells of the literature. Over the
+22,090 cells tracked for at least ten frames the median cell measured 22 µm² with an axis ratio of 1.5, and 90 %
+of the cells had an axis ratio below 1.9 (3.2.2). Rensink et al. compile the published dimensions: yeast cells
+"with a size of 9-11 x 3-6.5 μm", swollen cells "with an average size of 15 × 11 μm and 12 × 9 μm" and
+chlamydospores of "13 × 12 μm" (2026_Rensink). As projected areas these are about 20 to 55 µm² for the yeast
+cells, 85 to 130 µm² for the swollen cells and about 120 µm² for the chlamydospores. The median cell of this
+study therefore sits in the yeast-like class, and the 30 µm² and eccentricity 0.6 that mark the "large and
+round" quadrant of Figure 4 lie below the published swollen-cell size, so that quadrant collects cells on the
+way to swelling as well as swollen cells. The mothers that released blastoconidia measured 71 µm² at the moment
+of release, the area of a 9.5-µm sphere, between the two classes; the two cells of about 270 µm² on chip W65
+(Figure 5 B) correspond to 18.5 µm and exceed the published swollen cells. Chlamydospores and germ tubes were
+not seen, pseudohyphal chains only in complex medium on W65, hyphae only on W109 in complex medium (3.2.2).
+
+The organism grew in two ways, and the two traded against each other. In complex medium on chip W109 the cells
+ended 3.5 times larger and budded a sixth as often as in minimal medium on the same chip; the population grew
+into cell size rather than into blastoconidia (3.3). Within the Glc series, structures with a higher µ_bud had a
+lower µ_area (Figure 12), and under glucose oscillation the cells budded more and grew in area more slowly than
+under constant medium (4.2). Rensink et al. describe the same two modes as stages of one cycle: "blastoconidia
+were formed by cell division of swollen cells, hyphae, and existing blastoconidia, while blastoconidia
+differentiated into swollen cells and swollen cells differentiated into hyphae", so that in their static liquid
+cultures "blastoconidia were no longer the most dominant cell type after 10 h of culturing", and their model
+predicts "relative abundances of the blastoconidia, swollen cells and hyphae of 57 %, 32 %, and 11 %" after 72 h
+(2026_Rensink). The chambers show the medium deciding where on this cycle a population settles within 22 h:
+minimal medium kept it at yeast-like cells that release blastoconidia from a minority of large mothers, complex
+medium moved it toward swollen cells and, on W109, hyphae. Campbell et al. name "the nitrogen source (both
+organic and inorganic) and medium pH" as "particularly influential" on the life cycle (2004_Campbell), and the
+two media differ in both: YPD supplies peptone and yeast extract, oMLP ammonium nitrate at a carbon-to-nitrogen
+ratio of 125 (2.1; 2024_Haala). Haala et al. also report that under such a ratio "A. pullulans form
+intracellular storage lipids" (2024_Haala); whether the large round cells of the minimal-medium chambers on W65
+were lipid-storing cells was not examined and could be, with a lipid stain. Pseudohyphal growth, finally, had a
+different trigger here than in yeast: Blöbaum et al. saw it in S. cerevisiae under glucose shifts every 1.5 and
+6 min, as "a known response to nitrogen starvation and stress" (2024_Blöbaum); in A. pullulans it appeared with
+the complex medium and not with the oscillation.
+
+The two static chips disagreed, and the disagreement is instructive. W65 repeated the cell size of complex
+medium but not the small cells and frequent budding of minimal medium, and one of its four minimal-medium
+chambers ended at 215 µm² against 70 to 86 µm² for the other three, because it contained the two swollen cells
+that released a ring of ten blastoconidia within three frames (3.3, Figure 5 B). This is the transition from
+swollen cell to blastoconidia that Rensink et al. describe, caught in one chamber, and with four chambers per
+medium one such cell decides the mean. The lesson is the one of 4.1 at a smaller scale: one culture per chip,
+and chamber means that a single cell can move. Per-cell distributions (Figure 4) carry this information where
+chamber means hide it, and more chips per medium are the remedy.
+
+For the process the morphology matters because the morphotype decides the product. With a gold-conjugated
+pullulanase probe Campbell et al. found that "only swollen cells and chlamydospores, and neither hyphae nor
+unicellular blastospores, often held responsible for pullulan formation, appeared to produce pullulan-like
+material" (2004_Campbell). Read with this, the glucose-oscillation shift of 4.2 is two-edged: it increases the
+release of blastoconidia, which do not produce pullulan, and it enlarges the mothers, which may. Which side
+wins for the titre cannot be read from morphology and needs a product measurement. The medium adds a second
+caveat: oMLP was designed for liamocins (2024_Haala), whereas pullulan production is reported to favour a
+carbon-to-nitrogen ratio of 10:1 (2024_Zhang), so the morphology distribution seen here is that of a liamocin
+medium and not of a pullulan process. Both points return in 4.7.
 
 ## 4.6 Measuring a blastoconidia-forming fungus in a chip
 
-*[To be drafted; plan in the outline.]*
+The introduction named two problems that single-cell microfluidics meets in A. pullulans and not in S.
+cerevisiae: the assignment of buds to mothers when the buds are blastoconidia that move, and the secretion of
+pullulan into a device that depends on micrometre-scale flow (1.4). Both have an answer.
+
+The mother-bud assignment works in the sparse phase and only there. A new object is a bud candidate; its mother
+is the cell whose mask it touched at first detection, which decided 74 % of the accepted events, or the nearest
+established cell within 30 px for the 26 % that touched nothing; and a size criterion removes the washed-in
+cells and split masks, because the ratio of candidate area to mother area is bimodal, with buds at 0.07 and
+mother-sized objects at 0.45 and an antimode at 0.32 that rejected 15.5 % of the candidates (3.2.5, Figure 8).
+The restriction to the sparse phase follows from Figure 7: above about 8 objects per frame every object gave
+rise to a new touching object at a constant rate of 0.04 to 0.06 per frame, whether the chamber held 10 or 200
+objects, so at high density the touching new objects are fragments of touching masks that the contact rule
+cannot tell from buds (3.2.4). The sparse-phase window covered a median of 117 of 133 frames, and 245 of the 564
+chambers never left it, so the restriction cost little data; it cost the dense phase, in which lineage
+readouts would have needed a different method. That the problem is real and not an artefact of one tracker is
+shown by 3.2.6: the budding-rate trends against the period changed when the tracker was rebuilt, the per-series
+correlations of the two trackings agreeing at ρ 0.05 while the budding rates of the individual structures agreed
+at 0.77. Per-series trends of a lineage readout are a property of the tracker until the controls on the same
+structures confirm them, which is a second reason for the control logic of 4.1.
+
+Pullulan is not what makes the control chambers of a structure disagree. On the knockout structure the
+chamber-to-chamber variation of the cell-area level among the famine controls was 0.23 and among the feast
+controls 0.37, the 67th and 96th percentile of the 49 producer structures; the temporal variation lay at the
+92nd and 61st percentile; the famine-control cells were 1.5 times larger than the feast-control cells where the
+producers had a median ratio of 0.98, and the famine controls budded faster than the feast controls (3.7, Figure
+16). A single structure cannot show that pullulan has no effect on the flow, but it shows that removing it did
+not make nominally identical chambers agree better. The remaining candidates for the disagreement, seeding
+density, position within the array and flow asymmetry between arrays, are those of 4.2 and 4.8.
+
+The segmentation was a generalist model used out of the box. Cellpose-SAM is built to "generalize well
+out-of-distribution", is "robust to channel shuffling, cell size, shot noise, downsampling, isotropic and
+anisotropic blur" and "can run out-of-the-box on images that have been acquired with varying levels of image
+degradation, at different pixel sizes or in arbitrary channel order" (2025_Pachitariu). Phase-contrast images
+of a black yeast with cells from 8 to 270 µm² and pseudohyphal chains are such out-of-distribution data, and the
+model segmented them without training on A. pullulans. The price was paid in two places: in the dense phase,
+where touching masks merge and split (3.2.4), and in the chains of complex medium, which were split into their
+single cells (3.2.2). The framework offers "finetuning, human-in-the-loop training" (2025_Pachitariu), which was
+not used here and is the obvious next step for the dense phase and for the swollen and pseudohyphal forms. The
+cell filter replaced the manual curation of the earlier pipeline with two rules, a size and persistence rule
+that removed 35 % of the tracks but 6.8 % of the object-frames, and a phase-contrast rule for dead cells and
+debris that removed 432 tracks (3.2.1); the structure BSG/pH/6 min, which lost 52 % of its object-frames to
+them, shows that the rules act where the images are bad and not uniformly.
+
+The tracker halved the fragmentation of its predecessor, from 0.14 to 0.070 new tracks per object-frame, and 78
+% of the object-frames lay in tracks of at least ten frames, but the median track still lasted only 5 frames
+(3.2.3). Together with the open chamber design, this sets what the platform can and cannot measure for this
+organism. Blastoconidia leave the chamber: cells entered with the flow at 0.19 per cell-hour against 0.21 births
+per cell-hour, and immigration exceeded births in 37 % of the chambers (3.4), so the object count of a chamber is
+not a growth curve, µ_bud is a lower bound of the birth rate, and lineages rarely reach a second generation. The
+same wash-out is what kept the chambers sparse for 22 h: where the yeast chips of the literature hold "a maximum
+of 150–1000 microbial cells" per monolayer chamber (2024_Blöbaum), the A. pullulans chambers started with one to
+three cells and reached at most 180 objects, 245 of them never more than 20. What remains measurable are
+cumulative, hour-scale quantities, the endpoint morphology, the sparse-phase budding rate, µ_bud, µ_area and the
+robustness metrics, and these are the quantities the thesis reports. The cycles themselves were not observable
+at 10 min per frame for intervals up to 6 min and barely for 12 min (3.4); a run at 1 min per frame would show
+whether cell size or the sensor ratios follow the 24-min cycle, and is listed in 4.8.
 
 ## 4.7 Implications for bioprocess design in a circular bioeconomy
 
-*[To be drafted; plan in the outline.]*
+The half-cycle periods tested here span the time scales of large-scale mixing. Nadal-Rey et al. give mixing
+times in bioreactors as "of the order 10–1000 s depending on the reactor design and operating conditions", with
+circulation times lower "typically by a factor of three to five" (2021_Nadal-Rey); the measured mixing times of
+the industrial vessels modelled by Losoi et al. were 124 and 165 s, and optimally placed multiple feed points
+reduced them "from the scale of minutes to the scale of 10 s" (2022_Losoi). A cell in such a reactor passes
+through zones of excess and limitation on the scale of the circulation time, seconds to a few minutes, and sees
+the whole vessel on the scale of the mixing time. The half-cycles of 0.75 to 24 min, chosen with the yeast
+studies to cover "large-reactor mixing times" (2025_Pianale), cover this range and extend beyond it. Within it,
+A. pullulans did not care how often the medium switched (4.1). The cell responses that Nadal-Rey et al. list
+"vary over a wide range of timescales (from seconds to hours)" (2021_Nadal-Rey), and the hour-scale readouts of
+this thesis integrate over all of them; whatever the cells did within a cycle, it did not accumulate into a
+difference between cycles of 1.5 and of 48 min.
+
+The amplitude, not the frequency, is the parameter to carry into process design. Two points of the results say
+so. First, the one effect of the oscillation was the alternation between glucose excess and glucose absence,
+present at every interval (4.2). Second, the amplitude used here is a worst case. In fed-batch reactors the
+glucose peaks measured in a 20 m³ S. cerevisiae process were "from approximately 40 to 80 mg L−1"
+(2021_Nadal-Rey); the chambers alternated between 50 and 0 g/L, three orders of magnitude more. The chip result
+therefore says that even the extreme alternation did not change growth or morphology with the frequency, and
+that it shifted the population toward blastoconidia and larger mothers. For the process this reads in two
+directions. Nadal-Rey et al. note that exposure to fluctuations "increases the ATP demand for maintenance by
+40–50% in E. coli", so that "less carbon is available for product formation" (2021_Nadal-Rey); a population that
+answers glucose alternation by releasing more blastoconidia converts carbon into propagules that, by Campbell
+et al., do not produce pullulan (2004_Campbell), while the larger mothers may. Which of the two prevails is a
+question for a product measurement under alternation, with a pullulan or liamocin assay, and it is the first
+experiment that follows from this thesis.
+
+pH gradients are the smaller concern. Losoi et al. find the simulated pH gradients after a base pulse "similar
+to the substrate gradients" in extent (2022_Losoi); in the chip, alternation between pH 3.0 and pH 8.0 left
+growth, morphology and the pH sensor unchanged (4.2, 4.4), and the BioLector growth rates at the two pH values
+were alike (3.1). For a circular feedstock that arrives acidic or alkaline, or for a reactor in which base
+addition creates local pH excursions, the organism's growth is not the limiting factor; the product may be,
+since the life cycle and pullulan formation are pH-sensitive (2004_Campbell), which is again a product
+question.
+
+Feedstock composition mattered more than feedstock dynamics. The largest morphological effect of the whole data
+set was between complex and minimal medium in the static chambers (3.3), not between any two oscillation
+regimes, and the ranking of the strains in the BioLector changed with the medium (3.1). The requirement of the
+introduction, a cell factory that "maintain[s] performance while conditions fluctuate" (1.1), is met by
+A. pullulans for the fluctuation frequencies and the pH range tested; what a process on variable feedstocks has
+to control is the composition, in particular the carbon-to-nitrogen ratio that Haala et al. optimised for
+liamocins (2024_Haala) and that Zhang et al. report at 10:1 for pullulan (2024_Zhang).
+
+Two further implications concern strains and methods. The biosensor strains grew at 66 to 90 % of the wild type
+in oMLP and their ranking depended on the medium (3.1); as production hosts they carry a cost, and as monitoring
+strains they report nothing until their sensors are calibrated in the process context (4.4). The wild type
+remains the production candidate. On the method side, the thesis delivers what Olsson et al. ask for, a
+quantification of robustness "as a tool for guiding strain and bioprocess development" (2022_Olsson), with one
+addition: the control chambers on the same structure, without which the dMSCC data would have shown dose
+responses that were not there (4.1). A scale-down study of A. pullulans that wants to rank strains or media
+should therefore vary amplitude and composition, replicate per culture, keep constant-medium chambers on every
+structure, and add a product readout at the single-cell level; a fluorescent pullulan reporter of the kind Zhang
+et al. used for screening (2024_Zhang) could provide it in the chip.
 
 ## 4.8 Limitations and future work
 
-*[To be drafted from the consolidated list in the outline: biological replication and randomisation,
-fluorescein exchange test and famine verification, position within the array, 1-min frames for a subset,
-in-chip sensor calibration, static replication, OD₆₀₀ calibration, bud retention and mixed models.]*
+The limitations of this work follow from its design, and most of them have a direct remedy.
+
+The experimental unit. One culture per structure and one period per structure made the structure the detection
+limit (4.1). Future runs should assign periods to structures and days at random, run every period on at least
+two cultures, and keep feast and famine chambers on every structure. With two cultures per period the
+random-effects models that Lazic recommends for nested data (2010_Lazic) become possible, and the between-
+structure variation becomes a measured quantity instead of the limit.
+
+Position and pressure. The oscillation chambers sat in the centre of the array and the controls at its ends,
+and the control arrays were supplied passively (4.2). A run with constant medium in the central chambers, or an
+oscillation between two identical media as Täuber et al. used to exclude pressure effects (2020_Täuber), would
+separate position and switching from the oscillation.
+
+The chamber as a medium. The exchange time of the chambers was taken from the C. glutamicum chip (2020_Täuber;
+2023_Blöbaum) and not measured for the chamber height used here; a fluorescein switching test at the intervals
+used, 0.75 min in particular, would close this. Whether the famine medium was famine at the cell was not
+measured either (4.4); a glucose indicator in the chamber or a sampled outlet would settle it.
+
+Sampling. At 10 min per frame the cycles of the intervals up to 6 min are not observable and the 12-min
+interval is at the limit (3.4). A subset of chambers imaged at 1-min intervals would show whether cell size or a
+sensor ratio follows the 24-min cycle and how much of the temporal variance of R(t) is the cycle itself (4.3).
+
+Sensors. The four sensors are expressed and detected but not calibrated in the chip (4.4). An in-chip pH clamp
+of permeabilised cells, a defined ATP depletion for QUEEN-2m and a defined oxidative stimulus for OxPro at 30 °C
+under the microscope would give the range in which the ratios can move; an isogenic empty-vector transformant
+would separate the cost of the sensor from clonal variation in the growth rates of 3.1.
+
+Morphology and product. The static comparison rests on two chips with one culture each (3.3, 4.5); more chips
+per medium, a lipid stain for the large round cells, and a per-cell product readout would turn the morphology
+results into process statements. The segmentation can be fine-tuned on A. pullulans for the dense phase and the
+pseudohyphal forms (2025_Pachitariu), and bud retention in the chamber geometry would deepen the lineages that
+wash-out now cuts short (4.6).
+
+BioLector. The scattered-light signals are uncalibrated and the five wells per condition come from one
+preculture (3.1); an OD₆₀₀ calibration and biological replicates are needed before the growth parameters are
+compared across strains.
+
+Statistics and pipeline. The permutation null of the trend classification and the coefficient-of-variation
+check of the robustness metrics were computed on the final-run tables outside the pipeline (3.6, 3.4); both
+should become pipeline outputs so that the chapter's numbers come from one run.
+
+---
+
+# 5. Conclusion
+
+*[Separate chapter; one-page plan, to be written after 4.1 to 4.8 are agreed.]*
+
+This thesis asked how robust Aureobasidium pullulans is under glucose and pH oscillations and what follows for
+bioprocess design. In 564 microfluidic chambers on 54 structures, five strains were followed for 22 h under
+feast/famine half-cycle periods of 0.75 to 24 min, with constant-medium control chambers on every structure, and
+analysed with a pipeline that tracks every cell, assigns blastoconidia to their mothers in the sparse phase and
+compares every readout at the level of the structure. Growth, morphology and sensor signals did not depend on the
+period; the trends that appeared were carried by the structures, as their constant-medium controls showed, and
+the two remaining period effects lie below chance level. The alternation itself shifted growth toward
+blastoconidia and larger cells under glucose oscillation in every strain and at every interval, and changed
+nothing under pH oscillation between 3.0 and 8.0; the robustness metrics confirm both at the level of
+distributions. The constant-feast and constant-famine chambers barely separated in budding and the biosensor
+ratios did not separate at all, so the robustness of the intracellular physiology is neither established nor
+contradicted until the sensors are calibrated in the chip and the carbon state of the chamber is measured.
+Pullulan secretion does not explain the disagreement of control chambers, and the mother-bud assignment of a
+blastoconidia-forming fungus works where the chambers are sparse. For process design, the frequency of glucose
+and pH fluctuations is not the parameter to fear in A. pullulans; the amplitude of glucose alternation and the
+composition of the medium are, because they decide between growth in size and growth by blastoconidia, and with
+it between the morphotypes that produce pullulan and those that do not.

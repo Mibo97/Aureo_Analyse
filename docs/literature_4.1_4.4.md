@@ -1,4 +1,4 @@
-# Literature passages for discussion sections 4.1 and 4.4
+# Literature passages for the discussion (4.1 and 4.4 on 2026-10-06; 4.5 to 4.7 added 2026-10-07)
 
 Extracted 2026-10-06 from the twelve PDFs you sent (`literatur-4.1.zip`, `literatur-4.4.zip`). Page numbers are
 PDF pages (page 1 = first page of the file), not the printed journal pages. Quotes are verbatim from the text
@@ -304,12 +304,84 @@ use it. Where a paper contradicts or qualifies a claim, that is said.
   accumulation limits dye penetration". Use: 4.4 (melanisation as a possible attenuator of fluorescence
   readouts, hypothesis), 4.5 (surface growth and EPS as the context of the chamber biofilm).
 
-## Still missing after these fourteen
+## 4.5 to 4.7 (added 2026-10-07: 2025_Pachitariu, 2021_Nadal-Rey, 2022_Losoi, plus passages of the earlier papers)
+
+### 4.5 Growth mode and morphology
+- 2026_Rensink p.1 to p.2 (compiled dimensions): yeast cells "with a size of 9-11 x 3-6.5 μm, while the hyphae
+  have a width of 2-16 μm (de Hoog et al., 2000; Samson et al., 2019)"; "The globular and ellipsoid swollen cells
+  can either or not be septated with an average size of 15 × 11 μm and 12 × 9 μm, respectively, and have a thick
+  cell wall (Campbell et al., 2004; Li et al., 2009; Pechak and Crang, 1977)"; chlamydospores "have an average
+  size of 13 × 12 μm". Use: map the size classes of 3.2.2 onto the literature (yeast cells about 20 to 55 µm²,
+  swollen cells 85 to 130 µm², chlamydospores about 120 µm² as projected areas).
+- 2026_Rensink p.1 (abstract): the cell-type cycle and "blastoconidia were no longer the most dominant cell
+  type after 10 h of culturing, although they represented more than 75 % of the cells at the moment of
+  inoculation"; model prediction "57 %, 32 %, and 11 %" blastoconidia, swollen cells and hyphae after 72 h.
+- 2004_Campbell p.1: nitrogen source and medium pH "particularly influential" on the life cycle; abstract and p.4
+  on swollen cells and chlamydospores as the pullulan producers (see above).
+- 2024_Blöbaum p.8: "Cell circularity varied substantially with 1.5 and 6 min oscillations, owing to a shift
+  towards pseudohyphal growth … Pseudohyphal growth is a known response to nitrogen starvation and stress".
+  Use: a different trigger of pseudohyphae than ours (complex medium).
+- 2024_Haala p.6 (storage lipids under high C/N) and p.10 (oMLP composition, C/N 125); 2024_Zhang p.2 ("a 10:1
+  carbon/nitrogen ratio is the most favorable condition for pullulan production").
+
+### 4.6 Measuring a blastoconidia-forming fungus in a chip
+- 2025_Pachitariu p.1: "developers may specifically focus on methods that can be proved to generalize well
+  out-of-distribution"; "We increase generalization performance further by making the model robust to channel
+  shuffling, cell size, shot noise, downsampling, isotropic and anisotropic blur. The new model can be readily
+  adopted into the Cellpose ecosystem which includes finetuning, human-in-the-loop training, image restoration
+  and 3D segmentation approaches."
+- 2025_Pachitariu p.5: "Cellpose-SAM can run out-of-the-box on images that have been acquired with varying
+  levels of image degradation, at different pixel sizes or in arbitrary channel order, substantially simplifying
+  the logistics typically associated with setting up an image segmentation pipeline."
+- 2025_Pachitariu p.6: "the model is especially good at generalizing with zero-shot or limited data."
+- 2025_Pachitariu p.11 to p.12: training data include phase-contrast yeast (YeaZ, "16 2D images from the phase
+  contrast dataset") and phase-contrast bacteria (Omnipose). Use: yeast in phase contrast is inside its
+  training distribution, a black yeast with 270-µm² cells and pseudohyphal chains at its edge.
+- 2024_Blöbaum p.3: "In perfusion-based microfluidic systems, a maximum of 150–1000 microbial cells can be
+  cultivated and trapped in one monolayer-growth chambers". Use: the density the yeast chambers reach against
+  the 180 objects at most in ours.
+- 2020_Täuber p.13 (position-dependent exchange) and p.15 (identical-media switch) as under 4.1 and 4.2.
+
+### 4.7 Implications for bioprocess design
+- 2021_Nadal-Rey p.2: mixing time "defined as the time needed for the concentration of an inert tracer to reach
+  a pre-defined degree of homogeneity … with values being of the order 10–1000 s depending on the reactor design
+  and operating conditions (Sweere et al., 1987)"; "Use of the circulation time will give a lower value of τ
+  than the mixing time (Doran, 1995), typically by a factor of three to five."; "gradients are more likely to
+  occur at high biomass concentrations, and/or for microorganisms which have high substrate and/or oxygen uptake
+  rates."
+- 2021_Nadal-Rey p.3: "The changes that can occur as a response to such fluctuations vary over a wide range of
+  timescales (from seconds to hours). Changes in the metabolome … can occur at the second time scale."; "It has
+  been estimated that exposure to fluctuating conditions increases the ATP demand for maintenance by 40–50% in
+  E. coli (Löffler et al., 2016). The practical consequence of this is that less carbon is available for product
+  formation, leading to a reduction in the product yield."; "Using regime analysis, substrate gradients are
+  expected in the majority of cases".
+- 2021_Nadal-Rey p.7 and p.9 (Table 3): S. cerevisiae, 20 to 22 m³, four impellers, mixing time 147 to 183 s;
+  "A substrate concentration peak from approximately 40 to 80 mg L−1 was observed, being 80 mg L−1 the maximum
+  local concentration of glucose reported." Use: the amplitude of real fed-batch gradients against the 50 to
+  0 g/L alternation of the chip.
+- 2021_Nadal-Rey p.10: scale-down simulators apply pulses "at such frequency and magnitude that the simulator
+  is able to mimic the oscillations that the cells experience at a particular location in a large-scale
+  reactor"; "Many of these issues are amplified when working with viscous fermentation broths (e.g. filamentous
+  fungi broth)"; "Tip speed affects the shear rate, causing changes in the rheology and morphology of
+  filamentous fungi". Use: viscosity of pullulan broths as the scale-down problem the chip avoids.
+- 2022_Losoi p.1: "insufficient macromixing of feeds, leading to heterogeneities in pH, substrate, and oxygen";
+  multipoint feeds "reduced the mixing time substantially by more than a minute and mitigated gradients of pH,
+  substrate, and oxygen"; "the phenotypical heterogeneity of the biomass population was diminished".
+- 2022_Losoi p.9: "the pH gradients 10 s after the carbonate pulse … were similar to the substrate gradients."
+- 2022_Losoi p.10: "Both R4 and B13 achieved mixing times of 10 s (Table 3), which are common in
+  laboratory-scale reactors"; p.14: "Simulated mixing times were reduced from the scale of minutes to the scale
+  of 10 s, which mitigated substrate gradients and restored ideal homogeneous reactor performance."; p.17:
+  "locally measured mixing times of 165 s in R4 … and 124 s in R1".
+- 2025_Pianale p.3: oscillations of 24 and 48 min "included to assess the physiological effects of longer
+  oscillations in the order of large-reactor mixing times (Lara et al. 2006)".
+- 2022_Olsson p.1: "Quantification of robustness is suggested as a tool for guiding strain and bioprocess
+  development."
+
+## Still missing after these seventeen
 
 - Conidiation or blastoconidia release under nutrient limitation in A. pullulans (4.2, 4.4): Rensink 2024
   and 2026 are the fallback; a physiological source would be better.
 - Fluorescent-protein or heterologous-expression burden in a fungus (4.4, 4.7).
-- Campbell 2004 on morphotype and pullulan production (4.5).
 - Mixing and circulation times of large reactors with numbers (4.7): your intro refs 2022_Losoi,
   2021_Nadal-Ray, 2025_Arulrajah; 2020_Täuber p.3 gives only "Typical time scales are in second to minutes
   range based on the size and geometry of the bioreactor".

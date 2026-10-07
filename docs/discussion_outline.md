@@ -1,6 +1,6 @@
 # 4. Discussion: outline and evidence
 
-Working plan of 2026-10-06 for the discussion chapter. Every section lists the claims, the evidence in the
+Working plan of 2026-10-06 for the discussion chapter; all sections drafted in `docs/discussion_chapter.md` by 2026-10-07. Every section lists the claims, the evidence in the
 results chapter (numbers from the final v12 run, `docs/data_story.md`), the interpretations to weigh, and what
 the paragraph needs from the literature. "Intro refs" are keys of the introduction's reference list; "to find" are
 papers not yet in the list. The chapter has no length limit; the Conclusion is a separate chapter.
