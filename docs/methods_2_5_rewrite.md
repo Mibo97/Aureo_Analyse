@@ -1,6 +1,8 @@
 # Replacement text for the methods chapter: Section 2.3 (growth parameters) and Section 2.5
 
-Draft of 2026-09-29. The current Sections 2.5.1 to 2.5.6 describe the earlier pipeline (manual quality control,
+Draft of 2026-09-29, updated 2026-10-08 (morphology per cell, areas in µm², strain test over structures, permutation
+null of the control-trend classification, coefficient-of-variation check of the robustness metrics). The current
+Sections 2.5.1 to 2.5.6 describe the earlier pipeline (manual quality control,
 the track-merging routine, the distance heuristic with 10 and 7 frames and 30 px as the only mother-bud rule,
 µ_event as growth rate, Kruskal-Wallis as the main test). The results chapter rests on the final pipeline, which
 the text below describes in the style of the existing chapter. The paragraph for Section 2.3 is an addition at the
@@ -33,7 +35,8 @@ Automated image processing and single-cell tracking were performed using a custo
 processing steps were controlled via hierarchical YAML configuration files to ensure full reproducibility and
 parameter transparency. Raw time-lapse data were loaded lazily to limit memory usage, and the microfluidic
 cultivation chambers were detected and cropped automatically using iterative thresholding and morphological
-filtering. The pixel size (0.0733 µm) was read from the metadata of the .nd2 files.
+filtering. The pixel size (0.0733 µm) was read from the metadata of the .nd2 files; areas were measured in px² and
+are reported in µm² (1 px² = 0.00537 µm²), and the thresholds of the pipeline are stated in pixels.
 
 Single-cell segmentation was performed on the phase-contrast images with the Cellpose framework using the
 Segment Anything Model architecture (Cellpose-SAM, model `cpsam`, flow threshold 0.4, cell probability threshold
@@ -78,7 +81,7 @@ the tracker and the filters. One static recording that duplicated another stage 
 ### 2.5.3 Experimental Units and Aggregation
 
 The curated single-cell data were organised by biosensor strain, oscillation type and switching interval. The
-interval between two medium switches (0.75 to 24 min) is the half-half-cycle period; a full feast/famine cycle lasted
+interval between two medium switches (0.75 to 24 min) is the half-cycle period; a full feast/famine cycle lasted
 twice as long. It is referred to as the period of a structure. One microfluidic structure carried one period
 with five oscillation chambers, three constant-feast (PosCtrl) and
 three to four constant-famine (NegCtrl) chambers distributed over several arrays; the array index and the chamber
@@ -90,22 +93,27 @@ and four in minimal medium. All readouts were aggregated hierarchically from cel
 from chambers to structures (mean over chambers, with the standard deviation and standard error over chambers)
 and from structures to conditions. Because the chambers of a structure were technical replicates of one culture,
 every comparison between periods was a comparison between structures with n equal to the number of periods,
-and every error bar of the oscillation data is a chamber error bar of one structure. Comparisons between the two
-media of a static chip were made over the chambers of that chip.
+and every error bar of the oscillation data is a chamber error bar of one structure. In the figures against the
+period, every structure is shown as the mean of its oscillation chambers with their standard deviation and with
+its own feast and famine controls as triangles; the static figures show every chamber next to the mean.
+Comparisons between the two media of a static chip were made over the chambers of that chip.
 
 ### 2.5.4 Sparse-Phase Window and Lineage Classification
 
 With rising cell density the number of newly appearing objects in a chamber rose in proportion to the number of
 objects, and most of them touched an established cell at their first detection, because the masks of neighbouring
-cells touched, split and re-merged from frame to frame (Section 3.2). Lineage readouts were therefore evaluated
-only in the sparse phase of every chamber, defined as the frames before the rolling median (five frames) of the
+cells touched, split and re-merged from frame to frame (Section 3.2). This dependence was quantified per chamber
+in blocks of 22 frames as the number of new tracks per frame against the median number of objects per frame,
+separately for new objects that touched an established mask at their first detection and for new objects without
+contact, and as the number of touching new objects per existing object and frame. Lineage readouts were therefore
+evaluated only in the sparse phase of every chamber, defined as the frames before the rolling median (five frames) of the
 number of objects per frame exceeded 20. Chambers with fewer than 20 such frames were excluded from the lineage
 readouts. All other readouts used the entire cultivation.
 
 Within the window, every newly appearing object was a bud candidate. If the object had a parent track from the
 mask contact at its first detection, the parent was accepted as the mother when it had been tracked for at least
 three frames and the candidate persisted for at least two frames. Candidates without a touching mask were assigned
-by a distance heuristic: the mother was the nearest cell tracked for at least ten frames within 30 px, and the
+by a distance heuristic: the mother was the nearest cell tracked for at least ten frames within 30 px (2.2 µm), and the
 candidate had to persist for at least two and at most seven frames as a separate object. The assignment method was
 recorded for every event. Washed-in cells and masks that had split in two were removed by a size criterion: the
 ratio of the candidate's area to the mother's area at first detection was bimodal over all candidates, and
@@ -114,7 +122,7 @@ all data and applied to all strains and conditions. From the accepted events the
 (fraction of its observed frames spent in the budding phase) and the budding rate per mother-hour of every chamber
 (accepted events per hour of tracked mother time in the window) were calculated. The lineage assignment was
 validated by the share of candidates that could be assigned to a mother and the share of ambiguous candidates per
-chamber, compared across the structures of a series.
+chamber, compared across the structures of every oscillation series (Section 2.5.6).
 
 ### 2.5.5 Growth, Morphology, and Sensor Readouts
 
@@ -125,6 +133,13 @@ reached 90 % of its maximum, and spanning the last 25 % of the frames before it.
 projected cell area, the eccentricity and, for the biosensor strains, the ratiometric sensor signal (intensity of
 the sensor channel divided by the reference channel per cell). Sensor readouts excluded the first 120 min of every
 cultivation, the period before the environmental perturbations started.
+
+The morphology of the tracked cells was described per cell by the mean projected area and the mean eccentricity
+over its track (tracks of at least ten frames) and shown as one point per cell, per strain for the oscillation
+experiments and per chip and medium for the static cultivations. Guide lines at 30 µm² and an eccentricity of 0.6
+mark the quadrant of large round cells, the swollen cells described by Rensink et al. (2026); the share of cells in
+this quadrant was reported per panel as an orientation, not as a classification. The same per-cell values were
+compared between the strains as distributions with one value per cell (Section 2.5.6).
 
 Three specific growth rates were computed. The area-based growth rate µ_area of a single cell was the slope of
 the natural logarithm of its projected area against time for tracks of at least ten frames, fitted only before the
@@ -139,8 +154,10 @@ The event-based growth rate µ_event from the interval between two buddings of t
 2024) was computed for comparison but not used as a growth rate, because the generation time of the daughters
 does not enter it.
 
-The robustness metrics R(t) and R(p) were adapted from Trivellin et al. (2022) and Blöbaum et al. (2024).
-Temporal robustness R(t) quantifies the stability of a readout over time, at the population level as the
+The robustness metrics R(t) and R(p) were adapted from Trivellin et al. (2022) and Blöbaum et al. (2024) as
+R = −(σ²/x̄)/m, where σ and x̄ are the standard deviation and the mean of the readout over the compared values and
+m is the mean of the readout over the whole data set, so that R is dimensionless, at most zero and relative to the
+data set. Temporal robustness R(t) quantifies the stability of a readout over time, at the population level as the
 variation of the chamber mean over the frames and at the single-cell level as the variation of a cell's value
 over its frames (cells tracked for at least ten frames); population robustness R(p) quantifies the cell-to-cell heterogeneity of a readout within a
 chamber at each time point. Both were applied to the cell area, the eccentricity and the sensor ratios, R(p) also
@@ -166,19 +183,45 @@ oscillation chambers, for the feast and famine controls and their mean, and for 
 oscillation chambers and the control mean, and the combination was classified: a period effect required that the
 oscillation chambers trended (|ρ| ≥ 0.6), that no control type trended in the same direction, and that the
 difference trended as well; a structure effect was recorded when a control type trended in the same direction as
-the oscillation chambers; a trend that vanished after subtraction of the controls was recorded as not robust. In
+the oscillation chambers; a trend that vanished after subtraction of the controls was recorded as not robust. The
+classification of all readout-by-series combinations was summarised in one figure, with ρ of the oscillation
+chambers against ρ of the strongest control type of the same structures, one point per combination. In
 addition, every oscillation value was expressed relative to the two controls of its structure as a bracket score
 (0 = famine control, 1 = feast control); the bracket was regarded as degenerate when the two controls differed by
 less than twice the chamber standard deviation of the controls, and degenerate structures were excluded from the
 trend test of the score. Within cultures that carried two or three periods, the change from the shortest to the
 longest period was recorded for the oscillation chambers, their controls and the difference.
 
+How many period and structure effects the classification yields when the period has no effect was estimated by
+permutation: the periods of every series were shuffled among its structures (one label per structure, so that
+every structure kept its oscillation and control chambers and only the period order was destroyed), the
+classification was repeated with the same rules, and the number of combinations per verdict was collected over
+1,000 shuffles (seed 0). For every verdict the observed number was compared with the mean and the 5th to 95th
+percentile of the shuffled numbers, and the share of shuffles with at least the observed number was reported as
+its p-value; the observed numbers were checked against the classification of the unshuffled data.
+
 The oscillation chambers of a structure were compared with the mean of its two controls, paired over the
-structures of all series, by the Wilcoxon signed-rank test, and the ratio of the two was reported per oscillation
-type and strain; the robustness metrics were classified against the period in the same way as the readouts.
-Feast and famine controls were compared over structures by the Wilcoxon signed-rank test. The two media of a
+structures of all series, by the Wilcoxon signed-rank test. The effect was expressed as the ratio of the
+oscillation mean to the control mean for readouts with a positive level (area, eccentricity, budding rate,
+µ_bud, µ_area, immigration rate and sensor ratios) and as the difference for the robustness metrics, and its
+median and quartiles over structures were reported in total, per oscillation type and per strain, together with
+the number of structures in which the oscillation chambers lay above or below both controls. Whether the effect
+depended on the period was tested by the Spearman correlation of the effect with the period within every series.
+Because the oscillation chambers occupied the positions A3 to A12 and the controls the positions A1, A2, A13 and
+A14 of an array, the comparison is also a comparison of positions; the immigration rate was carried along as a
+control of the medium flow. Because R carries the mean of the readout (at equal relative spread R falls with a
+rising mean, as a Fano factor), every robustness difference between oscillation and control chambers was
+re-examined with the coefficient of variation σ/x̄, which does not: for the cell area, the eccentricity and
+µ_area the coefficient of variation over the cells of a chamber (mean over the frames with at least two cells)
+and, for the area and the eccentricity, over time of the chamber mean were run through the same paired
+comparison, together with the corresponding mean levels. The robustness metrics were classified against the
+period in the same way as the readouts. Feast and famine controls were compared over structures by the Wilcoxon
+signed-rank test. The two media of a
 static chip and the growth parameters of the BioLector cultivations were compared by Welch's t-test over chambers
-and wells, respectively. The consistency of the control chambers across the structures of a series was tested by
+and wells, respectively. Differences between the strains in the per-cell distributions of area and eccentricity
+were tested by the Mann-Whitney U test over structures, with the median per
+structure as the unit, every strain against the wild type, and only where both strains had at least three
+structures. The consistency of the control chambers across the structures of a series was tested by
 the Kruskal-Wallis H-test on chamber-level values, and the assignment rate of the lineage classification across
 structures likewise. No correction for multiple testing was applied; the number of tested combinations is
 reported with the results. Static control conditions were processed through the identical pipeline but evaluated
