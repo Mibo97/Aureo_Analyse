@@ -22,7 +22,7 @@ trend of the oscillation chambers, 23 a trend that a control of the same structu
 vanished after the controls were subtracted and 2 a trend that met all conditions of a period effect (Table 7,
 Figure 15). Shuffling the periods among the structures of each series produced 3.5 period effects on average,
 so the two observed ones lie below chance level, and neither recurred in the other oscillation type of the same
-strain. The 23 structure effects, by contrast, exceeded the 13 that shuffled periods produced: the control
+strain. The 23 structure effects, by contrast, exceeded the 13.5 that shuffled periods produced: the control
 chambers trended with the real period order more often than with a random one. The result is as negative as it
 is clear. Whatever the period did to the cells over 20 h was smaller than what the structure did.
 
@@ -224,10 +224,10 @@ How much of this is the metric? R is the negative Fano factor over a global mean
 with it "the weight of the mean on R was higher than for the CV" (2022_Trivellin). A function whose mean rises
 at constant relative spread therefore becomes less robust by R, and one whose mean falls becomes more robust.
 Both happened here: the cells under glucose oscillation were larger and grew more slowly. Measured as the
-coefficient of variation instead, three of the four differences remained and one did not (3.4): the area growth
+coefficient of variation instead, four of the five differences remained and one did not (3.4): the area growth
 rate of the oscillation chambers was more homogeneous (ratio to the control mean 0.84, p 0.002; Glc 0.79,
-p < 0.001), the eccentricity more heterogeneous (1.07, p 0.001) and the chamber mean area less stable over time
-(1.05, p 0.042), whereas the cell-to-cell spread of the area did not differ (1.04, p 0.13). The greater
+p < 0.001), the eccentricity more heterogeneous (1.07, p 0.001), the chamber mean area (1.05, p 0.042) and the chamber mean
+eccentricity (1.23, p 0.005) less stable over time, whereas the cell-to-cell spread of the area did not differ (1.04, p 0.13). The greater
 heterogeneity of cell size under oscillation in Table 4 is therefore the larger mean size of 4.2 expressed as a
 Fano factor, not a wider relative distribution; the more homogeneous growth rate is real, and so is the less
 stable mean area. Trade-offs of this kind are what the metric was built to show, since "robustness is

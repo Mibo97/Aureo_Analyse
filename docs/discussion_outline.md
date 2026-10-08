@@ -36,7 +36,7 @@ established. Pullulan does not explain the disagreement of control chambers.
 2. The two period effects (µ_area in BSO/Glc, budding rate in WT/Glc) did not recur in the other oscillation type
    of the same strain, and their number lies below what the classification produces by chance (3.5 on average
    when the periods are shuffled among the structures of a series; section "Numbers"), whereas the 23 structure
-   effects exceed the chance level (13 on average, p 0.004): the controls trend with the real period order more
+   effects exceed the chance level (13.5 on average, p 0.002): the controls trend with the real period order more
    often than with a random one, which is the alignment of period, position and day made visible.
 3. Structure, cultivation day and chip position were aligned with the period (3.6 last paragraph: day blocks,
    Spearman of period against date ±0.87 to ±0.89, shortest period on the same structure position).
@@ -124,10 +124,10 @@ established. Pullulan does not explain the disagreement of control chambers.
   across readouts, but R(t) depends on the sampling (10-min frames alias the cycles differently per interval), so
   only the comparison against the controls of the same structure is interpretable, not the level.
 - Five of eight period effects in one series (BSA/Glc) is a series property, not a metric property.
-- Checked 2026-10-06 (`docs/scratch/robust_cv.py`): as coefficient of variation, the growth-rate homogeneity
-  (p 0.002), the eccentricity heterogeneity (p 0.001) and the temporal instability of the mean area (p 0.042)
-  hold; the area heterogeneity does not (p 0.13), it is the larger mean size expressed as a Fano factor. All
-  differences are Glc-only.
+- Checked 2026-10-06, confirmed by the cluster run of 2026-10-08 (`51_osc_vs_controls_cv.csv`): as coefficient of
+  variation, the growth-rate homogeneity (p 0.002), the eccentricity heterogeneity (p 0.001) and the temporal
+  instability of the mean area (p 0.042) and of the mean eccentricity (p 0.005) hold; the area heterogeneity
+  does not (p 0.13), it is the larger mean size expressed as a Fano factor. All differences are Glc-only.
 
 **Literature need.** 2022_Trivellin (robustness is phenotype-specific; how R was compared across conditions),
 2024_Blöbaum (use of R(t) and R(p) in the chip); to find: phenotypic heterogeneity reviews (Ackermann 2015) if
@@ -325,10 +325,10 @@ time" "circulation time" "gradient" "lifeline" "scale-down".
 
   | verdict | observed | null mean | null 5th to 95th percentile | P(null ≥ observed) |
   | --- | --- | --- | --- | --- |
-  | no monotone trend | 31 | 38.4 | 32 to 44 | 0.98 |
-  | structure effect | 23 | 13.4 | 8 to 19 | 0.004 |
-  | not robust | 2 | 2.7 | 0 to 5 | 0.77 |
-  | period effect | 2 | 3.5 | 1 to 7 | 0.87 |
+  | no monotone trend | 31 | 38.3 | 32 to 44 | 0.98 |
+  | structure effect | 23 | 13.5 | 9 to 19 | 0.002 |
+  | not robust | 2 | 2.7 | 0 to 5 | 0.78 |
+  | period effect | 2 | 3.5 | 1 to 7 | 0.88 |
 
   Reading: two period effects are fewer than chance produces, so nothing in the 58 combinations needs a period
   to explain it. The excess of structure effects says that the structure drifts (day, position, loading order)

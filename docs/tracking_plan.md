@@ -594,13 +594,13 @@ only the period order is destroyed), repeats the control-trend classification wi
 per verdict the observed count, the null mean, the 5th and 95th percentile and P(null ≥ observed)
 (`50_control_trend_null.csv`; `TREND_NULL_PERMUTATIONS` = 1000, `TREND_NULL_SEED` = 0; a self-check compares the
 observed counts with `control_trend_check()`). On the final run: 2 period effects observed against 3.5 expected,
-23 structure effects against 13.4 (p 0.004). `cv_check.py` reads the step-40 chamber tables, forms the
+23 structure effects against 13.5 (p 0.002; cluster run of 2026-10-08, which reproduced the scratch values within the sampling error of the shuffles). `cv_check.py` reads the step-40 chamber tables, forms the
 coefficient of variation and the mean per chamber for area, eccentricity and µ_area (R(p)) and for the chamber
 mean area and eccentricity over time (R(t)), and runs them through the paired comparison of
 `osc_vs_controls.py` (`51_osc_vs_controls_cv.csv`, `_per_structure.csv`). On the final run the growth-rate
 homogeneity, the eccentricity heterogeneity and the temporal instability of the mean area hold as CV, the area
 heterogeneity does not (Fano factor of the larger mean). Both reproduce the scratch results on the final-run
-tables; synthetic run exit 0.
+tables; the CV table of the cluster run is identical to the scratch table; synthetic run exit 0.
 
 ## 7. Order and checkpoints
 
