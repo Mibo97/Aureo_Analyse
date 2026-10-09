@@ -522,48 +522,56 @@ kind Zhang et al. used for screening (2024_Zhang) could provide it in the chip.
 
 ## 4.8 Limitations and outlook
 
-The limitations of this work follow from its design, and most of them have a direct remedy.
+The limitations of this work follow from its design, and most of them have a direct remedy. They fall into
+three groups: the way the experiment was laid out on the chip, what the measurements could and could not
+resolve, and the distance between the morphology that was measured and the product that matters.
 
-The experimental unit. One culture per structure and one period per structure made the structure the detection
-limit (4.1). Future runs should assign periods to structures and days at random, run every period on at least
-two cultures, and keep feast and famine chambers on every structure. With two cultures per period the
-random-effects models of 4.1 become possible, and the between-structure variation becomes a measured quantity
-instead of the limit.
+The first group concerns the layout. One culture per structure and one period per structure made the
+structure the detection limit of the period effects (4.1), and the position of the oscillation chambers in the
+centre of the array, with the passively supplied controls at its ends, left the comparison of oscillation and
+constant medium confounded with position and pressure (4.2). Both limits can be removed with the same chip.
+Future runs should assign the periods to structures and days at random instead of in blocks, run every period
+on at least two cultures, and keep feast and famine chambers on every structure; with two cultures per period
+the random-effects models of 4.1 become possible, and the variation between structures becomes a measured
+quantity instead of the limit of the design. A run with constant medium in the central chambers, or an
+oscillation between two identical media of the kind Täuber et al. used to exclude pressure effects
+(2020_Täuber), would then separate the position of a chamber and the switching of the inlets from the
+oscillation itself. Two further quantities of the layout were taken from the literature rather than measured.
+The exchange time of the chambers is the value of the *C. glutamicum* chip (2020_Täuber; 2023_Blöbaum) and was
+not measured for the chamber height used here; a fluorescein switching test at the intervals used, 0.75 min in
+particular, would close this gap. And whether the famine medium was famine at the cell was not measured either
+(4.4); a glucose indicator in the chamber or a sampled outlet would settle it.
 
-Position and pressure. The oscillation chambers sat in the centre of the array and the controls at its ends,
-and the control arrays were supplied passively (4.2). A run with constant medium in the central chambers, or an
-oscillation between two identical media as Täuber et al. used to exclude pressure effects (2020_Täuber), would
-separate position and switching from the oscillation.
+The second group concerns the resolution of the measurements. At 10 min per frame the cycles of the intervals
+up to 6 min are not observable and the 12-min interval is at the limit (3.4), so the readouts of this thesis
+are hour-scale integrals over the cycles, and the temporal robustness R(t) contains whatever part of a cycle
+the frames caught (4.3). A subset of chambers imaged at 1-min intervals would show whether cell size or a
+sensor ratio follows the 24-min cycle and how much of the temporal variance is the cycle itself. The four
+sensors are expressed and detected but not calibrated in the chip (4.4), so their flat ratios cannot be read as
+physiology. An in-chip pH clamp of permeabilised cells, a defined ATP depletion for QUEEN-2m and a defined
+oxidative stimulus for OxPro, all at 30 °C under the microscope, would give the range in which the ratios can
+move, and an isogenic empty-vector transformant would separate the cost of the sensor from clonal variation in
+the growth rates of 3.1. Those growth rates carry a limit of their own: the scattered-light signals of the
+BioLector are uncalibrated and the five wells of a condition come from one preculture (3.1), so an OD₆₀₀
+calibration and biological replicates are needed before the growth parameters are compared across strains.
 
-The chamber as a medium. The exchange time of the chambers was taken from the *C. glutamicum* chip (2020_Täuber;
-2023_Blöbaum) and not measured for the chamber height used here; a fluorescein switching test at the intervals
-used, 0.75 min in particular, would close this. Whether the famine medium was famine at the cell was not
-measured either (4.4); a glucose indicator in the chamber or a sampled outlet would settle it.
+The third group concerns morphology and the product. The static comparison rests on two chips with one culture
+each (3.3, 4.5), and the morphotype distribution it describes is that of a liamocin medium (4.5); more chips
+per medium and a per-cell product readout, such as the fluorescent pullulan reporter of 4.7, would turn the
+morphology results into process statements. On the method side, the segmentation can be fine-tuned on
+*A. pullulans* for the dense phase and the pseudohyphal forms (2025_Pachitariu), and a chamber geometry that
+retains buds would deepen the lineages that wash-out now cuts short (4.6); these two steps would open the
+dense phase and the second generation to the lineage readouts.
 
-Sampling. At 10 min per frame the cycles of the intervals up to 6 min are not observable and the 12-min
-interval is at the limit (3.4). A subset of chambers imaged at 1-min intervals would show whether cell size or a
-sensor ratio follows the 24-min cycle and how much of the temporal variance of R(t) is the cycle itself (4.3).
-
-Sensors. The four sensors are expressed and detected but not calibrated in the chip (4.4). An in-chip pH clamp
-of permeabilised cells, a defined ATP depletion for QUEEN-2m and a defined oxidative stimulus for OxPro at 30 °C
-under the microscope would give the range in which the ratios can move; an isogenic empty-vector transformant
-would separate the cost of the sensor from clonal variation in the growth rates of 3.1.
-
-Morphology and product. The static comparison rests on two chips with one culture each (3.3, 4.5); more chips
-per medium and a per-cell product readout would turn the morphology results into process statements. The
-segmentation can be fine-tuned on *A. pullulans* for the dense phase and the pseudohyphal forms
-(2025_Pachitariu), and bud retention in the chamber geometry would deepen the lineages that wash-out now cuts
-short (4.6).
-
-BioLector. The scattered-light signals are uncalibrated and the five wells per condition come from one
-preculture (3.1); an OD₆₀₀ calibration and biological replicates are needed before the growth parameters are
-compared across strains.
-
-Multiple testing. The 58 and 90 readout-by-series combinations of 3.6 and 3.4 were classified without a
-correction for multiple testing, and so were the paired comparisons of 3.4 (2.5.6). The permutation null of 3.6
-states how many period and structure effects the classification yields when the period has no effect, and it
-is the safeguard on which the classification rests; the paired comparisons rest on their consistency across
-strains and oscillation types rather than on a correction.
+A last limitation is statistical. The 58 and 90 readout-by-series combinations of 3.6 and 3.4 were classified
+without a correction for multiple testing, and so were the paired comparisons of 3.4 (2.5.6). The permutation
+null of 3.6 states how many period and structure effects the classification yields when the period has no
+effect, and it is the safeguard on which the classification rests; the paired comparisons rest on their
+consistency across strains and oscillation types rather than on a correction. Taken together, the remedies of
+this section amount to one further round of chip experiments, with randomised periods, two cultures per
+period, central constant-medium chambers, a fluorescein test and in-chip sensor calibrations, and to one
+product measurement under glucose alternation. The first would turn the detection limit of 4.1 into a number;
+the second would decide the two-edged reading of 4.5 and 4.7.
 
 ## 4.9 Conclusion
 
